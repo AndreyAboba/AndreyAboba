@@ -22,7 +22,7 @@ local function showNotification(playerName)
 	if not notifiedPlayers[playerName] then
 		Notification:Notify(
 			{Title = "Syllinse автобот", Description = playerName .. ' Помечен как бот, это так ебать?"'},
-			{OutlineColor = Color3.fromRGB(80, 80, 80), Time = 17, Type = "option"},
+			{OutlineColor = Color3.fromRGB(80, 80, 80), Time = 10, Type = "option"},
 			{Image = "http://www.roblox.com/asset/?id=6023426923", ImageColor = Color3.fromRGB(255, 84, 84), Callback = function(State)
 				if State then
 					print(playerName .. " ✅Является ботом")
