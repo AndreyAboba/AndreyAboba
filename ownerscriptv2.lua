@@ -1,6 +1,7 @@
 local players = game:GetService("Players")
 local identifiedBots = {}
 local notifiedPlayers = {}
+local botList = {}
 
 local NotificationHolder = loadstring(game:HttpGet("https://raw.githubusercontent.com/BocusLuke/UI/main/STX/Module.Lua"))()
 local Notification = loadstring(game:HttpGet("https://raw.githubusercontent.com/BocusLuke/UI/main/STX/Client.Lua"))()
@@ -27,6 +28,7 @@ local function showNotification(playerName)
 				if State then
 					print(playerName .. " ✅Является ботом")
 					identifiedBots[playerName] = true
+					table.insert(botList, playerName)
 				end
 			end}
 		)
@@ -81,3 +83,14 @@ else
 		end)
 	end)
 end
+
+-- Function to print the bot list every 5 seconds
+local function printBotList()
+	while true do
+		wait(5)
+		print("Identified Bots: " .. table.concat(botList, ", "))
+	end
+end
+
+-- Start printing the bot list
+spawn(printBotList)
