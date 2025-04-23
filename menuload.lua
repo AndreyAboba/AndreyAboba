@@ -432,7 +432,7 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
     local ChatLocationIndicator = Instance.new("Frame")
     ChatLocationIndicator.Size = UDim2.new(0, 40, 0, 20)
     ChatLocationIndicator.Position = ChatLocation == "InMenu" and UDim2.new(0, 0, 0, 0) or UDim2.new(0, 40, 0, 0)
-    ChatLocationIndicator.BackgroundColor3 = ChatLocation == "InMenu" and Color3.fromRGB(80, 80, 80) or Color3.fromRGB(147, 112, 219)
+    ChatLocationIndicator.BackgroundColor3 = ChatLocation == "InMenu" and Color3.fromRGB(80, 80, 80) or Color3.fromRGB(147, 112, 219) -- Исправлены цвета
     ChatLocationIndicator.Parent = ChatLocationFrame
 
     local ChatLocationIndicatorCorner = Instance.new("UICorner")
@@ -630,7 +630,7 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
         ChatSection.Size = UDim2.new(1, 0, 1, -150)
         ChatSection.Visible = false
         OutputSection.Position = UDim2.new(0, 0, 0, 40)
-        OutputSection.Size = UDim2.new(1, 0, 1, -40) -- Исправлено: увеличена высота и ширина
+        OutputSection.Size = UDim2.new(1, 0, 1, -40)
         OutputSection.Visible = true
         Sidebar.Visible = false
     end)
@@ -660,5 +660,5 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
 end
 
 return {
-    InitMenu = Init
+    InitMenu = InitMenu
 }
