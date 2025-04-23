@@ -60,16 +60,6 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
         TabButton.MouseButton1Click:Connect(function()
             for _, t in ipairs(tabs) do
                 t.Section.Visible = t.Name == tab.Name
-                if t.Name == "Chat" then
-                    t.Section.Size = UDim2.new(1,-150,1,-40)
-                    t.Section.Position = UDim2.new(0,150,0,40)
-                elseif t.Name == "Output" then
-                    t.Section.Size = UDim2.new(1,-150,0,150)
-                    t.Section.Position = UDim2.new(0,150,1,-150)
-                elseif t.Name == "Loader" then
-                    t.Section.Size = UDim2.new(1,0,1,0)
-                    t.Section.Position = UDim2.new(0,0,0,0)
-                end
             end
             CurrentTab.Value = tab.Name
         end)
