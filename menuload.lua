@@ -1,5 +1,5 @@
 -- Модуль для управления меню (вкладки Main, Autofarm, Settings, TopBar)
-
+print('1')
 local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection, ChatLocation)
     local SectionFrames = {}
     local CurrentSection = "Main"
