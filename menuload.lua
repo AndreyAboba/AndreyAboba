@@ -13,8 +13,8 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
     -- Верхняя полоска с логотипом, текстом и вкладками
     local TopBar = Instance.new("Frame")
     TopBar.Size = UDim2.new(1, 0, 0, 40)
-    TopBar.BackgroundColor3 = Color3.fromRGB(15, 15, 15) -- Более тёмный фон
-    TopBar.BackgroundTransparency = 0 -- Убираем прозрачность
+    TopBar.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    TopBar.BackgroundTransparency = 0
     TopBar.BorderSizePixel = 1
     TopBar.BorderColor3 = Color3.fromRGB(50, 50, 50)
     TopBar.Parent = MainFrame
@@ -23,14 +23,14 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
     local LogoContainer = Instance.new("Frame")
     LogoContainer.Size = UDim2.new(0, 28, 0, 28)
     LogoContainer.Position = UDim2.new(0, 5, 0.5, -14)
-    LogoContainer.BackgroundColor3 = Color3.fromRGB(30, 30, 30) -- Добавляем фон
+    LogoContainer.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     LogoContainer.BackgroundTransparency = 0
     LogoContainer.BorderSizePixel = 1
     LogoContainer.BorderColor3 = Color3.fromRGB(50, 50, 50)
     LogoContainer.Parent = TopBar
 
     local LogoCorner = Instance.new("UICorner")
-    LogoCorner.CornerRadius = UDim.new(0, 14) -- Делаем круг
+    LogoCorner.CornerRadius = UDim.new(0, 14)
     LogoCorner.Parent = LogoContainer
 
     local LogoFrame = Instance.new("Frame")
@@ -138,6 +138,32 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
     ChatTabCorner.CornerRadius = UDim.new(0, 5)
     ChatTabCorner.Parent = ChatTab
 
+    -- Разделитель (вертикальная линия) между Chat и Output
+    local ChatOutputDivider = Instance.new("Frame")
+    ChatOutputDivider.Size = UDim2.new(0, 2, 0, 20)
+    ChatOutputDivider.Position = UDim2.new(0, 350, 0.5, -10)
+    ChatOutputDivider.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    ChatOutputDivider.BorderSizePixel = 0
+    ChatOutputDivider.Parent = TopBar
+
+    -- Кнопка "Output" в стиле вкладки
+    local OutputTab = Instance.new("TextButton")
+    OutputTab.Size = UDim2.new(0, 80, 0, 24)
+    OutputTab.Position = UDim2.new(0, 360, 0.5, -12)
+    OutputTab.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    OutputTab.BackgroundTransparency = CurrentTab.Value == "Output" and 0 or 0.2
+    OutputTab.Text = "Output"
+    OutputTab.TextColor3 = Color3.fromRGB(255, 255, 255)
+    OutputTab.TextSize = 14
+    OutputTab.Font = Enum.Font.Gotham
+    OutputTab.BorderSizePixel = 1
+    OutputTab.BorderColor3 = Color3.fromRGB(50, 50, 50)
+    OutputTab.Parent = TopBar
+
+    local OutputTabCorner = Instance.new("UICorner")
+    OutputTabCorner.CornerRadius = UDim.new(0, 5)
+    OutputTabCorner.Parent = OutputTab
+
     -- Анимация градиента для логотипа
     local GradientTime = 0
     local LastGradientUpdate = 0
@@ -153,7 +179,6 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
         local t = (math.sin(GradientTime) + 1) / 2
         local color1, color2 = Core.GradientColors.Color1.Value, Core.GradientColors.Color2.Value
 
-        -- Обновление градиента логотипа
         for _, segmentData in ipairs(LogoSegments) do
             segmentData.Gradient.Color = ColorSequence.new(color1:Lerp(color2, t), color2:Lerp(color1, t))
         end
@@ -213,12 +238,12 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
         Label.Text = section.Name
         Label.TextColor3 = Color3.fromRGB(255, 255, 255)
         Label.TextSize = 18
-        Label.Font = Enum.Font.Gotham
+        Label.Font = Enum.Font.GothamBold -- Используем GothamBold для лучшей читаемости
         Label.TextXAlignment = Enum.TextXAlignment.Left
         Label.Parent = SectionButton
 
         SectionButton.MouseButton1Click:Connect(function()
-            if CurrentTab.Value == "Chat" then return end
+            if CurrentTab.Value == "Chat" or CurrentTab.Value == "Output" then return end
             CurrentSection = section.Name
             CurrentTab.Value = "Loader"
             for _, btn in ipairs(Sidebar:GetChildren()) do
@@ -234,11 +259,14 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
             LoaderTab.BackgroundTransparency = 0
             ChatTab.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
             ChatTab.BackgroundTransparency = 0.2
+            OutputTab.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+            OutputTab.BackgroundTransparency = 0.2
             ChatSection.Position = UDim2.new(0, 150, 0, 40)
             ChatSection.Size = UDim2.new(1, -150, 0, 350)
             OutputSection.Position = UDim2.new(0, 150, 1, -110)
             OutputSection.Size = UDim2.new(1, -150, 0, 110)
-            ChatSection.Visible = false
+            ChatSection.Visible = ChatLocation == "InMenu" and CurrentTab.Value == "Chat"
+            OutputSection.Visible = true
             Sidebar.Visible = true
         end)
     end
@@ -278,7 +306,7 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
     local LoadButton = Instance.new("TextButton")
     LoadButton.Size = UDim2.new(1, -20, 0, 40)
     LoadButton.Position = UDim2.new(0, 10, 1, -50)
-    LoadButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25) -- Убираем прозрачность
+    LoadButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
     LoadButton.BackgroundTransparency = 0
     LoadButton.Text = "Load Selected Modules"
     LoadButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -330,7 +358,6 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
     AutofarmLabel.TextXAlignment = Enum.TextXAlignment.Left
     AutofarmLabel.Parent = AutofarmSection
 
-    -- Линия под Autofarm
     local AutofarmDivider = Instance.new("Frame")
     AutofarmDivider.Size = UDim2.new(1, -20, 0, 2)
     AutofarmDivider.Position = UDim2.new(0, 10, 0, 40)
@@ -357,7 +384,6 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
     SettingsLabel.TextXAlignment = Enum.TextXAlignment.Left
     SettingsLabel.Parent = SettingsSection
 
-    -- Линия под Settings
     local SettingsDivider = Instance.new("Frame")
     SettingsDivider.Size = UDim2.new(1, -20, 0, 2)
     SettingsDivider.Position = UDim2.new(0, 10, 0, 40)
@@ -379,7 +405,6 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
     ChatLocationContainerCorner.CornerRadius = UDim.new(0, 4)
     ChatLocationContainerCorner.Parent = ChatLocationContainer
 
-    -- Переключатель для выбора расположения чата
     local ChatLocationLabel = Instance.new("TextLabel")
     ChatLocationLabel.Size = UDim2.new(1, -10, 0, 20)
     ChatLocationLabel.Position = UDim2.new(0, 5, 0, 5)
@@ -555,11 +580,14 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
         LoaderTab.BackgroundTransparency = 0
         ChatTab.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
         ChatTab.BackgroundTransparency = 0.2
+        OutputTab.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+        OutputTab.BackgroundTransparency = 0.2
         ChatSection.Position = UDim2.new(0, 150, 0, 40)
         ChatSection.Size = UDim2.new(1, -150, 0, 350)
-        ChatSection.Visible = false
+        ChatSection.Visible = ChatLocation == "InMenu" and CurrentTab.Value == "Chat"
         OutputSection.Position = UDim2.new(0, 150, 1, -110)
         OutputSection.Size = UDim2.new(1, -150, 0, 110)
+        OutputSection.Visible = true
         Sidebar.Visible = true
         for secName, frame in pairs(SectionFrames) do
             frame.Visible = (secName == CurrentSection) and (CurrentTab.Value == "Loader")
@@ -567,19 +595,43 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
     end)
 
     ChatTab.MouseButton1Click:Connect(function()
+        if ChatLocation ~= "InMenu" then return end
         CurrentTab.Value = "Chat"
         LoaderTab.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
         LoaderTab.BackgroundTransparency = 0.2
         ChatTab.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
         ChatTab.BackgroundTransparency = 0
+        OutputTab.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+        OutputTab.BackgroundTransparency = 0.2
         for secName, frame in pairs(SectionFrames) do
             frame.Visible = false
         end
         ChatSection.Position = UDim2.new(0, 0, 0, 40)
-        ChatSection.Size = UDim2.new(1, 0, 1, -150) -- Исправляем размер чата
+        ChatSection.Size = UDim2.new(1, 0, 1, -150)
         ChatSection.Visible = true
         OutputSection.Position = UDim2.new(0, 0, 1, -110)
         OutputSection.Size = UDim2.new(1, 0, 0, 110)
+        OutputSection.Visible = true
+        Sidebar.Visible = false
+    end)
+
+    OutputTab.MouseButton1Click:Connect(function()
+        CurrentTab.Value = "Output"
+        LoaderTab.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+        LoaderTab.BackgroundTransparency = 0.2
+        ChatTab.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+        ChatTab.BackgroundTransparency = 0.2
+        OutputTab.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+        OutputTab.BackgroundTransparency = 0
+        for secName, frame in pairs(SectionFrames) do
+            frame.Visible = false
+        end
+        ChatSection.Position = UDim2.new(0, 0, 0, 40)
+        ChatSection.Size = UDim2.new(1, 0, 1, -150)
+        ChatSection.Visible = false
+        OutputSection.Position = UDim2.new(0, 0, 0, 40)
+        OutputSection.Size = UDim2.new(1, 0, 1, -40)
+        OutputSection.Visible = true
         Sidebar.Visible = false
     end)
 
@@ -601,7 +653,9 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
         ChatLocationFrame = ChatLocationFrame,
         ChatLocationIndicator = ChatLocationIndicator,
         ChatLocationText = ChatLocationText,
-        TopBar = TopBar
+        TopBar = TopBar,
+        ChatTab = ChatTab,
+        OutputTab = OutputTab
     }
 end
 
