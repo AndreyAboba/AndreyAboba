@@ -186,7 +186,7 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
 
     Core.Services.RunService.Heartbeat:Connect(updateGradients)
 
-    -- Боковая панель
+    -- Бокая панель
     local Sidebar = Instance.new("Frame")
     Sidebar.Size = UDim2.new(0, 150, 1, -40)
     Sidebar.Position = UDim2.new(0, 0, 0, 40)
@@ -237,8 +237,8 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
         Label.BackgroundTransparency = 1
         Label.Text = section.Name
         Label.TextColor3 = Color3.fromRGB(255, 255, 255)
-        Label.TextSize = 18
-        Label.Font = Enum.Font.GothamBold -- Используем GothamBold для лучшей читаемости
+        Label.TextSize = 16
+        Label.Font = Enum.Font.SourceSans -- Более минималистичный шрифт
         Label.TextXAlignment = Enum.TextXAlignment.Left
         Label.Parent = SectionButton
 
@@ -432,7 +432,7 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
     local ChatLocationIndicator = Instance.new("Frame")
     ChatLocationIndicator.Size = UDim2.new(0, 40, 0, 20)
     ChatLocationIndicator.Position = ChatLocation == "InMenu" and UDim2.new(0, 0, 0, 0) or UDim2.new(0, 40, 0, 0)
-    ChatLocationIndicator.BackgroundColor3 = ChatLocation == "InMenu" and Color3.fromRGB(147, 112, 219) or Color3.fromRGB(80, 80, 80)
+    ChatLocationIndicator.BackgroundColor3 = ChatLocation == "InMenu" and Color3.fromRGB(80, 80, 80) or Color3.fromRGB(147, 112, 219) -- Исправлены цвета
     ChatLocationIndicator.Parent = ChatLocationFrame
 
     local ChatLocationIndicatorCorner = Instance.new("UICorner")
@@ -584,9 +584,9 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
         OutputTab.BackgroundTransparency = 0.2
         ChatSection.Position = UDim2.new(0, 150, 0, 40)
         ChatSection.Size = UDim2.new(1, -150, 0, 350)
-        ChatSection.Visible = ChatLocation == "InMenu" and CurrentTab.Value == "Chat"
         OutputSection.Position = UDim2.new(0, 150, 1, -110)
         OutputSection.Size = UDim2.new(1, -150, 0, 110)
+        ChatSection.Visible = ChatLocation == "InMenu" and CurrentTab.Value == "Chat"
         OutputSection.Visible = true
         Sidebar.Visible = true
         for secName, frame in pairs(SectionFrames) do
