@@ -23,14 +23,14 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
     local LogoContainer = Instance.new("Frame")
     LogoContainer.Size = UDim2.new(0, 28, 0, 28)
     LogoContainer.Position = UDim2.new(0, 5, 0.5, -14)
-    LogoContainer.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    LogoContainer.BackgroundColor3 = Color3.fromRGB(30, 30, 30) -- Добавляем фон
     LogoContainer.BackgroundTransparency = 0
     LogoContainer.BorderSizePixel = 1
     LogoContainer.BorderColor3 = Color3.fromRGB(50, 50, 50)
     LogoContainer.Parent = TopBar
 
     local LogoCorner = Instance.new("UICorner")
-    LogoCorner.CornerRadius = UDim.new(0, 5)
+    LogoCorner.CornerRadius = UDim.new(0, 14) -- Делаем круг
     LogoCorner.Parent = LogoContainer
 
     local LogoFrame = Instance.new("Frame")
@@ -562,7 +562,7 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
         OutputSection.Size = UDim2.new(1, -150, 0, 110)
         Sidebar.Visible = true
         for secName, frame in pairs(SectionFrames) do
-            frame.Visible = (secName == section.Name) and (CurrentTab.Value == "Loader")
+            frame.Visible = (secName == CurrentSection) and (CurrentTab.Value == "Loader")
         end
     end)
 
@@ -576,7 +576,7 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
             frame.Visible = false
         end
         ChatSection.Position = UDim2.new(0, 0, 0, 40)
-        ChatSection.Size = UDim2.new(1, 0, 0, 350)
+        ChatSection.Size = UDim2.new(1, 0, 1, -150) -- Исправляем размер чата
         ChatSection.Visible = true
         OutputSection.Position = UDim2.new(0, 0, 1, -110)
         OutputSection.Size = UDim2.new(1, 0, 0, 110)
