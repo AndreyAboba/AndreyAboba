@@ -174,7 +174,7 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
 
     -- Кнопки боковой панели с иконками
     local Sections = {
-        { существенно = "Main", Icon = "rbxassetid://18821914323" },
+        { Name = "Main", Icon = "rbxassetid://18821914323" },
         { Name = "Autofarm", Icon = "rbxassetid://18821914323" },
         { Name = "Settings", Icon = "rbxassetid://18821914323" }
     }
