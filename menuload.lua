@@ -4,28 +4,29 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
     local SectionFrames = {}
     local CurrentSection = "Main"
 
-    -- Добавляем размытие (BlurEffect) для эффекта стекла
+    -- Создаём BlurEffect и изначально отключаем его
     local Blur = Instance.new("BlurEffect")
-    Blur.Size = 10
+    Blur.Size = 0 -- Изначально выключен
     Blur.Parent = game:GetService("Lighting")
+    local BlurEnabled = false
 
     -- Верхняя полоска с логотипом, текстом и вкладками
     local TopBar = Instance.new("Frame")
     TopBar.Size = UDim2.new(1, 0, 0, 40)
-    TopBar.BackgroundColor3 = Color3.fromRGB(255, 255, 255) -- Белый оттенок для стекла
-    TopBar.BackgroundTransparency = 0.9 -- Полупрозрачность
+    TopBar.BackgroundColor3 = Color3.fromRGB(15, 15, 15) -- Более тёмный фон
+    TopBar.BackgroundTransparency = 0 -- Убираем прозрачность
     TopBar.BorderSizePixel = 1
-    TopBar.BorderColor3 = Color3.fromRGB(80, 80, 80)
+    TopBar.BorderColor3 = Color3.fromRGB(50, 50, 50)
     TopBar.Parent = MainFrame
 
-    -- Логотип (круг с сегментами и градиентом) в левом углу
+    -- Логотип (круг с сегментами) в левом углу
     local LogoContainer = Instance.new("Frame")
     LogoContainer.Size = UDim2.new(0, 28, 0, 28)
     LogoContainer.Position = UDim2.new(0, 5, 0.5, -14)
-    LogoContainer.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    LogoContainer.BackgroundTransparency = 0.9
+    LogoContainer.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    LogoContainer.BackgroundTransparency = 0
     LogoContainer.BorderSizePixel = 1
-    LogoContainer.BorderColor3 = Color3.fromRGB(80, 80, 80)
+    LogoContainer.BorderColor3 = Color3.fromRGB(50, 50, 50)
     LogoContainer.Parent = TopBar
 
     local LogoCorner = Instance.new("UICorner")
@@ -65,10 +66,10 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
     local TitleFrame = Instance.new("Frame")
     TitleFrame.Size = UDim2.new(0, 100, 0, 24)
     TitleFrame.Position = UDim2.new(0, 38, 0.5, -12)
-    TitleFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    TitleFrame.BackgroundTransparency = 0.9
+    TitleFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    TitleFrame.BackgroundTransparency = 0
     TitleFrame.BorderSizePixel = 1
-    TitleFrame.BorderColor3 = Color3.fromRGB(80, 80, 80)
+    TitleFrame.BorderColor3 = Color3.fromRGB(50, 50, 50)
     TitleFrame.Parent = TopBar
 
     local TitleCorner = Instance.new("UICorner")
@@ -89,7 +90,7 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
     local Divider = Instance.new("Frame")
     Divider.Size = UDim2.new(0, 2, 0, 20)
     Divider.Position = UDim2.new(0, 150, 0.5, -10)
-    Divider.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+    Divider.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
     Divider.BorderSizePixel = 0
     Divider.Parent = TopBar
 
@@ -97,14 +98,14 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
     local LoaderTab = Instance.new("TextButton")
     LoaderTab.Size = UDim2.new(0, 80, 0, 24)
     LoaderTab.Position = UDim2.new(0, 160, 0.5, -12)
-    LoaderTab.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    LoaderTab.BackgroundTransparency = 0.9
+    LoaderTab.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    LoaderTab.BackgroundTransparency = CurrentTab.Value == "Loader" and 0 or 0.2
     LoaderTab.Text = "Loader"
     LoaderTab.TextColor3 = Color3.fromRGB(255, 255, 255)
     LoaderTab.TextSize = 14
     LoaderTab.Font = Enum.Font.Gotham
     LoaderTab.BorderSizePixel = 1
-    LoaderTab.BorderColor3 = Color3.fromRGB(80, 80, 80)
+    LoaderTab.BorderColor3 = Color3.fromRGB(50, 50, 50)
     LoaderTab.Parent = TopBar
 
     local LoaderTabCorner = Instance.new("UICorner")
@@ -115,7 +116,7 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
     local LoaderChatDivider = Instance.new("Frame")
     LoaderChatDivider.Size = UDim2.new(0, 2, 0, 20)
     LoaderChatDivider.Position = UDim2.new(0, 250, 0.5, -10)
-    LoaderChatDivider.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+    LoaderChatDivider.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
     LoaderChatDivider.BorderSizePixel = 0
     LoaderChatDivider.Parent = TopBar
 
@@ -123,26 +124,25 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
     local ChatTab = Instance.new("TextButton")
     ChatTab.Size = UDim2.new(0, 80, 0, 24)
     ChatTab.Position = UDim2.new(0, 260, 0.5, -12)
-    ChatTab.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    ChatTab.BackgroundTransparency = 0.9
+    ChatTab.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    ChatTab.BackgroundTransparency = CurrentTab.Value == "Chat" and 0 or 0.2
     ChatTab.Text = "Chat"
     ChatTab.TextColor3 = Color3.fromRGB(255, 255, 255)
     ChatTab.TextSize = 14
     ChatTab.Font = Enum.Font.Gotham
     ChatTab.BorderSizePixel = 1
-    ChatTab.BorderColor3 = Color3.fromRGB(80, 80, 80)
+    ChatTab.BorderColor3 = Color3.fromRGB(50, 50, 50)
     ChatTab.Parent = TopBar
 
     local ChatTabCorner = Instance.new("UICorner")
     ChatTabCorner.CornerRadius = UDim.new(0, 5)
     ChatTabCorner.Parent = ChatTab
 
-    -- Анимация градиента для логотипа и полосок
+    -- Анимация градиента для логотипа
     local GradientTime = 0
     local LastGradientUpdate = 0
     local GradientSpeed = 0.5
     local GradientUpdateInterval = 0.02
-    local SidebarFooterGradient
 
     local function updateGradients(deltaTime)
         LastGradientUpdate = LastGradientUpdate + deltaTime
@@ -157,13 +157,6 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
         for _, segmentData in ipairs(LogoSegments) do
             segmentData.Gradient.Color = ColorSequence.new(color1:Lerp(color2, t), color2:Lerp(color1, t))
         end
-
-        -- Динамическое обновление градиента полосок с эффектом "дыхания"
-        if SidebarFooterGradient then
-            local offset = math.sin(GradientTime * 2) * 0.5 + 0.5
-            SidebarFooterGradient.Color = ColorSequence.new(color1:Lerp(color2, offset), color2:Lerp(color1, offset))
-            SidebarFooterGradient.Offset = Vector2.new(math.sin(GradientTime) * 0.3, 0)
-        end
     end
 
     Core.Services.RunService.Heartbeat:Connect(updateGradients)
@@ -172,10 +165,10 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
     local Sidebar = Instance.new("Frame")
     Sidebar.Size = UDim2.new(0, 150, 1, -40)
     Sidebar.Position = UDim2.new(0, 0, 0, 40)
-    Sidebar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    Sidebar.BackgroundTransparency = 0.9
+    Sidebar.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    Sidebar.BackgroundTransparency = 0
     Sidebar.BorderSizePixel = 1
-    Sidebar.BorderColor3 = Color3.fromRGB(80, 80, 80)
+    Sidebar.BorderColor3 = Color3.fromRGB(50, 50, 50)
     Sidebar.Parent = MainFrame
 
     local SidebarList = Instance.new("UIListLayout")
@@ -194,10 +187,10 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
         local SectionButton = Instance.new("TextButton")
         SectionButton.Size = UDim2.new(1, -10, 0, 40)
         SectionButton.Position = UDim2.new(0, 5, 0, 0)
-        SectionButton.BackgroundColor3 = CurrentSection == section.Name and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(255, 255, 255)
-        SectionButton.BackgroundTransparency = CurrentSection == section.Name and 0.7 or 0.9
+        SectionButton.BackgroundColor3 = CurrentSection == section.Name and Color3.fromRGB(25, 25, 25) or Color3.fromRGB(15, 15, 15)
+        SectionButton.BackgroundTransparency = 0
         SectionButton.BorderSizePixel = 1
-        SectionButton.BorderColor3 = Color3.fromRGB(80, 80, 80)
+        SectionButton.BorderColor3 = Color3.fromRGB(50, 50, 50)
         SectionButton.Text = ""
         SectionButton.LayoutOrder = i
         SectionButton.Parent = Sidebar
@@ -230,17 +223,17 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
             CurrentTab.Value = "Loader"
             for _, btn in ipairs(Sidebar:GetChildren()) do
                 if btn:IsA("TextButton") then
-                    btn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-                    btn.BackgroundTransparency = btn.TextLabel.Text == section.Name and 0.7 or 0.9
+                    btn.BackgroundColor3 = btn.TextLabel.Text == section.Name and Color3.fromRGB(25, 25, 25) or Color3.fromRGB(15, 15, 15)
+                    btn.BackgroundTransparency = 0
                 end
             end
             for secName, frame in pairs(SectionFrames) do
                 frame.Visible = (secName == section.Name) and (CurrentTab.Value == "Loader")
             end
-            LoaderTab.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-            LoaderTab.BackgroundTransparency = 0.7
-            ChatTab.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-            ChatTab.BackgroundTransparency = 0.9
+            LoaderTab.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+            LoaderTab.BackgroundTransparency = 0
+            ChatTab.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+            ChatTab.BackgroundTransparency = 0.2
             ChatSection.Position = UDim2.new(0, 150, 0, 40)
             ChatSection.Size = UDim2.new(1, -150, 0, 350)
             OutputSection.Position = UDim2.new(0, 150, 1, -110)
@@ -250,27 +243,14 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
         end)
     end
 
-    -- Перекрывающая полоска снизу Sidebar с градиентом
-    local SidebarFooter = Instance.new("Frame")
-    SidebarFooter.Size = UDim2.new(0, 150, 0, 5)
-    SidebarFooter.Position = UDim2.new(0, 0, 1, -5)
-    SidebarFooter.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    SidebarFooter.BackgroundTransparency = 0.9
-    SidebarFooter.BorderSizePixel = 0
-    SidebarFooter.Parent = Sidebar
-
-    SidebarFooterGradient = Instance.new("UIGradient")
-    SidebarFooterGradient.Color = ColorSequence.new(Core.GradientColors.Color1.Value, Core.GradientColors.Color2.Value)
-    SidebarFooterGradient.Parent = SidebarFooter
-
     -- Контейнер для секций (сверху)
     local SectionContainer = Instance.new("Frame")
     SectionContainer.Size = UDim2.new(1, -150, 0, 350)
     SectionContainer.Position = UDim2.new(0, 150, 0, 40)
-    SectionContainer.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    SectionContainer.BackgroundTransparency = 0.9
+    SectionContainer.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    SectionContainer.BackgroundTransparency = 0
     SectionContainer.BorderSizePixel = 1
-    SectionContainer.BorderColor3 = Color3.fromRGB(80, 80, 80)
+    SectionContainer.BorderColor3 = Color3.fromRGB(50, 50, 50)
     SectionContainer.Parent = MainFrame
 
     -- Секция Main (бывшая Load)
@@ -298,14 +278,14 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
     local LoadButton = Instance.new("TextButton")
     LoadButton.Size = UDim2.new(1, -20, 0, 40)
     LoadButton.Position = UDim2.new(0, 10, 1, -50)
-    LoadButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    LoadButton.BackgroundTransparency = 0.9
+    LoadButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25) -- Убираем прозрачность
+    LoadButton.BackgroundTransparency = 0
     LoadButton.Text = "Load Selected Modules"
     LoadButton.TextColor3 = Color3.fromRGB(255, 255, 255)
     LoadButton.TextSize = 16
     LoadButton.Font = Enum.Font.GothamBold
     LoadButton.BorderSizePixel = 1
-    LoadButton.BorderColor3 = Color3.fromRGB(80, 80, 80)
+    LoadButton.BorderColor3 = Color3.fromRGB(50, 50, 50)
     LoadButton.Parent = MainSection
 
     local LoadButtonCorner = Instance.new("UICorner")
@@ -327,7 +307,7 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
     local MainDivider = Instance.new("Frame")
     MainDivider.Size = UDim2.new(1, -20, 0, 2)
     MainDivider.Position = UDim2.new(0, 10, 0, 40)
-    MainDivider.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+    MainDivider.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
     MainDivider.BorderSizePixel = 0
     MainDivider.Parent = MainSection
 
@@ -354,7 +334,7 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
     local AutofarmDivider = Instance.new("Frame")
     AutofarmDivider.Size = UDim2.new(1, -20, 0, 2)
     AutofarmDivider.Position = UDim2.new(0, 10, 0, 40)
-    AutofarmDivider.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+    AutofarmDivider.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
     AutofarmDivider.BorderSizePixel = 0
     AutofarmDivider.Parent = AutofarmSection
 
@@ -381,7 +361,7 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
     local SettingsDivider = Instance.new("Frame")
     SettingsDivider.Size = UDim2.new(1, -20, 0, 2)
     SettingsDivider.Position = UDim2.new(0, 10, 0, 40)
-    SettingsDivider.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+    SettingsDivider.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
     SettingsDivider.BorderSizePixel = 0
     SettingsDivider.Parent = SettingsSection
 
@@ -389,10 +369,10 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
     local ChatLocationContainer = Instance.new("Frame")
     ChatLocationContainer.Size = UDim2.new(1, -20, 0, 60)
     ChatLocationContainer.Position = UDim2.new(0, 10, 0, 50)
-    ChatLocationContainer.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    ChatLocationContainer.BackgroundTransparency = 0.9
+    ChatLocationContainer.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    ChatLocationContainer.BackgroundTransparency = 0
     ChatLocationContainer.BorderSizePixel = 1
-    ChatLocationContainer.BorderColor3 = Color3.fromRGB(80, 80, 80)
+    ChatLocationContainer.BorderColor3 = Color3.fromRGB(50, 50, 50)
     ChatLocationContainer.Parent = SettingsSection
 
     local ChatLocationContainerCorner = Instance.new("UICorner")
@@ -414,10 +394,10 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
     local ChatLocationFrame = Instance.new("Frame")
     ChatLocationFrame.Size = UDim2.new(0, 80, 0, 20)
     ChatLocationFrame.Position = UDim2.new(0, 5, 0, 30)
-    ChatLocationFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    ChatLocationFrame.BackgroundTransparency = 0.9
+    ChatLocationFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    ChatLocationFrame.BackgroundTransparency = 0
     ChatLocationFrame.BorderSizePixel = 1
-    ChatLocationFrame.BorderColor3 = Color3.fromRGB(80, 80, 80)
+    ChatLocationFrame.BorderColor3 = Color3.fromRGB(50, 50, 50)
     ChatLocationFrame.Parent = ChatLocationContainer
 
     local ChatLocationCorner = Instance.new("UICorner")
@@ -427,7 +407,7 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
     local ChatLocationIndicator = Instance.new("Frame")
     ChatLocationIndicator.Size = UDim2.new(0, 40, 0, 20)
     ChatLocationIndicator.Position = ChatLocation == "InMenu" and UDim2.new(0, 0, 0, 0) or UDim2.new(0, 40, 0, 0)
-    ChatLocationIndicator.BackgroundColor3 = ChatLocation == "InMenu" and Color3.fromRGB(80, 80, 80) or Color3.fromRGB(147, 112, 219)
+    ChatLocationIndicator.BackgroundColor3 = ChatLocation == "InMenu" and Color3.fromRGB(147, 112, 219) or Color3.fromRGB(80, 80, 80)
     ChatLocationIndicator.Parent = ChatLocationFrame
 
     local ChatLocationIndicatorCorner = Instance.new("UICorner")
@@ -444,14 +424,75 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
     ChatLocationText.TextXAlignment = Enum.TextXAlignment.Center
     ChatLocationText.Parent = ChatLocationFrame
 
+    -- Контейнер для переключателя Blur Effect
+    local BlurContainer = Instance.new("Frame")
+    BlurContainer.Size = UDim2.new(1, -20, 0, 60)
+    BlurContainer.Position = UDim2.new(0, 10, 0, 120)
+    BlurContainer.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    BlurContainer.BackgroundTransparency = 0
+    BlurContainer.BorderSizePixel = 1
+    BlurContainer.BorderColor3 = Color3.fromRGB(50, 50, 50)
+    BlurContainer.Parent = SettingsSection
+
+    local BlurContainerCorner = Instance.new("UICorner")
+    BlurContainerCorner.CornerRadius = UDim.new(0, 4)
+    BlurContainerCorner.Parent = BlurContainer
+
+    local BlurLabel = Instance.new("TextLabel")
+    BlurLabel.Size = UDim2.new(1, -10, 0, 20)
+    BlurLabel.Position = UDim2.new(0, 5, 0, 5)
+    BlurLabel.BackgroundTransparency = 1
+    BlurLabel.Text = "Blur Effect"
+    BlurLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    BlurLabel.TextSize = 14
+    BlurLabel.Font = Enum.Font.Gotham
+    BlurLabel.TextXAlignment = Enum.TextXAlignment.Left
+    BlurLabel.Parent = BlurContainer
+
+    local BlurToggleFrame = Instance.new("Frame")
+    BlurToggleFrame.Size = UDim2.new(0, 40, 0, 20)
+    BlurToggleFrame.Position = UDim2.new(0, 5, 0, 30)
+    BlurToggleFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    BlurToggleFrame.BackgroundTransparency = 0
+    BlurToggleFrame.BorderSizePixel = 1
+    BlurToggleFrame.BorderColor3 = Color3.fromRGB(50, 50, 50)
+    BlurToggleFrame.Parent = BlurContainer
+
+    local BlurToggleCorner = Instance.new("UICorner")
+    BlurToggleCorner.CornerRadius = UDim.new(1, 0)
+    BlurToggleCorner.Parent = BlurToggleFrame
+
+    local BlurToggleIndicator = Instance.new("Frame")
+    BlurToggleIndicator.Size = UDim2.new(0, 20, 0, 20)
+    BlurToggleIndicator.Position = UDim2.new(0, 0, 0, 0)
+    BlurToggleIndicator.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+    BlurToggleIndicator.Parent = BlurToggleFrame
+
+    local BlurIndicatorCorner = Instance.new("UICorner")
+    BlurIndicatorCorner.CornerRadius = UDim.new(1, 0)
+    BlurIndicatorCorner.Parent = BlurToggleIndicator
+
+    BlurToggleFrame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            BlurEnabled = not BlurEnabled
+            Core.Services.TweenService:Create(
+                BlurToggleIndicator,
+                TweenInfo.new(0.2),
+                {Position = BlurEnabled and UDim2.new(1, -20, 0, 0) or UDim2.new(0, 0, 0, 0)}
+            ):Play()
+            BlurToggleIndicator.BackgroundColor3 = BlurEnabled and Color3.fromRGB(147, 112, 219) or Color3.fromRGB(80, 80, 80)
+            Blur.Size = BlurEnabled and 10 or 0
+        end
+    end)
+
     -- Создание UI для каждого модуля в секции Main
     for i, module in ipairs(Core.Modules) do
         local ModuleFrame = Instance.new("Frame")
         ModuleFrame.Size = UDim2.new(1, 0, 0, 40)
-        ModuleFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-        ModuleFrame.BackgroundTransparency = 0.9
+        ModuleFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+        ModuleFrame.BackgroundTransparency = 0
         ModuleFrame.BorderSizePixel = 1
-        ModuleFrame.BorderColor3 = Color3.fromRGB(80, 80, 80)
+        ModuleFrame.BorderColor3 = Color3.fromRGB(50, 50, 50)
         ModuleFrame.LayoutOrder = i
         ModuleFrame.Parent = ModuleList
 
@@ -473,10 +514,10 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
         local ToggleFrame = Instance.new("Frame")
         ToggleFrame.Size = UDim2.new(0, 40, 0, 20)
         ToggleFrame.Position = UDim2.new(1, -50, 0, 10)
-        ToggleFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-        ToggleFrame.BackgroundTransparency = 0.9
+        ToggleFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+        ToggleFrame.BackgroundTransparency = 0
         ToggleFrame.BorderSizePixel = 1
-        ToggleFrame.BorderColor3 = Color3.fromRGB(80, 80, 80)
+        ToggleFrame.BorderColor3 = Color3.fromRGB(50, 50, 50)
         ToggleFrame.Parent = ModuleFrame
 
         local ToggleCorner = Instance.new("UICorner")
@@ -486,7 +527,8 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
         local ToggleIndicator = Instance.new("Frame")
         ToggleIndicator.Size = UDim2.new(0, 20, 0, 20)
         ToggleIndicator.Position = module.Enabled and UDim2.new(1, -20, 0, 0) or UDim2.new(0, 0, 0, 0)
-        ToggleIndicator.BackgroundColor3 = module.Enabled and Color3.fromRGB(147, 112, 219) or Color3.fromRGB(80, 80, 80)
+        ToggleIndicator.BackgroundColor3 = module.Enabled and Color3.fromRGB(147, 112, 219) or Color3.fromRGB(200, 200, 200)
+        ToggleIndicator.BackgroundTransparency = 0
         ToggleIndicator.Parent = ToggleFrame
 
         local IndicatorCorner = Instance.new("UICorner")
@@ -501,7 +543,7 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
                     TweenInfo.new(0.2),
                     {Position = module.Enabled and UDim2.new(1, -20, 0, 0) or UDim2.new(0, 0, 0, 0)}
                 ):Play()
-                ToggleIndicator.BackgroundColor3 = module.Enabled and Color3.fromRGB(147, 112, 219) or Color3.fromRGB(80, 80, 80)
+                ToggleIndicator.BackgroundColor3 = module.Enabled and Color3.fromRGB(147, 112, 219) or Color3.fromRGB(200, 200, 200)
             end
         end)
     end
@@ -509,10 +551,10 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
     -- Обработчик переключения вкладок
     LoaderTab.MouseButton1Click:Connect(function()
         CurrentTab.Value = "Loader"
-        LoaderTab.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-        LoaderTab.BackgroundTransparency = 0.7
-        ChatTab.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-        ChatTab.BackgroundTransparency = 0.9
+        LoaderTab.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+        LoaderTab.BackgroundTransparency = 0
+        ChatTab.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+        ChatTab.BackgroundTransparency = 0.2
         ChatSection.Position = UDim2.new(0, 150, 0, 40)
         ChatSection.Size = UDim2.new(1, -150, 0, 350)
         ChatSection.Visible = false
@@ -520,16 +562,16 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
         OutputSection.Size = UDim2.new(1, -150, 0, 110)
         Sidebar.Visible = true
         for secName, frame in pairs(SectionFrames) do
-            frame.Visible = (secName == CurrentSection) and (CurrentTab.Value == "Loader")
+            frame.Visible = (secName == section.Name) and (CurrentTab.Value == "Loader")
         end
     end)
 
     ChatTab.MouseButton1Click:Connect(function()
         CurrentTab.Value = "Chat"
-        LoaderTab.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-        LoaderTab.BackgroundTransparency = 0.9
-        ChatTab.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-        ChatTab.BackgroundTransparency = 0.7
+        LoaderTab.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+        LoaderTab.BackgroundTransparency = 0.2
+        ChatTab.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+        ChatTab.BackgroundTransparency = 0
         for secName, frame in pairs(SectionFrames) do
             frame.Visible = false
         end
@@ -539,6 +581,16 @@ local function InitMenu(MainFrame, Core, CurrentTab, ChatSection, OutputSection,
         OutputSection.Position = UDim2.new(0, 0, 1, -110)
         OutputSection.Size = UDim2.new(1, 0, 0, 110)
         Sidebar.Visible = false
+    end)
+
+    -- Отключаем Blur при загрузке модулей
+    LoadButton.MouseButton1Click:Connect(function()
+        Blur.Size = 0
+        BlurEnabled = false
+        if BlurToggleIndicator then
+            BlurToggleIndicator.Position = UDim2.new(0, 0, 0, 0)
+            BlurToggleIndicator.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+        end
     end)
 
     return {
