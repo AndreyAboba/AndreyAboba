@@ -1,954 +1,285 @@
-local function Init(Core)
-    local TweenService = Core.Services.TweenService
+return function(Core, Modules, UserId, PlaceId, Usernames, FriendsList, fetchMessages, fetchPrivateMessages, sendMessage, sendPrivateMessage, addFriend, removeFriend, initializeMacLib, loadModule)
+    local CoreGui, Lighting, UIS = game:GetService("CoreGui"), game:GetService("Lighting"), game:GetService("UserInputService")
+    local Logs, ChatMessages, DisplayedMessageIds = {}, {}, {}
+    local ChatLocation, CurrentTab, CurrentSection, BlurEnabled, LastMessageTime, LastJobIdTime, MESSAGE_COOLDOWN, JOBID_COOLDOWN = "InMenu", "Loader", "Main", true, 0, 0, 10, 60
 
-    local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "SyllinseLoader"
-    ScreenGui.IgnoreGuiInset = true
-    ScreenGui.ResetOnSpawn = false
-    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    ScreenGui.DisplayOrder = 2147483647
-    ScreenGui.Parent = Core.Services.CoreGuiService
+    local BlurEffect = Instance.new("BlurEffect", Lighting) BlurEffect.Name, BlurEffect.Size, BlurEffect.Enabled = "SyllinseLoaderBlur", 24, BlurEnabled
+    local ScreenGui = Instance.new("ScreenGui", CoreGui) ScreenGui.Name, ScreenGui.IgnoreGuiInset, ScreenGui.ResetOnSpawn, ScreenGui.ZIndexBehavior, ScreenGui.DisplayOrder = "SyllinseLoader", true, false, Enum.ZIndexBehavior.Sibling, 2147483647
+    ScreenGui:GetPropertyChangedSignal("Enabled"):Connect(function() BlurEffect.Enabled = ScreenGui.Enabled and BlurEnabled end)
 
-    local MainFrame = Instance.new("Frame")
-    MainFrame.Size = UDim2.new(0, 650, 0, 550)
-    MainFrame.Position = UDim2.new(0.5, -325, 0.5, -275)
-    MainFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 15)
-    MainFrame.BackgroundTransparency = 0.1
-    MainFrame.BorderSizePixel = 0
-    MainFrame.Parent = ScreenGui
+    local MainFrame = Instance.new("Frame", ScreenGui) MainFrame.Size, MainFrame.Position, MainFrame.BackgroundColor3, MainFrame.BackgroundTransparency, MainFrame.BorderSizePixel = UDim2.new(0, 650, 0, 550), UDim2.new(0.5, -325, 0.5, -275), Color3.fromRGB(10, 10, 15), 0.1, 0
+    Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 12)
+    local UIGradient = Instance.new("UIGradient", MainFrame) UIGradient.Color, UIGradient.Rotation = ColorSequence.new(Color3.fromRGB(0, 153, 255), Color3.fromRGB(147, 112, 219)), 45
 
-    local UICorner = Instance.new("UICorner")
-    UICorner.CornerRadius = UDim.new(0, 12)
-    UICorner.Parent = MainFrame
+    local TopBar = Instance.new("Frame", MainFrame) TopBar.Size, TopBar.BackgroundColor3, TopBar.BackgroundTransparency, TopBar.BorderSizePixel = UDim2.new(1, 0, 0, 50), Color3.fromRGB(15, 15, 20), 0.2, 0
+    local TopBarGradient = Instance.new("UIGradient", TopBar) TopBarGradient.Color, TopBarGradient.Rotation = ColorSequence.new(Color3.fromRGB(0, 153, 255), Color3.fromRGB(147, 112, 219)), 45
+    local TitleLabel = Instance.new("TextLabel", TopBar) TitleLabel.Size, TitleLabel.Position, TitleLabel.BackgroundTransparency, TitleLabel.Text, TitleLabel.TextColor3, TitleLabel.TextSize, TitleLabel.Font, TitleLabel.TextXAlignment = UDim2.new(0, 150, 0, 30), UDim2.new(0, 15, 0.5, -15), 1, "Syllinse", Color3.fromRGB(255, 255, 255), 20, Enum.Font.Montserrat, Enum.TextXAlignment.Left
 
-    local UIGradient = Instance.new("UIGradient")
-    UIGradient.Color = ColorSequence.new(Color3.fromRGB(0, 153, 255), Color3.fromRGB(147, 112, 219))
-    UIGradient.Rotation = 45
-    UIGradient.Parent = MainFrame
+    local TabsContainer = Instance.new("Frame", TopBar) TabsContainer.Size, TabsContainer.Position, TabsContainer.BackgroundTransparency = UDim2.new(0, 200, 0, 30), UDim2.new(1, -210, 0.5, -15), 1
+    local TabsList = Instance.new("UIListLayout", TabsContainer) TabsList.FillDirection, TabsList.HorizontalAlignment, TabsList.Padding = Enum.FillDirection.Horizontal, Enum.HorizontalAlignment.Right, UDim.new(0, 10)
 
-    local TopBar = Instance.new("Frame")
-    TopBar.Size = UDim2.new(1, 0, 0, 50)
-    TopBar.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-    TopBar.BackgroundTransparency = 0.2
-    TopBar.BorderSizePixel = 0
-    TopBar.Parent = MainFrame
+    local LoaderTab = Instance.new("TextButton", TabsContainer) LoaderTab.Size, LoaderTab.BackgroundColor3, LoaderTab.BackgroundTransparency, LoaderTab.Text, LoaderTab.TextColor3, LoaderTab.TextSize, LoaderTab.Font, LoaderTab.BorderSizePixel = UDim2.new(0, 80, 0, 30), Color3.fromRGB(25, 25, 30), 0.3, "Loader", Color3.fromRGB(255, 255, 255), 14, Enum.Font.Montserrat, 0
+    Instance.new("UICorner", LoaderTab).CornerRadius = UDim.new(0, 6)
+    local LoaderTabGradient = Instance.new("UIGradient", LoaderTab) LoaderTabGradient.Color, LoaderTabGradient.Rotation, LoaderTabGradient.Enabled = ColorSequence.new(Color3.fromRGB(0, 153, 255), Color3.fromRGB(147, 112, 219)), 45, true
 
-    local TopBarGradient = Instance.new("UIGradient")
-    TopBarGradient.Color = ColorSequence.new(Color3.fromRGB(0, 153, 255), Color3.fromRGB(147, 112, 219))
-    TopBarGradient.Rotation = 45
-    TopBarGradient.Parent = TopBar
+    local ChatTab = Instance.new("TextButton", TabsContainer) ChatTab.Size, ChatTab.BackgroundColor3, ChatTab.BackgroundTransparency, ChatTab.Text, ChatTab.TextColor3, ChatTab.TextSize, ChatTab.Font, ChatTab.BorderSizePixel = UDim2.new(0, 80, 0, 30), Color3.fromRGB(25, 25, 30), 0.3, "Chat", Color3.fromRGB(255, 255, 255), 14, Enum.Font.Montserrat, 0
+    Instance.new("UICorner", ChatTab).CornerRadius = UDim.new(0, 6)
+    local ChatTabGradient = Instance.new("UIGradient", ChatTab) ChatTabGradient.Color, ChatTabGradient.Rotation, ChatTabGradient.Enabled = ColorSequence.new(Color3.fromRGB(0, 153, 255), Color3.fromRGB(147, 112, 219)), 45, false
 
-    local TitleLabel = Instance.new("TextLabel")
-    TitleLabel.Size = UDim2.new(0, 150, 0, 30)
-    TitleLabel.Position = UDim2.new(0, 15, 0.5, -15)
-    TitleLabel.BackgroundTransparency = 1
-    TitleLabel.Text = "Syllinse"
-    TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    TitleLabel.TextSize = 20
-    TitleLabel.Font = Enum.Font.Montserrat
-    TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
-    TitleLabel.Parent = TopBar
+    local Sidebar = Instance.new("Frame", MainFrame) Sidebar.Size, Sidebar.Position, Sidebar.BackgroundColor3, Sidebar.BackgroundTransparency, Sidebar.BorderSizePixel = UDim2.new(0, 150, 1, -50), UDim2.new(0, 0, 0, 50), Color3.fromRGB(15, 15, 20), 0.2, 0
+    local SidebarGradient = Instance.new("UIGradient", Sidebar) SidebarGradient.Color, SidebarGradient.Rotation = ColorSequence.new(Color3.fromRGB(0, 153, 255), Color3.fromRGB(147, 112, 219)), 45
+    local SidebarList = Instance.new("UIListLayout", Sidebar) SidebarList.Padding, SidebarList.SortOrder = UDim.new(0, 5), Enum.SortOrder.LayoutOrder
 
-    local TabsContainer = Instance.new("Frame")
-    TabsContainer.Size = UDim2.new(0, 200, 0, 30)
-    TabsContainer.Position = UDim2.new(1, -210, 0.5, -15)
-    TabsContainer.BackgroundTransparency = 1
-    TabsContainer.Parent = TopBar
-
-    local TabsList = Instance.new("UIListLayout")
-    TabsList.FillDirection = Enum.FillDirection.Horizontal
-    TabsList.HorizontalAlignment = Enum.HorizontalAlignment.Right
-    TabsList.Padding = UDim.new(0, 10)
-    TabsList.Parent = TabsContainer
-
-    local LoaderTab = Instance.new("TextButton")
-    LoaderTab.Size = UDim2.new(0, 80, 0, 30)
-    LoaderTab.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
-    LoaderTab.BackgroundTransparency = 0.3
-    LoaderTab.Text = "Loader"
-    LoaderTab.TextColor3 = Color3.fromRGB(255, 255, 255)
-    LoaderTab.TextSize = 14
-    LoaderTab.Font = Enum.Font.Montserrat
-    LoaderTab.BorderSizePixel = 0
-    LoaderTab.Parent = TabsContainer
-
-    local LoaderTabCorner = Instance.new("UICorner")
-    LoaderTabCorner.CornerRadius = UDim.new(0, 6)
-    LoaderTabCorner.Parent = LoaderTab
-
-    local LoaderTabGradient = Instance.new("UIGradient")
-    LoaderTabGradient.Color = ColorSequence.new(Color3.fromRGB(0, 153, 255), Color3.fromRGB(147, 112, 219))
-    LoaderTabGradient.Rotation = 45
-    LoaderTabGradient.Enabled = true
-    LoaderTabGradient.Parent = LoaderTab
-
-    local ChatTab = Instance.new("TextButton")
-    ChatTab.Size = UDim2.new(0, 80, 0, 30)
-    ChatTab.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
-    ChatTab.BackgroundTransparency = 0.3
-    ChatTab.Text = "Chat"
-    ChatTab.TextColor3 = Color3.fromRGB(255, 255, 255)
-    ChatTab.TextSize = 14
-    ChatTab.Font = Enum.Font.Montserrat
-    ChatTab.BorderSizePixel = 0
-    ChatTab.Parent = TabsContainer
-
-    local ChatTabCorner = Instance.new("UICorner")
-    ChatTabCorner.CornerRadius = UDim.new(0, 6)
-    ChatTabCorner.Parent = ChatTab
-
-    local ChatTabGradient = Instance.new("UIGradient")
-    ChatTabGradient.Color = ColorSequence.new(Color3.fromRGB(0, 153, 255), Color3.fromRGB(147, 112, 219))
-    ChatTabGradient.Rotation = 45
-    ChatTabGradient.Enabled = false
-    ChatTabGradient.Parent = ChatTab
-
-    local Sidebar = Instance.new("Frame")
-    Sidebar.Size = UDim2.new(0, 150, 1, -50)
-    Sidebar.Position = UDim2.new(0, 0, 0, 50)
-    Sidebar.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-    Sidebar.BackgroundTransparency = 0.2
-    Sidebar.BorderSizePixel = 0
-    Sidebar.Parent = MainFrame
-
-    local SidebarGradient = Instance.new("UIGradient")
-    SidebarGradient.Color = ColorSequence.new(Color3.fromRGB(0, 153, 255), Color3.fromRGB(147, 112, 219))
-    SidebarGradient.Rotation = 45
-    SidebarGradient.Parent = Sidebar
-
-    local SidebarList = Instance.new("UIListLayout")
-    SidebarList.Padding = UDim.new(0, 5)
-    SidebarList.SortOrder = Enum.SortOrder.LayoutOrder
-    SidebarList.Parent = Sidebar
-
-    local Sections = {
-        { Name = "Main", Icon = "rbxassetid://18821914323" },
-        { Name = "Autofarm", Icon = "rbxassetid://18821914323" },
-        { Name = "Settings", Icon = "rbxassetid://18821914323" }
-    }
+    local Sections = {{Name = "Main", Icon = "rbxassetid://11982164035"}, {Name = "Autofarm", Icon = "rbxassetid://74133076168703"}, {Name = "Settings", Icon = "rbxassetid://14134158045"}, {Name = "Logs & Debug", Icon = "rbxassetid://116108099038795"}}
     local SectionFrames = {}
-    local CurrentSection = "Main"
-    local CurrentTab = "Loader"
 
     for i, section in ipairs(Sections) do
-        local SectionButton = Instance.new("TextButton")
-        SectionButton.Size = UDim2.new(1, -10, 0, 40)
-        SectionButton.Position = UDim2.new(0, 5, 0, 0)
-        SectionButton.BackgroundColor3 = CurrentSection == section.Name and Color3.fromRGB(25, 25, 30) or Color3.fromRGB(20, 20, 25)
-        SectionButton.BackgroundTransparency = 0.3
-        SectionButton.Text = ""
-        SectionButton.LayoutOrder = i
-        SectionButton.Parent = Sidebar
-
-        local ButtonCorner = Instance.new("UICorner")
-        ButtonCorner.CornerRadius = UDim.new(0, 6)
-        ButtonCorner.Parent = SectionButton
-
-        local Icon = Instance.new("ImageLabel")
-        Icon.Size = UDim2.new(0, 20, 0, 20)
-        Icon.Position = UDim2.new(0, 10, 0, 10)
-        Icon.BackgroundTransparency = 1
-        Icon.Image = section.Icon
-        Icon.Parent = SectionButton
-
-        local Label = Instance.new("TextLabel")
-        Label.Size = UDim2.new(1, -40, 1, 0)
-        Label.Position = UDim2.new(0, 40, 0, 0)
-        Label.BackgroundTransparency = 1
-        Label.Text = section.Name
-        Label.TextColor3 = Color3.fromRGB(255, 255, 255)
-        Label.TextSize = 16
-        Label.Font = Enum.Font.Montserrat
-        Label.TextXAlignment = Enum.TextXAlignment.Left
-        Label.Parent = SectionButton
-
-        local ButtonGradient = Instance.new("UIGradient")
-        ButtonGradient.Color = ColorSequence.new(Color3.fromRGB(0, 153, 255), Color3.fromRGB(147, 112, 219))
-        ButtonGradient.Rotation = 45
-        ButtonGradient.Enabled = CurrentSection == section.Name
-        ButtonGradient.Parent = SectionButton
-
+        local SectionButton = Instance.new("TextButton", Sidebar) SectionButton.Size, SectionButton.Position, SectionButton.BackgroundColor3, SectionButton.BackgroundTransparency, SectionButton.Text, SectionButton.LayoutOrder = UDim2.new(1, -10, 0, 40), UDim2.new(0, 5, 0, 0), CurrentSection == section.Name and Color3.fromRGB(35, 35, 45) or Color3.fromRGB(20, 20, 25), 0.3, "", i
+        Instance.new("UICorner", SectionButton).CornerRadius = UDim.new(0, 6)
+        local Icon = Instance.new("ImageLabel", SectionButton) Icon.Size, Icon.Position, Icon.BackgroundTransparency, Icon.Image = UDim2.new(0, 20, 0, 20), UDim2.new(0, 10, 0, 10), 1, section.Icon
+        local Label = Instance.new("TextLabel", SectionButton) Label.Size, Label.Position, Label.BackgroundTransparency, Label.Text, Label.TextColor3, Label.TextSize, Label.Font, Label.TextXAlignment, Label.Name = UDim2.new(1, -40, 1, 0), UDim2.new(0, 40, 0, 0), 1, section.Name, Color3.fromRGB(255, 255, 255), 16, Enum.Font.Montserrat, Enum.TextXAlignment.Left, "TextLabel"
         SectionButton.MouseButton1Click:Connect(function()
             if CurrentTab == "Chat" then return end
-            CurrentSection = section.Name
-            CurrentTab = "Loader"
-            for _, btn in ipairs(Sidebar:GetChildren()) do
-                if btn:IsA("TextButton") then
-                    btn.BackgroundColor3 = btn.TextLabel.Text == section.Name and Color3.fromRGB(25, 25, 30) or Color3.fromRGB(20, 20, 25)
-                    btn.UIGradient.Enabled = btn.TextLabel.Text == section.Name
-                end
-            end
-            for secName, frame in pairs(SectionFrames) do
-                frame.Visible = (secName == section.Name) and (CurrentTab == "Loader")
-            end
-            LoaderTabGradient.Enabled = true
-            ChatTabGradient.Enabled = false
-            ChatSection.Position = UDim2.new(0, 150, 0, 50)
-            ChatSection.Size = UDim2.new(1, -150, 0, 400)
-            OutputSection.Position = UDim2.new(0, 150, 1, -100)
-            OutputSection.Size = UDim2.new(1, -150, 0, 100)
-            ChatSection.Visible = false
-            Sidebar.Visible = true
+            CurrentSection, CurrentTab = section.Name, "Loader"
+            for _, btn in ipairs(Sidebar:GetChildren()) do if btn:IsA("TextButton") then btn.BackgroundColor3 = btn.TextLabel.Text == section.Name and Color3.fromRGB(35, 35, 45) or Color3.fromRGB(20, 20, 25) end end
+            for secName, frame in pairs(SectionFrames) do if frame then frame.BackgroundTransparency, frame.Visible = secName == section.Name and 0 or 0.3, secName == section.Name if frame.Visible then Core.Services.TweenService:Create(frame, TweenInfo.new(0.3), {BackgroundTransparency = 0}):Play() end end end
+            LoaderTabGradient.Enabled, ChatTabGradient.Enabled = true, false
+            if ChatSection then ChatSection.Visible = false end
+            if OutputSection then OutputSection.Position, OutputSection.Size, OutputSection.Visible = UDim2.new(0, 150, 1, -100), UDim2.new(1, -150, 0, 100), ChatLocation ~= "AsOutput" end
+            if Sidebar then Sidebar.Visible = true end
+            if ChatSection and ChatSection.Parent then ChatSection.Position, ChatSection.Size = UDim2.new(0, 150, 0, 50), UDim2.new(1, -150, 0, 400) end
         end)
-
-        SectionButton.MouseEnter:Connect(function()
-            TweenService:Create(SectionButton, TweenInfo.new(0.2), {BackgroundTransparency = 0.1}):Play()
-        end)
-
-        SectionButton.MouseLeave:Connect(function()
-            TweenService:Create(SectionButton, TweenInfo.new(0.2), {BackgroundTransparency = 0.3}):Play()
-        end)
+        SectionButton.MouseEnter:Connect(function() Core.Services.TweenService:Create(SectionButton, TweenInfo.new(0.2), {BackgroundTransparency = 0.1}):Play() end)
+        SectionButton.MouseLeave:Connect(function() Core.Services.TweenService:Create(SectionButton, TweenInfo.new(0.2), {BackgroundTransparency = 0.3}):Play() end)
     end
 
-    local SectionContainer = Instance.new("Frame")
-    SectionContainer.Size = UDim2.new(1, -150, 0, 400)
-    SectionContainer.Position = UDim2.new(0, 150, 0, 50)
-    SectionContainer.BackgroundTransparency = 1
-    SectionContainer.Parent = MainFrame
+    local SectionContainer = Instance.new("Frame", MainFrame) SectionContainer.Size, SectionContainer.Position, SectionContainer.BackgroundTransparency = UDim2.new(1, -150, 0, 400), UDim2.new(0, 150, 0, 50), 1
 
-    local MainSection = Instance.new("Frame")
-    MainSection.Size = UDim2.new(1, 0, 1, 0)
-    MainSection.BackgroundTransparency = 1
-    MainSection.Visible = true
-    MainSection.Parent = SectionContainer
+    local MainSection = Instance.new("Frame", SectionContainer) MainSection.Size, MainSection.BackgroundTransparency, MainSection.BackgroundColor3, MainSection.Visible = UDim2.new(1, 0, 1, 0), 0, Color3.fromRGB(30, 30, 40), true
     SectionFrames["Main"] = MainSection
+    local MainLabel = Instance.new("TextLabel", MainSection) MainLabel.Size, MainLabel.Position, MainLabel.BackgroundTransparency, MainLabel.Text, MainLabel.TextColor3, MainLabel.TextSize, MainLabel.Font, MainLabel.TextXAlignment = UDim2.new(1, -20, 0, 30), UDim2.new(0, 10, 0, 10), 1, "Main", Color3.fromRGB(255, 255, 255), 16, Enum.Font.Montserrat, Enum.TextXAlignment.Left
+    local MainDivider = Instance.new("Frame", MainSection) MainDivider.Size, MainDivider.Position, MainDivider.BackgroundColor3, MainDivider.BorderSizePixel = UDim2.new(1, -20, 0, 2), UDim2.new(0, 10, 0, 40), Color3.fromRGB(50, 50, 50), 0
+    local ModuleList = Instance.new("ScrollingFrame", MainSection) ModuleList.Size, ModuleList.Position, ModuleList.BackgroundTransparency, ModuleList.BorderSizePixel, ModuleList.CanvasSize, ModuleList.ScrollBarThickness = UDim2.new(1, -20, 1, -100), UDim2.new(0, 10, 0, 55), 1, 0, UDim2.new(0, 0, 0, #Modules * 50), 6
+    local ModuleListLayout = Instance.new("UIListLayout", ModuleList) ModuleListLayout.Padding, ModuleListLayout.SortOrder = UDim.new(0, 5), Enum.SortOrder.LayoutOrder
+    local LoadButton = Instance.new("TextButton", MainSection) LoadButton.Size, LoadButton.Position, LoadButton.BackgroundColor3, LoadButton.BackgroundTransparency, LoadButton.Text, LoadButton.TextColor3, LoadButton.TextSize, LoadButton.Font = UDim2.new(1, -20, 0, 40), UDim2.new(0, 10, 1, -50), Color3.fromRGB(40, 40, 50), 0.3, "Load Selected Modules", Color3.fromRGB(255, 255, 255), 16, Enum.Font.Montserrat
+    Instance.new("UICorner", LoadButton).CornerRadius = UDim.new(0, 8)
+    LoadButton.MouseEnter:Connect(function() Core.Services.TweenService:Create(LoadButton, TweenInfo.new(0.2), {BackgroundTransparency = 0.1}):Play() end)
+    LoadButton.MouseLeave:Connect(function() Core.Services.TweenService:Create(LoadButton, TweenInfo.new(0.2), {BackgroundTransparency = 0.3}):Play() end)
+    LoadButton.MouseButton1Down:Connect(function() Core.Services.TweenService:Create(LoadButton, TweenInfo.new(0.1), {Size = UDim2.new(1, -20, 0, 38)}):Play() end)
+    LoadButton.MouseButton1Up:Connect(function() Core.Services.TweenService:Create(LoadButton, TweenInfo.new(0.1), {Size = UDim2.new(1, -20, 0, 40)}):Play() end)
 
-    local ModuleList = Instance.new("ScrollingFrame")
-    ModuleList.Size = UDim2.new(1, -20, 1, -60)
-    ModuleList.Position = UDim2.new(0, 10, 0, 40)
-    ModuleList.BackgroundTransparency = 1
-    ModuleList.BorderSizePixel = 0
-    ModuleList.CanvasSize = UDim2.new(0, 0, 0, #Core.Modules * 50)
-    ModuleList.ScrollBarThickness = 6
-    ModuleList.Parent = MainSection
-
-    local ModuleListLayout = Instance.new("UIListLayout")
-    ModuleListLayout.Padding = UDim.new(0, 5)
-    ModuleListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    ModuleListLayout.Parent = ModuleList
-
-    local LoadButton = Instance.new("TextButton")
-    LoadButton.Size = UDim2.new(1, -20, 0, 40)
-    LoadButton.Position = UDim2.new(0, 10, 1, -50)
-    LoadButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-    LoadButton.BackgroundTransparency = 0.3
-    LoadButton.Text = "Load Selected Modules"
-    LoadButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    LoadButton.TextSize = 16
-    LoadButton.Font = Enum.Font.Montserrat
-    LoadButton.Parent = MainSection
-
-    local LoadButtonCorner = Instance.new("UICorner")
-    LoadButtonCorner.CornerRadius = UDim.new(0, 8)
-    LoadButtonCorner.Parent = LoadButton
-
-    local LoadButtonGradient = Instance.new("UIGradient")
-    LoadButtonGradient.Color = ColorSequence.new(Color3.fromRGB(0, 153, 255), Color3.fromRGB(147, 112, 219))
-    LoadButtonGradient.Rotation = 45
-    LoadButtonGradient.Parent = LoadButton
-
-    LoadButton.MouseEnter:Connect(function()
-        TweenService:Create(LoadButton, TweenInfo.new(0.2), {BackgroundTransparency = 0.1}):Play()
-    end)
-
-    LoadButton.MouseLeave:Connect(function()
-        TweenService:Create(LoadButton, TweenInfo.new(0.2), {BackgroundTransparency = 0.3}):Play()
-    end)
-
-    local MainLabel = Instance.new("TextLabel")
-    MainLabel.Size = UDim2.new(1, -20, 0, 30)
-    MainLabel.Position = UDim2.new(0, 10, 0, 10)
-    MainLabel.BackgroundTransparency = 1
-    MainLabel.Text = "Main"
-    MainLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    MainLabel.TextSize = 16
-    MainLabel.Font = Enum.Font.Montserrat
-    MainLabel.TextXAlignment = Enum.TextXAlignment.Left
-    MainLabel.Parent = MainSection
-
-    local MainDivider = Instance.new("Frame")
-    MainDivider.Size = UDim2.new(1, -20, 0, 2)
-    MainDivider.Position = UDim2.new(0, 10, 0, 40)
-    MainDivider.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    MainDivider.BorderSizePixel = 0
-    MainDivider.Parent = MainSection
-
-    local AutofarmSection = Instance.new("Frame")
-    AutofarmSection.Size = UDim2.new(1, 0, 1, 0)
-    AutofarmSection.BackgroundTransparency = 1
-    AutofarmSection.Visible = false
-    AutofarmSection.Parent = SectionContainer
+    local AutofarmSection = Instance.new("Frame", SectionContainer) AutofarmSection.Size, AutofarmSection.BackgroundTransparency, AutofarmSection.BackgroundColor3, AutofarmSection.Visible = UDim2.new(1, 0, 1, 0), 0.3, Color3.fromRGB(30, 30, 40), false
     SectionFrames["Autofarm"] = AutofarmSection
+    local AutofarmLabel = Instance.new("TextLabel", AutofarmSection) AutofarmLabel.Size, AutofarmLabel.Position, AutofarmLabel.BackgroundTransparency, AutofarmLabel.Text, AutofarmLabel.TextColor3, AutofarmLabel.TextSize, AutofarmLabel.Font, AutofarmLabel.TextXAlignment = UDim2.new(1, -20, 0, 30), UDim2.new(0, 10, 0, 10), 1, "Autofarm", Color3.fromRGB(255, 255, 255), 14, Enum.Font.Montserrat, Enum.TextXAlignment.Left
+    local AutofarmDivider = Instance.new("Frame", AutofarmSection) AutofarmDivider.Size, AutofarmDivider.Position, AutofarmDivider.BackgroundColor3, AutofarmDivider.BorderSizePixel = UDim2.new(1, -20, 0, 2), UDim2.new(0, 10, 0, 40), Color3.fromRGB(50, 50, 50), 0
+    local AutofarmPlaceholder = Instance.new("TextLabel", AutofarmSection) AutofarmPlaceholder.Size, AutofarmPlaceholder.Position, AutofarmPlaceholder.BackgroundTransparency, AutofarmPlaceholder.Text, AutofarmPlaceholder.TextColor3, AutofarmPlaceholder.TextSize, AutofarmPlaceholder.Font, AutofarmPlaceholder.TextXAlignment = UDim2.new(1, -20, 0, 30), UDim2.new(0, 10, 0, 55), 1, "Coming Soon...", Color3.fromRGB(150, 150, 150), 14, Enum.Font.Montserrat, Enum.TextXAlignment.Left
 
-    local AutofarmLabel = Instance.new("TextLabel")
-    AutofarmLabel.Size = UDim2.new(1, -20, 0, 30)
-    AutofarmLabel.Position = UDim2.new(0, 10, 0, 10)
-    AutofarmLabel.BackgroundTransparency = 1
-    AutofarmLabel.Text = "Autofarm"
-    AutofarmLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    AutofarmLabel.TextSize = 16
-    AutofarmLabel.Font = Enum.Font.Montserrat
-    AutofarmLabel.TextXAlignment = Enum.TextXAlignment.Left
-    AutofarmLabel.Parent = AutofarmSection
-
-    local AutofarmDivider = Instance.new("Frame")
-    AutofarmDivider.Size = UDim2.new(1, -20, 0, 2)
-    AutofarmDivider.Position = UDim2.new(0, 10, 0, 40)
-    AutofarmDivider.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    AutofarmDivider.BorderSizePixel = 0
-    AutofarmDivider.Parent = AutofarmSection
-
-    local SettingsSection = Instance.new("Frame")
-    SettingsSection.Size = UDim2.new(1, 0, 1, 0)
-    SettingsSection.BackgroundTransparency = 1
-    SettingsSection.Visible = false
-    SettingsSection.Parent = SectionContainer
+    local SettingsSection = Instance.new("Frame", SectionContainer) SettingsSection.Size, SettingsSection.BackgroundTransparency, SettingsSection.BackgroundColor3, SettingsSection.Visible = UDim2.new(1, 0, 1, 0), 0.3, Color3.fromRGB(30, 30, 40), false
     SectionFrames["Settings"] = SettingsSection
+    local SettingsLabel = Instance.new("TextLabel", SettingsSection) SettingsLabel.Size, SettingsLabel.Position, SettingsLabel.BackgroundTransparency, SettingsLabel.Text, SettingsLabel.TextColor3, SettingsLabel.TextSize, SettingsLabel.Font, SettingsLabel.TextXAlignment = UDim2.new(1, -20, 0, 30), UDim2.new(0, 10, 0, 10), 1, "Settings", Color3.fromRGB(255, 255, 255), 16, Enum.Font.Montserrat, Enum.TextXAlignment.Left
+    local SettingsDivider = Instance.new("Frame", SettingsSection) SettingsDivider.Size, SettingsDivider.Position, SettingsDivider.BackgroundColor3, SettingsDivider.BorderSizePixel = UDim2.new(1, -20, 0, 2), UDim2.new(0, 10, 0, 40), Color3.fromRGB(50, 50, 50), 0
+    local ChatLocationContainer = Instance.new("Frame", SettingsSection) ChatLocationContainer.Size, ChatLocationContainer.Position, ChatLocationContainer.BackgroundColor3, ChatLocationContainer.BackgroundTransparency, ChatLocationContainer.BorderSizePixel = UDim2.new(1, -20, 0, 60), UDim2.new(0, 10, 0, 55), Color3.fromRGB(40, 40, 50), 0.3, 0
+    Instance.new("UICorner", ChatLocationContainer).CornerRadius = UDim.new(0, 6)
+    local ChatLocationLabel = Instance.new("TextLabel", ChatLocationContainer) ChatLocationLabel.Size, ChatLocationLabel.Position, ChatLocationLabel.BackgroundTransparency, ChatLocationLabel.Text, ChatLocationLabel.TextColor3, ChatLocationLabel.TextSize, ChatLocationLabel.Font, ChatLocationLabel.TextXAlignment = UDim2.new(1, -10, 0, 20), UDim2.new(0, 5, 0, 5), 1, "Chat Location", Color3.fromRGB(255, 255, 255), 14, Enum.Font.Montserrat, Enum.TextXAlignment.Left
+    local ChatLocationFrame = Instance.new("Frame", ChatLocationContainer) ChatLocationFrame.Size, ChatLocationFrame.Position, ChatLocationFrame.BackgroundColor3 = UDim2.new(0, 80, 0, 20), UDim2.new(0, 5, 0, 30), Color3.fromRGB(50, 50, 50)
+    Instance.new("UICorner", ChatLocationFrame).CornerRadius = UDim.new(1, 0)
+    local ChatLocationIndicator = Instance.new("Frame", ChatLocationFrame) ChatLocationIndicator.Size, ChatLocationIndicator.Position, ChatLocationIndicator.BackgroundColor3 = UDim2.new(0, 40, 0, 20), UDim2.new(0, 0, 0, 0), Color3.fromRGB(80, 80, 80)
+    Instance.new("UICorner", ChatLocationIndicator).CornerRadius = UDim.new(1, 0)
+    local ChatLocationText = Instance.new("TextLabel", ChatLocationFrame) ChatLocationText.Size, ChatLocationText.BackgroundTransparency, ChatLocationText.Text, ChatLocationText.TextColor3, ChatLocationText.TextSize, ChatLocationText.Font, ChatLocationText.TextXAlignment = UDim2.new(1, 0, 1, 0), 1, "In Menu", Color3.fromRGB(255, 255, 255), 14, Enum.Font.Montserrat, Enum.TextXAlignment.Center
+    local BlurContainer = Instance.new("Frame", SettingsSection) BlurContainer.Size, BlurContainer.Position, BlurContainer.BackgroundColor3, BlurContainer.BackgroundTransparency, BlurContainer.BorderSizePixel = UDim2.new(1, -20, 0, 60), UDim2.new(0, 10, 0, 125), Color3.fromRGB(40, 40, 50), 0.3, 0
+    Instance.new("UICorner", BlurContainer).CornerRadius = UDim.new(0, 6)
+    local BlurLabel = Instance.new("TextLabel", BlurContainer) BlurLabel.Size, BlurLabel.Position, BlurLabel.BackgroundTransparency, BlurLabel.Text, BlurLabel.TextColor3, BlurLabel.TextSize, BlurLabel.Font, BlurLabel.TextXAlignment = UDim2.new(1, -10, 0, 20), UDim2.new(0, 5, 0, 5), 1, "Blur Background", Color3.fromRGB(255, 255, 255), 14, Enum.Font.Montserrat, Enum.TextXAlignment.Left
+    local BlurFrame = Instance.new("Frame", BlurContainer) BlurFrame.Size, BlurFrame.Position, BlurFrame.BackgroundColor3 = UDim2.new(0, 80, 0, 20), UDim2.new(0, 5, 0, 30), Color3.fromRGB(50, 50, 50)
+    Instance.new("UICorner", BlurFrame).CornerRadius = UDim.new(1, 0)
+    local BlurEntry = Instance.new("Frame", BlurFrame) BlurEntry.Size, BlurEntry.Position, BlurEntry.BackgroundColor3 = UDim2.new(0, 40, 0, 20), UDim2.new(1, -40, 0, 0), Color3.fromRGB(70, 130, 255)
+    Instance.new("UICorner", BlurEntry).CornerRadius = UDim.new(1, 0)
+    local BlurText = Instance.new("TextLabel", BlurFrame) BlurText.Size, BlurText.BackgroundTransparency, BlurText.Text, BlurText.TextColor3, BlurText.TextSize, BlurText.Font, BlurText.TextXAlignment = UDim2.new(1, 0, 1, 0), 1, "Enabled", Color3.fromRGB(255, 255, 255), 14, Enum.Font.Montserrat, Enum.TextXAlignment.Center
 
-    local SettingsLabel = Instance.new("TextLabel")
-    SettingsLabel.Size = UDim2.new(1, -20, 0, 30)
-    SettingsLabel.Position = UDim2.new(0, 10, 0, 10)
-    SettingsLabel.BackgroundTransparency = 1
-    SettingsLabel.Text = "Settings"
-    SettingsLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    SettingsLabel.TextSize = 16
-    SettingsLabel.Font = Enum.Font.Montserrat
-    SettingsLabel.TextXAlignment = Enum.TextXAlignment.Left
-    SettingsLabel.Parent = SettingsSection
+    local DebugSection = Instance.new("Frame", SectionContainer) DebugSection.Size, DebugSection.BackgroundTransparency, DebugSection.BackgroundColor3, DebugSection.Visible = UDim2.new(1, 0, 1, 0), 0.3, Color3.fromRGB(30, 30, 40), false
+    SectionFrames["Logs & Debug"] = DebugSection
+    local DebugLabel = Instance.new("TextLabel", DebugSection) DebugLabel.Size, DebugLabel.Position, DebugLabel.BackgroundTransparency, DebugLabel.Text, DebugLabel.TextColor3, DebugLabel.TextSize, DebugLabel.Font, DebugLabel.TextXAlignment = UDim2.new(1, -20, 0, 30), UDim2.new(0, 10, 0, 10), 1, "Logs & Debug", Color3.fromRGB(255, 255, 255), 16, Enum.Font.Montserrat, Enum.TextXAlignment.Left
+    local DebugDivider = Instance.new("Frame", DebugSection) DebugDivider.Size, DebugDivider.Position, DebugDivider.BackgroundColor3, DebugDivider.BorderSizePixel = UDim2.new(1, -20, 0, 2), UDim2.new(0, 10, 0, 40), Color3.fromRGB(50, 50, 50), 0
+    local DebugFilterFrame = Instance.new("Frame", DebugSection) DebugFilterFrame.Size, DebugFilterFrame.Position, DebugFilterFrame.BackgroundColor3, DebugFilterFrame.BackgroundTransparency = UDim2.new(1, -20, 0, 40), UDim2.new(0, 10, 0, 55), Color3.fromRGB(40, 40, 50), 0.3
+    Instance.new("UICorner", DebugFilterFrame).CornerRadius = UDim.new(0, 6)
+    local DebugFilterLabel = Instance.new("TextLabel", DebugFilterFrame) DebugFilterLabel.Size, DebugFilterLabel.Position, DebugFilterLabel.BackgroundTransparency, DebugFilterLabel.Text, DebugFilterLabel.TextColor3, DebugFilterLabel.TextSize, DebugFilterLabel.Font = UDim2.new(0, 100, 0, 20), UDim2.new(0, -5, 0, 10), 1, "Filter:", Color3.fromRGB(255, 255, 255), 14, Enum.Font.Montserrat
+    local DebugFilterToggle = Instance.new("Frame", DebugFilterFrame) DebugFilterToggle.Size, DebugFilterToggle.Position, DebugFilterToggle.BackgroundColor3 = UDim2.new(0, 80, 0, 20), UDim2.new(0, 70, 0, 10), Color3.fromRGB(50, 50, 50)
+    Instance.new("UICorner", DebugFilterToggle).CornerRadius = UDim.new(1, 0)
+    local DebugFilterIndicator = Instance.new("Frame", DebugFilterToggle) DebugFilterIndicator.Size, DebugFilterIndicator.Position, DebugFilterIndicator.BackgroundColor3 = UDim2.new(0, 40, 0, 20), UDim2.new(0, 0, 0, 0), Color3.fromRGB(80, 80, 80)
+    Instance.new("UICorner", DebugFilterIndicator).CornerRadius = UDim.new(1, 0)
+    local DebugFilterText = Instance.new("TextLabel", DebugFilterToggle) DebugFilterText.Size, DebugFilterText.BackgroundTransparency, DebugFilterText.Text, DebugFilterText.TextColor3, DebugFilterText.TextSize, DebugFilterText.Font, DebugFilterText.TextXAlignment = UDim2.new(1, 0, 1, 0), 1, "All", Color3.fromRGB(255, 255, 255), 14, Enum.Font.Montserrat, Enum.TextXAlignment.Center
+    local DebugClearButton = Instance.new("TextButton", DebugFilterFrame) DebugClearButton.Size, DebugClearButton.Position, DebugClearButton.BackgroundColor3, DebugClearButton.Text, DebugClearButton.TextColor3, DebugClearButton.TextSize, DebugClearButton.Font = UDim2.new(0, 100, 0, 30), UDim2.new(1, -110, 0, 5), Color3.fromRGB(50, 50, 60), "Clear Logs", Color3.fromRGB(255, 255, 255), 14, Enum.Font.Montserrat
+    Instance.new("UICorner", DebugClearButton).CornerRadius = UDim.new(0, 6)
 
-    local SettingsDivider = Instance.new("Frame")
-    SettingsDivider.Size = UDim2.new(1, -20, 0, 2)
-    SettingsDivider.Position = UDim2.new(0, 10, 0, 40)
-    SettingsDivider.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    SettingsDivider.BorderSizePixel = 0
-    SettingsDivider.Parent = SettingsSection
+    local ChatSection = Instance.new("Frame", MainFrame) ChatSection.Size, ChatSection.Position, ChatSection.BackgroundTransparency, ChatSection.Visible = UDim2.new(1, -150, 0, 400), UDim2.new(0, 150, 0, 50), 1, false
+    local ChatLabel = Instance.new("TextLabel", ChatSection) ChatLabel.Size, ChatLabel.Position, ChatLabel.BackgroundTransparency, ChatLabel.Text, ChatLabel.TextColor3, ChatLabel.TextSize, ChatLabel.Font, ChatLabel.TextXAlignment = UDim2.new(1, -20, 0, 30), UDim2.new(0, 10, 0, 10), 1, "Chat", Color3.fromRGB(255, 255, 255), 16, Enum.Font.Montserrat, Enum.TextXAlignment.Left
+    local ChatDivider = Instance.new("Frame", ChatSection) ChatDivider.Size, ChatDivider.Position, ChatDivider.BackgroundColor3, ChatDivider.BorderSizePixel, ChatDivider.ZIndex = UDim2.new(1, -20, 0, 2), UDim2.new(0, 10, 0, 40), Color3.fromRGB(50, 50, 50), 0, 2
+    local ChatFrame = Instance.new("Frame", ChatSection) ChatFrame.Size, ChatFrame.Position, ChatFrame.BackgroundColor3, ChatFrame.BackgroundTransparency, ChatFrame.BorderSizePixel, ChatFrame.BorderColor3, ChatFrame.ZIndex = UDim2.new(1, -20, 1, -50), UDim2.new(0, 10, 0, 40), Color3.fromRGB(20, 20, 25), 0.3, 1, Color3.fromRGB(60, 60, 60), 1
+    Instance.new("UICorner", ChatFrame).CornerRadius = UDim.new(0, 12)
+    local ChatPadding = Instance.new("UIPadding", ChatFrame) ChatPadding.PaddingLeft, ChatPadding.PaddingRight, ChatPadding.PaddingTop, ChatPadding.PaddingBottom = UDim.new(0, 5), UDim.new(0, 5), UDim.new(0, 5), UDim.new(0, 5)
+    local ChatList = Instance.new("ScrollingFrame", ChatFrame) ChatList.Size, ChatList.Position, ChatList.BackgroundTransparency, ChatList.BorderSizePixel, ChatList.CanvasSize, ChatList.ScrollBarThickness = UDim2.new(1, 0, 1, -50), UDim2.new(0, 0, 0, 0), 1, 0, UDim2.new(0, 0, 0, 0), 4
+    local ChatListLayout = Instance.new("UIListLayout", ChatList) ChatListLayout.Padding, ChatListLayout.SortOrder = UDim.new(0, 5), Enum.SortOrder.LayoutOrder
+    local PMInstructionLabel = Instance.new("TextLabel", ChatFrame) PMInstructionLabel.Size, PMInstructionLabel.Position, PMInstructionLabel.BackgroundTransparency, PMInstructionLabel.Text, PMInstructionLabel.TextColor3, PMInstructionLabel.TextSize, PMInstructionLabel.Font, PMInstructionLabel.TextXAlignment = UDim2.new(1, -10, 0, 15), UDim2.new(0, 5, 1, -50), 1, "Use /pm <userId> <message> or /pmjobid <userId> to send private messages", Color3.fromRGB(150, 150, 150), 12, Enum.Font.Montserrat, Enum.TextXAlignment.Left
+    local ChatInput = Instance.new("TextBox", ChatFrame) ChatInput.Size, ChatInput.Position, ChatInput.BackgroundColor3, ChatInput.Text, ChatInput.PlaceholderText, ChatInput.TextColor3, ChatInput.TextSize, ChatInput.Font, ChatInput.TextXAlignment, ChatInput.PlaceholderColor3 = UDim2.new(1, -110, 0, 30), UDim2.new(0, 5, 1, -35), Color3.fromRGB(40, 40, 40), "", "Type your message...", Color3.fromRGB(255, 255, 255), 14, Enum.Font.Montserrat, Enum.TextXAlignment.Left, Color3.fromRGB(150, 150, 150)
+    Instance.new("UICorner", ChatInput).CornerRadius = UDim.new(0, 5)
+    local ShareJobIdButton = Instance.new("TextButton", ChatFrame) ShareJobIdButton.Size, ShareJobIdButton.Position, ShareJobIdButton.BackgroundColor3, ShareJobIdButton.Text, ShareJobIdButton.TextColor3, ShareJobIdButton.TextSize, ShareJobIdButton.Font = UDim2.new(0, 100, 0, 30), UDim2.new(1, -105, 1, -35), Color3.fromRGB(80, 80, 80), "Share JobId", Color3.fromRGB(255, 255, 255), 14, Enum.Font.Montserrat
+    Instance.new("UICorner", ShareJobIdButton).CornerRadius = UDim.new(0, 5)
 
-    local ChatLocationContainer = Instance.new("Frame")
-    ChatLocationContainer.Size = UDim2.new(1, -20, 0, 60)
-    ChatLocationContainer.Position = UDim2.new(0, 10, 0, 50)
-    ChatLocationContainer.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-    ChatLocationContainer.BackgroundTransparency = 0.3
-    ChatLocationContainer.BorderSizePixel = 0
-    ChatLocationContainer.Parent = SettingsSection
+    local OutputSection = Instance.new("Frame", MainFrame) OutputSection.Size, OutputSection.Position, OutputSection.BackgroundColor3 = UDim2.new(1, -150, 0, 100), UDim2.new(0, 150, 1, -100), Color3.fromRGB(18, 18, 18)
+    local OutputLabel = Instance.new("TextLabel", OutputSection) OutputLabel.Size, OutputLabel.Position, OutputLabel.BackgroundTransparency, OutputLabel.Text, OutputLabel.TextColor3, OutputLabel.TextSize, OutputLabel.Font, OutputLabel.TextXAlignment = UDim2.new(1, -20, 0, 20), UDim2.new(0, 10, 0, 0), 1, "Output", Color3.fromRGB(255, 255, 255), 16, Enum.Font.Montserrat, Enum.TextXAlignment.Left
+    local OutputList = Instance.new("ScrollingFrame", OutputSection) OutputList.Size, OutputList.Position, OutputList.BackgroundTransparency, OutputList.BorderSizePixel, OutputList.CanvasSize, OutputList.ScrollBarThickness = UDim2.new(1, -20, 1, -30), UDim2.new(0, 10, 0, 20), 1, 0, UDim2.new(0, 0, 0, 0), 6
+    local OutputListLayout = Instance.new("UIListLayout", OutputList) OutputListLayout.Padding, OutputListLayout.SortOrder = UDim.new(0, 5), Enum.SortOrder.LayoutOrder
 
-    local ChatLocationContainerCorner = Instance.new("UICorner")
-    ChatLocationContainerCorner.CornerRadius = UDim.new(0, 6)
-    ChatLocationContainerCorner.Parent = ChatLocationContainer
-
-    local ChatLocationLabel = Instance.new("TextLabel")
-    ChatLocationLabel.Size = UDim2.new(1, -10, 0, 20)
-    ChatLocationLabel.Position = UDim2.new(0, 5, 0, 5)
-    ChatLocationLabel.BackgroundTransparency = 1
-    ChatLocationLabel.Text = "Chat Location"
-    ChatLocationLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    ChatLocationLabel.TextSize = 14
-    ChatLocationLabel.Font = Enum.Font.Montserrat
-    ChatLocationLabel.TextXAlignment = Enum.TextXAlignment.Left
-    ChatLocationLabel.Parent = ChatLocationContainer
-
-    local ChatLocationFrame = Instance.new("Frame")
-    ChatLocationFrame.Size = UDim2.new(0, 80, 0, 20)
-    ChatLocationFrame.Position = UDim2.new(0, 5, 0, 30)
-    ChatLocationFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    ChatLocationFrame.Parent = ChatLocationContainer
-
-    local ChatLocationCorner = Instance.new("UICorner")
-    ChatLocationCorner.CornerRadius = UDim.new(1, 0)
-    ChatLocationCorner.Parent = ChatLocationFrame
-
-    local ChatLocationIndicator = Instance.new("Frame")
-    ChatLocationIndicator.Size = UDim2.new(0, 40, 0, 20)
-    ChatLocationIndicator.Position = UDim2.new(0, 0, 0, 0)
-    ChatLocationIndicator.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-    ChatLocationIndicator.Parent = ChatLocationFrame
-
-    local ChatLocationIndicatorCorner = Instance.new("UICorner")
-    ChatLocationIndicatorCorner.CornerRadius = UDim.new(1, 0)
-    ChatLocationIndicatorCorner.Parent = ChatLocationIndicator
-
-    local ChatLocationText = Instance.new("TextLabel")
-    ChatLocationText.Size = UDim2.new(1, 0, 1, 0)
-    ChatLocationText.BackgroundTransparency = 1
-    ChatLocationText.Text = "In Menu"
-    ChatLocationText.TextColor3 = Color3.fromRGB(255, 255, 255)
-    ChatLocationText.TextSize = 14
-    ChatLocationText.Font = Enum.Font.Montserrat
-    ChatLocationText.TextXAlignment = Enum.TextXAlignment.Center
-    ChatLocationText.Parent = ChatLocationFrame
-
-    local ChatSection = Instance.new("Frame")
-    ChatSection.Size = UDim2.new(1, -150, 0, 400)
-    ChatSection.Position = UDim2.new(0, 150, 0, 50)
-    ChatSection.BackgroundTransparency = 1
-    ChatSection.Visible = false
-    ChatSection.Parent = MainFrame
-
-    local ChatLabel = Instance.new("TextLabel")
-    ChatLabel.Size = UDim2.new(1, -20, 0, 30)
-    ChatLabel.Position = UDim2.new(0, 10, 0, 10)
-    ChatLabel.BackgroundTransparency = 1
-    ChatLabel.Text = "Chat"
-    ChatLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    ChatLabel.TextSize = 16
-    ChatLabel.Font = Enum.Font.Montserrat
-    ChatLabel.TextXAlignment = Enum.TextXAlignment.Left
-    ChatLabel.Parent = ChatSection
-
-    local ChatDivider = Instance.new("Frame")
-    ChatDivider.Size = UDim2.new(1, -20, 0, 2)
-    ChatDivider.Position = UDim2.new(0, 10, 0, 40)
-    ChatDivider.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    ChatDivider.BorderSizePixel = 0
-    ChatDivider.ZIndex = 2
-    ChatDivider.Parent = ChatSection
-
-    local ChatFrame = Instance.new("Frame")
-    ChatFrame.Size = UDim2.new(1, -20, 1, -50)
-    ChatFrame.Position = UDim2.new(0, 10, 0, 40)
-    ChatFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-    ChatFrame.BackgroundTransparency = 0.3
-    ChatFrame.BorderSizePixel = 1
-    ChatFrame.BorderColor3 = Color3.fromRGB(60, 60, 60)
-    ChatFrame.ZIndex = 1
-    ChatFrame.Parent = ChatSection
-
-    local ChatCorner = Instance.new("UICorner")
-    ChatCorner.CornerRadius = UDim.new(0, 12)
-    ChatCorner.Parent = ChatFrame
-
-    local ChatPadding = Instance.new("UIPadding")
-    ChatPadding.PaddingLeft = UDim.new(0, 5)
-    ChatPadding.PaddingRight = UDim.new(0, 5)
-    ChatPadding.PaddingTop = UDim.new(0, 5)
-    ChatPadding.PaddingBottom = UDim.new(0, 5)
-    ChatPadding.Parent = ChatFrame
-
-    local ChatList = Instance.new("ScrollingFrame")
-    ChatList.Size = UDim2.new(1, 0, 1, -40)
-    ChatList.Position = UDim2.new(0, 0, 0, 0)
-    ChatList.BackgroundTransparency = 1
-    ChatList.BorderSizePixel = 0
-    ChatList.CanvasSize = UDim2.new(0, 0, 0, 0)
-    ChatList.ScrollBarThickness = 4
-    ChatList.Parent = ChatFrame
-
-    local ChatListLayout = Instance.new("UIListLayout")
-    ChatListLayout.Padding = UDim.new(0, 5)
-    ChatListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    ChatListLayout.Parent = ChatList
-
-    local ChatInput = Instance.new("TextBox")
-    ChatInput.Size = UDim2.new(1, -110, 0, 30)
-    ChatInput.Position = UDim2.new(0, 5, 1, -35)
-    ChatInput.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    ChatInput.BackgroundTransparency = 0.3
-    ChatInput.Text = ""
-    ChatInput.PlaceholderText = "Type your message..."
-    ChatInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-    ChatInput.TextSize = 14
-    ChatInput.Font = Enum.Font.Montserrat
-    ChatInput.TextXAlignment = Enum.TextXAlignment.Left
-    ChatInput.Parent = ChatFrame
-
-    local ChatInputCorner = Instance.new("UICorner")
-    ChatInputCorner.CornerRadius = UDim.new(0, 6)
-    ChatInputCorner.Parent = ChatInput
-
-    local ChatInputGradient = Instance.new("UIGradient")
-    ChatInputGradient.Color = ColorSequence.new(Color3.fromRGB(0, 153, 255), Color3.fromRGB(147, 112, 219))
-    ChatInputGradient.Rotation = 45
-    ChatInputGradient.Parent = ChatInput
-
-    local ShareJobIdButton = Instance.new("TextButton")
-    ShareJobIdButton.Size = UDim2.new(0, 100, 0, 30)
-    ShareJobIdButton.Position = UDim2.new(1, -105, 1, -35)
-    ShareJobIdButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-    ShareJobIdButton.BackgroundTransparency = 0.3
-    ShareJobIdButton.Text = "Share JobId"
-    ShareJobIdButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    ShareJobIdButton.TextSize = 14
-    ShareJobIdButton.Font = Enum.Font.Montserrat
-    ShareJobIdButton.Parent = ChatFrame
-
-    local ShareJobIdCorner = Instance.new("UICorner")
-    ShareJobIdCorner.CornerRadius = UDim.new(0, 6)
-    ShareJobIdCorner.Parent = ShareJobIdButton
-
-    local ShareJobIdGradient = Instance.new("UIGradient")
-    ShareJobIdGradient.Color = ColorSequence.new(Color3.fromRGB(0, 153, 255), Color3.fromRGB(147, 112, 219))
-    ShareJobIdGradient.Rotation = 45
-    ShareJobIdGradient.Parent = ShareJobIdButton
-
-    ShareJobIdButton.MouseEnter:Connect(function()
-        TweenService:Create(ShareJobIdButton, TweenInfo.new(0.2), {BackgroundTransparency = 0.1}):Play()
-    end)
-
-    ShareJobIdButton.MouseLeave:Connect(function()
-        TweenService:Create(ShareJobIdButton, TweenInfo.new(0.2), {BackgroundTransparency = 0.3}):Play()
-    end)
-
-    local OutputSection = Instance.new("Frame")
-    OutputSection.Size = UDim2.new(1, -150, 0, 100)
-    OutputSection.Position = UDim2.new(0, 150, 1, -100)
-    OutputSection.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-    OutputSection.BackgroundTransparency = 0.2
-    OutputSection.Parent = MainFrame
-
-    local OutputLabel = Instance.new("TextLabel")
-    OutputLabel.Size = UDim2.new(1, -20, 0, 20)
-    OutputLabel.Position = UDim2.new(0, 10, 0, 0)
-    OutputLabel.BackgroundTransparency = 1
-    OutputLabel.Text = "Output"
-    OutputLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    OutputLabel.TextSize = 16
-    OutputLabel.Font = Enum.Font.Montserrat
-    OutputLabel.TextXAlignment = Enum.TextXAlignment.Left
-    OutputLabel.Parent = OutputSection
-
-    local OutputList = Instance.new("ScrollingFrame")
-    OutputList.Size = UDim2.new(1, -20, 1, -30)
-    OutputList.Position = UDim2.new(0, 10, 0, 20)
-    OutputList.BackgroundTransparency = 1
-    OutputList.BorderSizePixel = 0
-    OutputList.CanvasSize = UDim2.new(0, 0, 0, 0)
-    OutputList.ScrollBarThickness = 6
-    OutputList.Parent = OutputSection
-
-    local OutputListLayout = Instance.new("UIListLayout")
-    OutputListLayout.Padding = UDim.new(0, 5)
-    OutputListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    OutputListLayout.Parent = OutputList
-
-    for i, module in ipairs(Core.Modules) do
-        local ModuleFrame = Instance.new("Frame")
-        ModuleFrame.Size = UDim2.new(1, 0, 0, 40)
-        ModuleFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-        ModuleFrame.BackgroundTransparency = 0.3
-        ModuleFrame.LayoutOrder = i
-        ModuleFrame.Parent = ModuleList
-
-        local ModuleCorner = Instance.new("UICorner")
-        ModuleCorner.CornerRadius = UDim.new(0, 6)
-        ModuleCorner.Parent = ModuleFrame
-
-        local ModuleLabel = Instance.new("TextLabel")
-        ModuleLabel.Size = UDim2.new(0.7, 0, 1, 0)
-        ModuleLabel.Position = UDim2.new(0, 10, 0, 0)
-        ModuleLabel.BackgroundTransparency = 1
-        ModuleLabel.Text = module.Name
-        ModuleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        ModuleLabel.TextSize = 16
-        ModuleLabel.Font = Enum.Font.Montserrat
-        ModuleLabel.TextXAlignment = Enum.TextXAlignment.Left
-        ModuleLabel.Parent = ModuleFrame
-
-        local ToggleFrame = Instance.new("Frame")
-        ToggleFrame.Size = UDim2.new(0, 40, 0, 20)
-        ToggleFrame.Position = UDim2.new(1, -50, 0, 10)
-        ToggleFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-        ToggleFrame.Parent = ModuleFrame
-
-        local ToggleCorner = Instance.new("UICorner")
-        ToggleCorner.CornerRadius = UDim.new(1, 0)
-        ToggleCorner.Parent = ToggleFrame
-
-        local ToggleIndicator = Instance.new("Frame")
-        ToggleIndicator.Size = UDim2.new(0, 20, 0, 20)
-        ToggleIndicator.Position = module.Enabled and UDim2.new(1, -20, 0, 0) or UDim2.new(0, 0, 0, 0)
-        ToggleIndicator.BackgroundColor3 = module.Enabled and Color3.fromRGB(147, 112, 219) or Color3.fromRGB(80, 80, 80)
-        ToggleIndicator.Parent = ToggleFrame
-
-        local IndicatorCorner = Instance.new("UICorner")
-        IndicatorCorner.CornerRadius = UDim.new(1, 0)
-        IndicatorCorner.Parent = ToggleIndicator
-
+    for i, module in ipairs(Modules) do
+        local ModuleFrame = Instance.new("Frame", ModuleList) ModuleFrame.Size, ModuleFrame.BackgroundColor3, ModuleFrame.LayoutOrder = UDim2.new(1, 0, 0, 40), Color3.fromRGB(20, 20, 25), i
+        Instance.new("UICorner", ModuleFrame).CornerRadius = UDim.new(0, 6)
+        local ModuleLabel = Instance.new("TextLabel", ModuleFrame) ModuleLabel.Size, ModuleLabel.Position, ModuleLabel.BackgroundTransparency, ModuleLabel.Text, ModuleLabel.TextColor3, ModuleLabel.TextSize, ModuleLabel.Font, ModuleLabel.TextXAlignment = UDim2.new(0.7, 0, 1, 0), UDim2.new(0, 10, 0, 0), 1, module.Name, Color3.fromRGB(255, 255, 255), 16, Enum.Font.Montserrat, Enum.TextXAlignment.Left
+        local ToggleFrame = Instance.new("Frame", ModuleFrame) ToggleFrame.Size, ToggleFrame.Position, ToggleFrame.BackgroundColor3 = UDim2.new(0, 40, 0, 20), UDim2.new(1, -50, 0, 10), Color3.fromRGB(50, 50, 60)
+        Instance.new("UICorner", ToggleFrame).CornerRadius = UDim.new(1, 0)
+        local ToggleIndicator = Instance.new("Frame", ToggleFrame) ToggleIndicator.Size, ToggleIndicator.Position, ToggleIndicator.BackgroundColor3 = UDim2.new(0, 20, 0, 20), module.Enabled and UDim2.new(1, -20, 0, 0) or UDim2.new(0, 0, 0, 0), module.Enabled and Color3.fromRGB(70, 130, 255) or Color3.fromRGB(80, 80, 80)
+        Instance.new("UICorner", ToggleIndicator).CornerRadius = UDim.new(1, 0)
         ToggleFrame.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 then
                 module.Enabled = not module.Enabled
-                Core.Services.TweenService:Create(
-                    ToggleIndicator,
-                    TweenInfo.new(0.2),
-                    {Position = module.Enabled and UDim2.new(1, -20, 0, 0) or UDim2.new(0, 0, 0, 0)}
-                ):Play()
-                ToggleIndicator.BackgroundColor3 = module.Enabled and Color3.fromRGB(147, 112, 219) or Color3.fromRGB(80, 80, 80)
+                Core.Services.TweenService:Create(ToggleIndicator, TweenInfo.new(0.2), {Position = module.Enabled and UDim2.new(1, -20, 0, 0) or UDim2.new(0, 0, 0, 0)}):Play()
+                ToggleIndicator.BackgroundColor3 = module.Enabled and Color3.fromRGB(70, 130, 255) or Color3.fromRGB(80, 80, 80)
             end
         end)
     end
 
-    LoadButton.MouseButton1Click:Connect(function()
-        if not Core.InitializeMacLib() then
-            Core.AddLog("Error: Failed to initialize MacLib", true)
-            return
-        end
+    local DebugFilterState = "All"
+    local DebugList = Instance.new("ScrollingFrame", DebugSection) DebugList.Size, DebugList.Position, DebugList.BackgroundTransparency, DebugList.BorderSizePixel, DebugList.CanvasSize, DebugList.ScrollBarThickness = UDim2.new(1, -20, 1, -110), UDim2.new(0, 10, 0, 100), 1, 0, UDim2.new(0, 0, 0, 0), 6
+    local DebugListLayout = Instance.new("UIListLayout", DebugList) DebugListLayout.Padding, DebugListLayout.SortOrder = UDim.new(0, 5), Enum.SortOrder.LayoutOrder
 
-        local selectedModules = 0
-        for _, module in ipairs(Core.Modules) do
-            if module.Enabled then
-                selectedModules = selectedModules + 1
-            end
+    local function addLog(message, isError)
+        table.insert(Logs, {Text = message, IsError = isError})
+        if OutputList then
+            local LogLabel = Instance.new("TextLabel", OutputList) LogLabel.Size, LogLabel.BackgroundTransparency, LogLabel.Text, LogLabel.TextColor3, LogLabel.TextSize, LogLabel.Font, LogLabel.TextXAlignment = UDim2.new(1, 0, 0, 20), 1, message, isError and Color3.fromRGB(255, 50, 50) or Color3.fromRGB(200, 200, 200), 14, Enum.Font.Montserrat, Enum.TextXAlignment.Left
+            OutputList.CanvasSize = UDim2.new(0, 0, 0, #Logs * 25)
+            OutputList.CanvasPosition = Vector2.new(0, OutputList.CanvasSize.Y.Offset)
         end
-
-        if selectedModules == 0 then
-            Core.AddLog("Info: No modules selected. Closing loader.", false)
-            ScreenGui:Destroy()
-            return
+        if DebugList and (DebugFilterState == "All" or (DebugFilterState == "Errors" and isError) or (DebugFilterState == "Success" and not isError)) then
+            local DebugLogLabel = Instance.new("TextLabel", DebugList) DebugLogLabel.Size, DebugLogLabel.BackgroundTransparency, DebugLogLabel.Text, DebugLogLabel.TextColor3, DebugLogLabel.TextSize, DebugLogLabel.Font, DebugLogLabel.TextXAlignment = UDim2.new(1, 0, 0, 20), 1, message, isError and Color3.fromRGB(255, 50, 50) or Color3.fromRGB(200, 200, 200), 14, Enum.Font.Montserrat, Enum.TextXAlignment.Left
+            DebugList.CanvasSize = UDim2.new(0, 0, 0, #Logs * 25)
+            DebugList.CanvasPosition = Vector2.new(0, DebugList.CanvasSize.Y.Offset)
         end
+    end
 
-        local loadedModules = 0
-        for _, module in ipairs(Core.Modules) do
-            if module.Enabled then
-                Core.LoadModule(module.Name, module.URL)
-                loadedModules = loadedModules + 1
-                if loadedModules == selectedModules then
-                    Core.AddLog("🔰 FastLoad: All selected modules loaded!", false)
-                    ScreenGui:Destroy()
+    DebugFilterToggle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            DebugFilterState = DebugFilterState == "All" and "Errors" or DebugFilterState == "Errors" and "Success" or "All"
+            DebugFilterText.Text = DebugFilterState
+            Core.Services.TweenService:Create(DebugFilterIndicator, TweenInfo.new(0.2), {Position = DebugFilterState == "All" and UDim2.new(0, 0, 0, 0) or DebugFilterState == "Errors" and UDim2.new(0, 20, 0, 0) or UDim2.new(0, 40, 0, 0)}):Play()
+            DebugFilterIndicator.BackgroundColor3 = DebugFilterState == "All" and Color3.fromRGB(80, 80, 80) or DebugFilterState == "Errors" and Color3.fromRGB(255, 50, 50) or Color3.fromRGB(50, 255, 50)
+            for _, child in ipairs(DebugList:GetChildren()) do if child:IsA("TextLabel") then child:Destroy() end end
+            for _, log in ipairs(Logs) do if DebugFilterState == "All" or (DebugFilterState == "Errors" and log.IsError) or (DebugFilterState == "Success" and not log.IsError) then local DebugLogLabel = Instance.new("TextLabel", DebugList) DebugLogLabel.Size, DebugLogLabel.BackgroundTransparency, DebugLogLabel.Text, DebugLogLabel.TextColor3, DebugLogLabel.TextSize, DebugLogLabel.Font, DebugLogLabel.TextXAlignment = UDim2.new(1, 0, 0, 20), 1, log.Text, log.IsError and Color3.fromRGB(255, 50, 50) or Color3.fromRGB(200, 200, 200), 14, Enum.Font.Montserrat, Enum.TextXAlignment.Left end end
+            DebugList.CanvasSize = UDim2.new(0, 0, 0, #DebugList:GetChildren() * 25)
+        end
+    end)
+
+    DebugClearButton.MouseButton1Click:Connect(function()
+        Logs = {}
+        for _, child in ipairs(DebugList:GetChildren()) do if child:IsA("TextLabel") then child:Destroy() end end
+        for _, child in ipairs(OutputList:GetChildren()) do if child:IsA("TextLabel") then child:Destroy() end end
+        DebugList.CanvasSize, OutputList.CanvasSize = UDim2.new(0, 0, 0, 0), UDim2.new(0, 0, 0, 0)
+        addLog("Logs cleared!", false)
+    end)
+
+    local function isValidJobId(jobId) return jobId:match("^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$") ~= nil end
+
+    local function addChatMessage(userId, message, messageId, isPrivate, recipientId)
+        if DisplayedMessageIds[messageId] or false then return end
+        table.insert(ChatMessages, {userId = userId, message = message, messageId = messageId, isPrivate = isPrivate, recipientId = recipientId})
+        DisplayedMessageIds[messageId] = true
+        local ChatMessageFrame = Instance.new("Frame", ChatList) ChatMessageFrame.Size, ChatMessageFrame.BackgroundTransparency = UDim2.new(1, 0, 0, 20), 1
+        ChatMessageFrame:SetAttribute("UserId", userId)
+        ChatMessageFrame:SetAttribute("IsPrivate", isPrivate)
+        local displayName = Usernames[userId] or userId
+        local ChatMessageLabel = Instance.new("TextLabel", ChatMessageFrame) ChatMessageLabel.Size, ChatMessageLabel.BackgroundTransparency, ChatMessageLabel.Text, ChatMessageLabel.TextColor3, ChatMessageLabel.TextSize, ChatMessageLabel.Font, ChatMessageLabel.TextXAlignment, ChatMessageLabel.TextWrapped = UDim2.new(1, -250, 1, 0), 1, (isPrivate and "[PM] " or "") .. displayName .. ": " .. message, isPrivate and Color3.fromRGB(255, 165, 0) or (FriendsList[userId] and Color3.fromRGB(50, 255, 50) or Color3.fromRGB(200, 200, 200)), 14, Enum.Font.Montserrat, Enum.TextXAlignment.Left, true
+        ChatMessageLabel.Name = "ChatMessageLabel"
+        local AddFriendButton = Instance.new("TextButton", ChatMessageFrame) AddFriendButton.Size, AddFriendButton.Position, AddFriendButton.BackgroundColor3, AddFriendButton.Text, AddFriendButton.TextColor3, AddFriendButton.TextSize, AddFriendButton.Font = UDim2.new(0, 80, 0, 20), UDim2.new(1, -90, 0, 0), Color3.fromRGB(50, 50, 60), FriendsList[userId] and "Unfriend" or "Add Friend", Color3.fromRGB(255, 255, 255), 12, Enum.Font.Montserrat
+        AddFriendButton.Name = "AddFriendButton"
+        Instance.new("UICorner", AddFriendButton).CornerRadius = UDim.new(0, 4)
+        if userId == UserId or userId == "System" then AddFriendButton.Visible = false
+        else
+            AddFriendButton.MouseButton1Click:Connect(function()
+                if FriendsList[userId] then removeFriend(userId) else addFriend(userId) end
+                for _, messageFrame in ipairs(ChatList:GetChildren()) do
+                    if messageFrame:IsA("Frame") then
+                        local msgUserId, isPrivateMsg = messageFrame:GetAttribute("UserId"), messageFrame:GetAttribute("IsPrivate")
+                        local messageLabel, addFriendBtn, sendPMBtn, pmJobIdBtn = messageFrame:FindFirstChild("ChatMessageLabel"), messageFrame:FindFirstChild("AddFriendButton"), messageFrame:FindFirstChild("SendPMButton"), messageFrame:FindFirstChild("PMJobIdButton")
+                        if msgUserId == userId and messageLabel then
+                            messageLabel.TextColor3 = isPrivateMsg and Color3.fromRGB(255, 165, 0) or (FriendsList[userId] and Color3.fromRGB(50, 255, 50) or Color3.fromRGB(200, 200, 200))
+                            if addFriendBtn then addFriendBtn.Text = FriendsList[userId] and "Unfriend" or "Add Friend" end
+                            if FriendsList[userId] and not sendPMBtn and userId ~= UserId and userId ~= "System" then
+                                local newSendPMButton = Instance.new("TextButton", messageFrame) newSendPMButton.Size, newSendPMButton.Position, newSendPMButton.BackgroundColor3, newSendPMButton.Text, newSendPMButton.TextColor3, newSendPMButton.TextSize, newSendPMButton.Font = UDim2.new(0, 80, 0, 20), UDim2.new(1, -170, 0, 0), Color3.fromRGB(50, 50, 60), "Send PM", Color3.fromRGB(255, 255, 255), 12, Enum.Font.Montserrat
+                                newSendPMButton.Name, newSendPMButton.ZIndex = "SendPMButton", 5
+                                Instance.new("UICorner", newSendPMButton).CornerRadius = UDim.new(0, 4)
+                                newSendPMButton.MouseButton1Click:Connect(function() ChatInput.Text = "/pm " .. userId .. " " ChatInput:CaptureFocus() addLog("SendPM clicked for user " .. userId, false) end)
+                            elseif sendPMBtn and not FriendsList[userId] then sendPMBtn:Destroy() end
+                            if FriendsList[userId] and not pmJobIdBtn and userId ~= UserId and userId ~= "System" then
+                                local newPMJobIdButton = Instance.new("TextButton", messageFrame) newPMJobIdButton.Size, newPMJobIdButton.Position, newPMJobIdButton.BackgroundColor3, newPMJobIdButton.Text, newPMJobIdButton.TextColor3, newPMJobIdButton.TextSize, newPMJobIdButton.Font = UDim2.new(0, 80, 0, 20), UDim2.new(1, -250, 0, 0), Color3.fromRGB(50, 50, 60), "PM JobId", Color3.fromRGB(255, 255, 255), 12, Enum.Font.Montserrat
+                                newPMJobIdButton.Name, newPMJobIdButton.ZIndex = "PMJobIdButton", 5
+                                Instance.new("UICorner", newPMJobIdButton).CornerRadius = UDim.new(0, 4)
+                                newPMJobIdButton.MouseButton1Click:Connect(function()
+                                    local jobId = game.JobId jobId = jobId and jobId ~= "" and jobId or nil
+                                    if jobId then
+                                        local currentTime = os.time()
+                                        if currentTime - LastJobIdTime < JOBID_COOLDOWN then addLog("JobId share cooldown active. Wait " .. math.ceil(JOBID_COOLDOWN - (currentTime - LastJobIdTime)) .. " seconds.", true)
+                                        else
+                                            local success = sendPrivateMessage(userId, "JobId: " .. jobId)
+                                            if success then LastJobIdTime = currentTime addLog("Shared JobId via PM to " .. userId, false) else addLog("Failed to send JobId via PM to " .. userId, true) end
+                                        end
+                                    else addLog("Error: No JobId available", true) end
+                                end)
+                            elseif pmJobIdBtn and not FriendsList[userId] then pmJobIdBtn:Destroy() end
+                        end
+                    end
                 end
+            end)
+        end
+        local jobId = message:match("JobId: (%S+)")
+        if jobId and isValidJobId(jobId) then
+            local JoinButton = Instance.new("TextButton", ChatMessageFrame) JoinButton.Size, JoinButton.Position, JoinButton.BackgroundColor3, JoinButton.Text, JoinButton.TextColor3, JoinButton.TextSize, JoinButton.Font = UDim2.new(0, 80, 0, 20), FriendsList[userId] and UDim2.new(1, -330, 0, 0) or UDim2.new(1, -170, 0, 0), Color3.fromRGB(50, 50, 60), "Join Server", Color3.fromRGB(255, 255, 255), 12, Enum.Font.Montserrat
+            Instance.new("UICorner", JoinButton).CornerRadius = UDim.new(0, 4)
+            JoinButton.MouseButton1Click:Connect(function()
+                local success, err = pcall(function() Core.Services.TeleportService:TeleportToPlaceInstance(PlaceId, jobId, Core.PlayerData.LocalPlayer) end)
+                addLog(success and "Teleporting to server with JobId: " .. jobId or "Failed to teleport: " .. tostring(err), not success)
+            end)
+        end
+        ChatList.CanvasSize = UDim2.new(0, 0, 0, #ChatMessages * 25)
+        ChatList.CanvasPosition = Vector2.new(0, ChatList.CanvasSize.Y.Offset)
+    end
+
+    LoadButton.MouseButton1Click:Connect(function()
+        local success, UI = initializeMacLib()
+        if not success then addLog("Error: Failed to initialize MacLib", true) return end
+        local selectedModules = 0
+        for _, module in ipairs(Modules) do if module.Enabled then selectedModules = selectedModules + 1 end end
+        if selectedModules == 0 then addLog("No modules selected. Closing loader.", false) BlurEffect.Enabled = false BlurEffect:Destroy() ScreenGui:Destroy() return end
+        local loadedModules = 0
+        for _, module in ipairs(Modules) do
+            if module.Enabled then
+                addLog("Loading " .. module.Name, false)
+                local success, err = loadModule(module.Name, module.URL, UI)
+                if success then addLog(module.Name .. " loaded successfully", false) else addLog("Failed to load " .. module.Name .. ": " .. tostring(err), true) end
+                loadedModules = loadedModules + 1
+                if loadedModules == selectedModules then addLog("All selected modules loaded!", false) BlurEffect.Enabled = false BlurEffect:Destroy() ScreenGui:Destroy() end
             end
         end
     end)
 
     local dragging, dragInput, dragStart, startPos
     TopBar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = MainFrame.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging, dragStart, startPos = true, input.Position, MainFrame.Position
+            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
         end
     end)
-
-    TopBar.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
-        end
-    end)
-
-    Core.Services.UserInputService.InputChanged:Connect(function(input)
+    TopBar.InputChanged:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseMovement then dragInput = input end end)
+    UIS.InputChanged:Connect(function(input)
         if input == dragInput and dragging then
             local delta = input.Position - dragStart
             MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
         end
     end)
-
-    local BASE_RESOLUTION = Vector2.new(1920, 1080)
-
-    local function rescaleUI()
-        local camera = Core.Services.Workspace.CurrentCamera
-        if not camera then
-            warn("Camera not found, cannot rescale UI")
-            return
-        end
-
-        local currentResolution = camera.ViewportSize
-        local scale
-        if Core.Services.UserInputService.TouchEnabled then
-            scale = 0.6
-        else
-            local scaleX = currentResolution.X / BASE_RESOLUTION.X
-            local scaleY = currentResolution.Y / BASE_RESOLUTION.Y
-            scale = math.min(scaleX, scaleY)
-            scale = math.min(scale, 1)
-        end
-
-        MainFrame.Size = UDim2.new(0, 650 * scale, 0, 550 * scale)
-        MainFrame.Position = UDim2.new(0.5, -325 * scale, 0.5, -275 * scale)
-    end
-
-    rescaleUI()
-
-    Core.Services.Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
-        rescaleUI()
-    end)
-
-    _G.SetUIScale = function(scale)
-        MainFrame.Size = UDim2.new(0, 650 * scale, 0, 550 * scale)
-        MainFrame.Position = UDim2.new(0.5, -325 * scale, 0.5, -275 * scale)
-    end
-
-    _G.UpdateOutput = function(logs)
-        OutputList:ClearAllChildren()
-        for _, log in ipairs(logs) do
-            local LogLabel = Instance.new("TextLabel")
-            LogLabel.Size = UDim2.new(1, 0, 0, 20)
-            LogLabel.BackgroundTransparency = 1
-            LogLabel.Text = log.Text
-            LogLabel.TextColor3 = log.IsError and Color3.fromRGB(255, 50, 50) or Color3.fromRGB(200, 200, 200)
-            LogLabel.TextSize = 14
-            LogLabel.Font = Enum.Font.Montserrat
-            LogLabel.TextXAlignment = Enum.TextXAlignment.Left
-            LogLabel.Parent = OutputList
-        end
-        OutputList.CanvasSize = UDim2.new(0, 0, 0, #logs * 25)
-        OutputList.CanvasPosition = Vector2.new(0, OutputList.CanvasSize.Y.Offset)
-    end
-
-    local ChatMessages = {}
-    local DisplayedMessageIds = {}
-    local UserId = tostring(math.random(1000, 9999))
-    local FIREBASE_URL = "https://skibidi-chat-26fa2-default-rtdb.firebaseio.com/messages.json"
-    local ChatLocation = "InMenu"
-    local PlaceId = game.PlaceId
-
-    local function isValidJobId(jobId)
-        return jobId:match("^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$") ~= nil
-    end
-
-    local function addChatMessage(userId, message, messageId)
-        if DisplayedMessageIds[messageId] then
-            return
-        end
-
-        table.insert(ChatMessages, { userId = userId, message = message, messageId = messageId })
-        DisplayedMessageIds[messageId] = true
-
-        local ChatMessageFrame = Instance.new("Frame")
-        ChatMessageFrame.Size = UDim2.new(1, 0, 0, 20)
-        ChatMessageFrame.BackgroundTransparency = 1
-        ChatMessageFrame.Parent = ChatList
-
-        local ChatMessageLabel = Instance.new("TextLabel")
-        ChatMessageLabel.Size = UDim2.new(1, -100, 1, 0)
-        ChatMessageLabel.BackgroundTransparency = 1
-        ChatMessageLabel.Text = userId .. ": " .. message
-        ChatMessageLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-        ChatMessageLabel.TextSize = 14
-        ChatMessageLabel.Font = Enum.Font.Montserrat
-        ChatMessageLabel.TextXAlignment = Enum.TextXAlignment.Left
-        ChatMessageLabel.TextWrapped = true
-        ChatMessageLabel.Parent = ChatMessageFrame
-
-        local jobId = message:match("JobId: (%S+)")
-        if jobId and isValidJobId(jobId) then
-            local JoinButton = Instance.new("TextButton")
-            JoinButton.Size = UDim2.new(0, 80, 0, 20)
-            JoinButton.Position = UDim2.new(1, -90, 0, 0)
-            JoinButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-            JoinButton.BackgroundTransparency = 0.3
-            JoinButton.Text = "Join Server"
-            JoinButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-            JoinButton.TextSize = 12
-            JoinButton.Font = Enum.Font.Montserrat
-            JoinButton.Parent = ChatMessageFrame
-
-            local JoinButtonCorner = Instance.new("UICorner")
-            JoinButtonCorner.CornerRadius = UDim.new(0, 4)
-            JoinButtonCorner.Parent = JoinButton
-
-            local JoinButtonGradient = Instance.new("UIGradient")
-            JoinButtonGradient.Color = ColorSequence.new(Color3.fromRGB(0, 153, 255), Color3.fromRGB(147, 112, 219))
-            JoinButtonGradient.Rotation = 45
-            JoinButtonGradient.Parent = JoinButton
-
-            JoinButton.MouseEnter:Connect(function()
-                TweenService:Create(JoinButton, TweenInfo.new(0.2), {BackgroundTransparency = 0.1}):Play()
-            end)
-
-            JoinButton.MouseLeave:Connect(function()
-                TweenService:Create(JoinButton, TweenInfo.new(0.2), {BackgroundTransparency = 0.3}):Play()
-            end)
-
-            JoinButton.MouseButton1Click:Connect(function()
-                local success, err = pcall(function()
-                    Core.Services.TeleportService:TeleportToPlaceInstance(PlaceId, jobId, Core.PlayerData.LocalPlayer)
-                end)
-                if success then
-                    Core.AddLog("Teleporting to server with JobId: " .. jobId, false)
-                else
-                    Core.AddLog("Failed to teleport: " .. tostring(err), true)
-                end
-            end)
-        end
-
-        ChatList.CanvasSize = UDim2.new(0, 0, 0, #ChatMessages * 25)
-        ChatList.CanvasPosition = Vector2.new(0, ChatList.CanvasSize.Y.Offset)
-    end
-
-    local function fetchMessages()
-        local success, response = pcall(function()
-            local response = request({
-                Url = FIREBASE_URL,
-                Method = "GET"
-            })
-            if response then
-                if response.StatusCode == 200 then
-                    if response.Body then
-                        local decoded = game:GetService("HttpService"):JSONDecode(response.Body)
-                        if decoded == nil then
-                            return {}
-                        end
-                        return decoded
-                    else
-                        error("No response body")
-                    end
-                else
-                    error("Invalid status code: " .. tostring(response.StatusCode))
-                end
-            else
-                error("Response is nil")
-            end
-        end)
-
-        if success then
-            if type(response) == "table" then
-                local sortedMessages = {}
-                for messageId, msg in pairs(response) do
-                    if msg.userId and msg.message and msg.timestamp then
-                        table.insert(sortedMessages, { id = messageId, userId = msg.userId, message = msg.message, timestamp = msg.timestamp })
-                    end
-                end
-                table.sort(sortedMessages, function(a, b) return a.timestamp < b.timestamp end)
-
-                for _, msg in ipairs(sortedMessages) do
-                    addChatMessage(msg.userId, msg.message, msg.id)
-                end
-            end
-        end
-    end
-
-    local function sendMessage(message)
-        local success, err = pcall(function()
-            local data = {
-                userId = UserId,
-                message = message,
-                timestamp = os.time()
-            }
-            local encodedData = game:GetService("HttpService"):JSONEncode(data)
-            local response = request({
-                Url = FIREBASE_URL,
-                Method = "POST",
-                Headers = {
-                    ["Content-Type"] = "application/json"
-                },
-                Body = encodedData
-            })
-            if response and response.StatusCode == 200 then
-                fetchMessages()
-            end
-        end)
-    end
-
-    ShareJobIdButton.MouseButton1Click:Connect(function()
-        local jobId = game.JobId
-        if jobId and jobId ~= "" then
-            local message = "JobId: " .. jobId
-            sendMessage(message)
-            Core.AddLog("Shared JobId: " .. jobId, false)
-        else
-            Core.AddLog("Error: No JobId available (you might be in Studio or on a local server)", true)
-        end
-    end)
-
-    local function updateChatLocation()
-        if ChatLocation == "InMenu" then
-            ChatFrame.Parent = ChatSection
-            ChatFrame.Size = UDim2.new(1, -20, 1, -50)
-            ChatFrame.Position = UDim2.new(0, 10, 0, 40)
-            ChatList.Size = UDim2.new(1, 0, 1, -40)
-            ChatList.Position = UDim2.new(0, 0, 0, 0)
-            ChatInput.Size = UDim2.new(1, -110, 0, 30)
-            ChatInput.Position = UDim2.new(0, 5, 1, -35)
-            ShareJobIdButton.Position = UDim2.new(1, -105, 1, -35)
-            ChatTab.Visible = true
-            OutputSection.Position = CurrentTab == "Chat" and UDim2.new(0, 0, 1, -100) or UDim2.new(0, 150, 1, -100)
-            OutputSection.Size = CurrentTab == "Chat" and UDim2.new(1, 0, 0, 100) or UDim2.new(1, -150, 0, 100)
-            Sidebar.Visible = CurrentTab == "Loader"
-        else
-            ChatFrame.Parent = MainFrame
-            ChatFrame.Size = UDim2.new(1, -150, 0, 100)
-            ChatFrame.Position = UDim2.new(0, 150, 1, -100)
-            ChatList.Size = UDim2.new(1, 0, 1, -40)
-            ChatList.Position = UDim2.new(0, 0, 0, 0)
-            ChatInput.Size = UDim2.new(1, -110, 0, 30)
-            ChatInput.Position = UDim2.new(0, 5, 1, -35)
-            ShareJobIdButton.Position = UDim2.new(1, -105, 1, -35)
-            ChatTab.Visible = false
-            CurrentTab = "Loader"
-            LoaderTabGradient.Enabled = true
-            ChatTabGradient.Enabled = false
-            ChatSection.Position = UDim2.new(0, 150, 0, 50)
-            ChatSection.Size = UDim2.new(1, -150, 0, 400)
-            ChatSection.Visible = false
-            OutputSection.Position = UDim2.new(0, 150, 1, -100)
-            OutputSection.Size = UDim2.new(1, -150, 0, 100)
-            Sidebar.Visible = true
-            for secName, frame in pairs(SectionFrames) do
-                frame.Visible = (secName == CurrentSection) and (CurrentTab == "Loader")
-            end
-        end
-    end
-
-    LoaderTab.MouseButton1Click:Connect(function()
-        CurrentTab = "Loader"
-        LoaderTabGradient.Enabled = true
-        ChatTabGradient.Enabled = false
-        ChatSection.Position = UDim2.new(0, 150, 0, 50)
-        ChatSection.Size = UDim2.new(1, -150, 0, 400)
-        ChatSection.Visible = false
-        OutputSection.Position = UDim2.new(0, 150, 1, -100)
-        OutputSection.Size = UDim2.new(1, -150, 0, 100)
-        Sidebar.Visible = true
-        for secName, frame in pairs(SectionFrames) do
-            frame.Visible = (secName == CurrentSection) and (CurrentTab == "Loader")
-        end
-    end)
-
-    ChatTab.MouseButton1Click:Connect(function()
-        CurrentTab = "Chat"
-        LoaderTabGradient.Enabled = false
-        ChatTabGradient.Enabled = true
-        for secName, frame in pairs(SectionFrames) do
-            frame.Visible = false
-        end
-        ChatSection.Position = UDim2.new(0, 0, 0, 50)
-        ChatSection.Size = UDim2.new(1, 0, 0, 400)
-        ChatSection.Visible = true
-        OutputSection.Position = UDim2.new(0, 0, 1, -100)
-        OutputSection.Size = UDim2.new(1, 0, 0, 100)
-        Sidebar.Visible = false
-    end)
-
-    ChatLocationFrame.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            ChatLocation = ChatLocation == "InMenu" and "AsOutput" or "InMenu"
-            ChatLocationText.Text = ChatLocation == "InMenu" and "In Menu" or "As Output"
-            Core.Services.TweenService:Create(
-                ChatLocationIndicator,
-                TweenInfo.new(0.2),
-                {Position = ChatLocation == "InMenu" and UDim2.new(0, 0, 0, 0) or UDim2.new(0, 40, 0, 0)}
-            ):Play()
-            ChatLocationIndicator.BackgroundColor3 = ChatLocation == "InMenu" and Color3.fromRGB(80, 80, 80) or Color3.fromRGB(147, 112, 219)
-            updateChatLocation()
-        end
-    end)
-
-    ChatInput.FocusLost:Connect(function(enterPressed)
-        if enterPressed and ChatInput.Text ~= "" then
-            sendMessage(ChatInput.Text)
-            ChatInput.Text = ""
-        end
-    end)
-
-    spawn(function()
-        while true do
-            fetchMessages()
-            wait(5)
-        end
-    end)
-
-    MainFrame.BackgroundTransparency = 1
-    local fadeIn = TweenService:Create(MainFrame, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {BackgroundTransparency = 0.1})
-    fadeIn:Play()
-
-    Core.AddLog("🔰 Syllinse Loader: Loader UI initialized!", false)
-    addChatMessage("System", "Chat initialized. Your ID: " .. UserId, "system_init")
-    addChatMessage("System", "Connected to Firebase!", "system_connect")
-    fetchMessages()
 end
-
-return {
-    Init = Init
-}
