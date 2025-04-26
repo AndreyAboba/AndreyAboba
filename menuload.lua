@@ -8,6 +8,7 @@ local GunSilent = {
         RangePlus = { Value = 50, Default = 50 },
         Rage = { Value = false, Default = false },
         HitPart = { Value = "Head", Default = "Head" },
+        HitPartYOffset = { Value = -0.5, Default = -0.5 }, -- Новая настройка для смещения hitPart по Y
         PredictBullet = { Value = 2500, Default = 2500 },
         FakeDistance = { Value = 3, Default = 3 },
         UseFOV = { Value = true, Default = true },
@@ -30,7 +31,7 @@ local GunSilent = {
         SmoothingVisualFactor = { Value = 0.3, Default = 0.3 },
         AdvancedPositionHistorySize = { Value = 20, Default = 20 },
         LatencyCompensation = { Value = 0.2, Default = 0.2 },
-        PingEstimate = { Value = 0.03, Default = 0.03 }, -- Уменьшено до 30 мс
+        PingEstimate = { Value = 0.03, Default = 0.03 },
         ShowTrajectoryBeam = { Value = true, Default = true },
         ShowFullTrajectory = { Value = true, Default = true },
         ShotgunSupport = { Value = false, Default = false },
@@ -49,7 +50,7 @@ local GunSilent = {
     State = {
         LastEventId = 0,
         LastTool = nil,
-        ToolCache = nil, -- Новый кэш для инструмента
+        ToolCache = nil,
         TargetVisualPart = nil,
         HitboxVisualPart = nil,
         PredictVisualPart = nil,
@@ -91,7 +92,7 @@ local function updateToolCache(tool)
         return
     end
     if GunSilent.State.ToolCache and GunSilent.State.ToolCache.Tool == tool then
-        return -- Кэш уже актуален
+        return
     end
     GunSilent.State.ToolCache = {
         Tool = tool,
@@ -118,11 +119,11 @@ local function getEquippedGunTool(character)
     if not character then return nil end
     for _, child in pairs(character:GetChildren()) do
         if child.ClassName == "Tool" and isGunTool(child) then
-            updateToolCache(child) -- Обновляем кэш при обнаружении инструмента
+            updateToolCache(child)
             return child
         end
     end
-    updateToolCache(nil) -- Если инструмент не найден, очищаем кэш
+    updateToolCache(nil)
     return nil
 end
 
@@ -244,12 +245,13 @@ end
 
 local function predictTargetPositionGun(target, applyFakeDistance)
     local localRoot = GunSilent.State.LocalRoot
+    local localHead = GunSilent.State.LocalCharacter and GunSilent.State.LocalCharacter:FindFirstChild("Head")
     if not target or not target.Character or not localRoot then
         return { position = nil, direction = nil, realDirection = nil, fakePosition = nil, timeToTarget = 0 }
     end
 
     local targetChar = target.Character
-    local myPos = localRoot.Position
+    local myPos = localHead and localHead.Position or localRoot.Position -- Используем голову, если доступна
     local hitPart = targetChar:FindFirstChild(GunSilent.Settings.HitPart.Value == "Random" and (math.random() > 0.5 and "Head" or "UpperTorso") or GunSilent.Settings.HitPart.Value) or targetChar:FindFirstChild("HumanoidRootPart")
     local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
     if not hitPart or not targetRoot then
@@ -269,7 +271,7 @@ local function predictTargetPositionGun(target, applyFakeDistance)
     end
 
     local targetId = tostring(target.UserId)
-    local targetPos = hitPart.Position
+    local targetPos = hitPart.Position + Vector3.new(0, GunSilent.Settings.HitPartYOffset.Value, 0) -- Применяем смещение по Y
     GunSilent.State.IsTeleporting = GunSilent.State.LastTargetPosition[targetId] and (targetPos - GunSilent.State.LastTargetPosition[targetId]).Magnitude > 50
     GunSilent.State.LastTargetPosition[targetId] = targetPos
 
@@ -298,14 +300,25 @@ local function predictTargetPositionGun(target, applyFakeDistance)
         pastVel = pastVel.Unit * maxSpeed
     end
 
-    local fakePos = applyFakeDistance and GunSilent.Settings.FakeDistance.Value > 0 and (pastPos - (pastPos - myPos).Unit * math.max(1, (pastPos - myPos).Magnitude - GunSilent.Settings.FakeDistance.Value)) or myPos
+    local isStationary = pastVel.Magnitude < 1 -- Цель считается неподвижной, если скорость < 1 stud/sec
+    local fakePos = myPos
+    if not isStationary and applyFakeDistance and GunSilent.Settings.FakeDistance.Value > 0 then
+        fakePos = pastPos - (pastPos - myPos).Unit * math.max(1, (pastPos - myPos).Magnitude - GunSilent.Settings.FakeDistance.Value)
+    end
+
     local distance = (pastPos - fakePos).Magnitude
     local realDistance = (pastPos - myPos).Magnitude
-    local timeToTarget = math.max(distance / bulletSpeed, 0.01) -- Минимальный порог времени
+    local timeToTarget = math.max(distance / bulletSpeed, 0.01)
     local realTimeToTarget = math.max(realDistance / bulletSpeed, 0.01)
 
-    local predictedPos = pastPos + pastVel * timeToTarget -- Убрано LatencyCompensation
-    local realPredictedPos = pastPos + pastVel * realTimeToTarget
+    local predictedPos, realPredictedPos
+    if isStationary then
+        predictedPos = pastPos -- Для стоячих целей предсказание не нужно
+        realPredictedPos = pastPos
+    else
+        predictedPos = pastPos + pastVel * timeToTarget
+        realPredictedPos = pastPos + pastVel * realTimeToTarget
+    end
 
     local humanoid = targetChar:FindFirstChild("Humanoid")
     local isInVehicle = humanoid and humanoid.SeatPart ~= nil
@@ -390,7 +403,7 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
     GunSilent.State.LastTargetPos, GunSilent.State.LastPredictionPos = targetPos, predictionPos
 
     local localHead = GunSilent.State.LocalCharacter and GunSilent.State.LocalCharacter:FindFirstChild("Head")
-    local startPos = localHead and localHead.Position or localRoot.Position
+    local startPos = localRoot.Position + Vector3.new(0, 1.5, 0) -- Корректируем startPos (примерно на уровне груди)
     local smoothingFactor = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.SmoothingVisualFactor.Value or GunSilent.FixedPredictionValues.SmoothingVisualFactor
     GunSilent.State.SmoothedVisualPositions = GunSilent.State.SmoothedVisualPositions or {}
 
@@ -793,6 +806,23 @@ local function Init(UI, Core, notify)
                 callback = function(value)
                     GunSilent.Settings.HitPart.Value = value
                     notify("GunSilent", "Hit Part set to: " .. value, true)
+                end
+            }
+            uiElements.HitPartYOffset = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Hit Part Y Offset",
+                    Minimum = -2,
+                    Maximum = 2,
+                    Default = GunSilent.Settings.HitPartYOffset.Value,
+                    Precision = 1,
+                    Callback = function(value)
+                        GunSilent.Settings.HitPartYOffset.Value = value
+                        notify("GunSilent", "Hit Part Y Offset set to: " .. value, false)
+                    end
+                }, 'HitPartYOffset'),
+                callback = function(value)
+                    GunSilent.Settings.HitPartYOffset.Value = value
+                    notify("GunSilent", "Hit Part Y Offset set to: " .. value, false)
                 end
             }
             uiElements.FakeDistance = {
@@ -1245,13 +1275,8 @@ local function Init(UI, Core, notify)
                     uiElements.RangePlus.callback(uiElements.RangePlus.element:GetValue())
                     uiElements.Rage.callback(uiElements.Rage.element:GetState())
                     uiElements.DoubleTap.callback(uiElements.DoubleTap.element:GetState())
-                    local hitPartOptions = uiElements.HitPart.element:GetOptions()
-                    for option, selected in pairs(hitPartOptions) do
-                        if selected then
-                            uiElements.HitPart.callback(option)
-                            break
-                        end
-                    end
+                    uiElements.HitPart.callback(uiElements.HitPart.element:GetValue())
+                    uiElements.HitPartYOffset.callback(uiElements.HitPartYOffset.element:GetValue())
                     uiElements.FakeDistance.callback(uiElements.FakeDistance.element:GetValue())
                     uiElements.ShotgunSupport.callback(uiElements.ShotgunSupport.element:GetState())
                     uiElements.GenerateBullets.callback(uiElements.GenerateBullets.element:GetValue())
@@ -1259,22 +1284,10 @@ local function Init(UI, Core, notify)
                     uiElements.GSUSEFOV.callback(uiElements.GSUSEFOV.element:GetState())
                     uiElements.GSFOV.callback(uiElements.GSFOV.element:GetValue())
                     uiElements.GSShowCircle.callback(uiElements.GSShowCircle.element:GetState())
-                    local circleMethodOptions = uiElements.GSCircleMethod.element:GetOptions()
-                    for option, selected in pairs(circleMethodOptions) do
-                        if selected then
-                            uiElements.GSCircleMethod.callback(option)
-                            break
-                        end
-                    end
+                    uiElements.GSCircleMethod.callback(uiElements.GSCircleMethod.element:GetValue())
                     uiElements.GSGradientCircle.callback(uiElements.GSGradientCircle.element:GetState())
                     uiElements.GSGradientSpeed.callback(uiElements.GSGradientSpeed.element:GetValue())
-                    local sortMethodOptions = uiElements.SortMethod.element:GetOptions()
-                    for option, selected in pairs(sortMethodOptions) do
-                        if selected then
-                            uiElements.SortMethod.callback(option)
-                            break
-                        end
-                    end
+                    uiElements.SortMethod.callback(uiElements.SortMethod.element:GetValue())
                     uiElements.TargetVisual.callback(uiElements.TargetVisual.element:GetState())
                     uiElements.HitboxVisual.callback(uiElements.HitboxVisual.element:GetState())
                     uiElements.PredictVisual.callback(uiElements.PredictVisual.element:GetState())
