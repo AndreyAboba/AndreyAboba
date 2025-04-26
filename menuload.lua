@@ -1,1054 +1,1249 @@
-local function createMenu(Core)
-    local Logs, ChatMessages, DisplayedMessageIds, FriendsList, Usernames = {}, {}, {}, {}, {}
-    local UserId = LRM_LinkedDiscordID and tostring(LRM_LinkedDiscordID) ~= "" and tostring(LRM_LinkedDiscordID) or tostring(math.random(1000,9999))
-    local FIREBASE_URL = "https://skibidi-chat-26fa2-default-rtdb.firebaseio.com/messages.json"
-    local FRIENDS_URL = "https://skibidi-chat-26fa2-default-rtdb.firebaseio.com/friends.json"
-    local USERNAMES_URL = "https://skibidi-chat-26fa2-default-rtdb.firebaseio.com/usernames.json"
-    local PRIVATE_MESSAGES_URL = "https://skibidi-chat-26fa2-default-rtdb.firebaseio.com/private_messages.json"
-    local ChatLocation, PlaceId, CurrentTab, CurrentSection = "InMenu", game.PlaceId, "Loader", "Main"
-    local BlurEnabled, LastMessageTime, LastJobIdTime, MESSAGE_COOLDOWN, JOBID_COOLDOWN = true, 0, 0, 10, 60
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local Stats = game:GetService("Stats")
 
-    local BlurEffect = Instance.new("BlurEffect", Core.Services.Lighting)
-    BlurEffect.Name, BlurEffect.Size, BlurEffect.Enabled = "SyllinseLoaderBlur", 24, BlurEnabled
-
-    local ScreenGui = Instance.new("ScreenGui", Core.Services.CoreGuiService)
-    ScreenGui.Name, ScreenGui.IgnoreGuiInset, ScreenGui.ResetOnSpawn, ScreenGui.ZIndexBehavior, ScreenGui.DisplayOrder =
-        "SyllinseLoader", true, false, Enum.ZIndexBehavior.Sibling, 2147483647
-
-    ScreenGui:GetPropertyChangedSignal("Enabled"):Connect(function()
-        BlurEffect.Enabled = ScreenGui.Enabled and BlurEnabled
-    end)
-
-    local MainFrame = Instance.new("Frame", ScreenGui)
-    MainFrame.Size, MainFrame.Position, MainFrame.BackgroundColor3, MainFrame.BackgroundTransparency, MainFrame.BorderSizePixel =
-        UDim2.new(0, 650, 0, 550), UDim2.new(0.5, -325, 0.5, -275), Color3.fromRGB(10, 10, 15), 0.1, 0
-    Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 12)
-
-    local UIGradient = Instance.new("UIGradient", MainFrame)
-    UIGradient.Color, UIGradient.Rotation = ColorSequence.new(Core.GradientColors.Color1.Value, Core.GradientColors.Color2.Value), 45
-
-    local TopBar = Instance.new("Frame", MainFrame)
-    TopBar.Size, TopBar.BackgroundColor3, TopBar.BackgroundTransparency, TopBar.BorderSizePixel =
-        UDim2.new(1, 0, 0, 50), Color3.fromRGB(15, 15, 20), 0.2, 0
-
-    local TopBarGradient = Instance.new("UIGradient", TopBar)
-    TopBarGradient.Color, TopBarGradient.Rotation = ColorSequence.new(Core.GradientColors.Color1.Value, Core.GradientColors.Color2.Value), 45
-
-    local TitleLabel = Instance.new("TextLabel", TopBar)
-    TitleLabel.Size, TitleLabel.Position, TitleLabel.BackgroundTransparency, TitleLabel.Text, TitleLabel.TextColor3,
-    TitleLabel.TextSize, TitleLabel.Font, TitleLabel.TextXAlignment =
-        UDim2.new(0, 150, 0, 30), UDim2.new(0, 15, 0.5, -15), 1, "Syllinse", Color3.fromRGB(255, 255, 255),
-        20, Enum.Font.Montserrat, Enum.TextXAlignment.Left
-
-    local TabsContainer = Instance.new("Frame", TopBar)
-    TabsContainer.Size, TabsContainer.Position, TabsContainer.BackgroundTransparency =
-        UDim2.new(0, 200, 0, 30), UDim2.new(1, -210, 0.5, -15), 1
-
-    local TabsList = Instance.new("UIListLayout", TabsContainer)
-    TabsList.FillDirection, TabsList.HorizontalAlignment, TabsList.Padding =
-        Enum.FillDirection.Horizontal, Enum.HorizontalAlignment.Right, UDim.new(0, 10)
-
-    local LoaderTab = Instance.new("TextButton", TabsContainer)
-    LoaderTab.Size, LoaderTab.BackgroundColor3, LoaderTab.BackgroundTransparency, LoaderTab.Text, LoaderTab.TextColor3,
-    LoaderTab.TextSize, LoaderTab.Font, LoaderTab.BorderSizePixel =
-        UDim2.new(0, 80, 0, 30), Color3.fromRGB(25, 25, 30), 0.3, "Loader", Color3.fromRGB(255, 255, 255),
-        14, Enum.Font.Montserrat, 0
-    Instance.new("UICorner", LoaderTab).CornerRadius = UDim.new(0, 6)
-
-    local LoaderTabGradient = Instance.new("UIGradient", LoaderTab)
-    LoaderTabGradient.Color, LoaderTabGradient.Rotation, LoaderTabGradient.Enabled =
-        ColorSequence.new(Core.GradientColors.Color1.Value, Core.GradientColors.Color2.Value), 45, true
-
-    local ChatTab = Instance.new("TextButton", TabsContainer)
-    ChatTab.Size, ChatTab.BackgroundColor3, ChatTab.BackgroundTransparency, ChatTab.Text, ChatTab.TextColor3,
-    ChatTab.TextSize, ChatTab.Font, ChatTab.BorderSizePixel =
-        UDim2.new(0, 80, 0, 30), Color3.fromRGB(25, 25, 30), 0.3, "Chat", Color3.fromRGB(255, 255, 255),
-        14, Enum.Font.Montserrat, 0
-    Instance.new("UICorner", ChatTab).CornerRadius = UDim.new(0, 6)
-
-    local ChatTabGradient = Instance.new("UIGradient", ChatTab)
-    ChatTabGradient.Color, ChatTabGradient.Rotation, ChatTabGradient.Enabled =
-        ColorSequence.new(Core.GradientColors.Color1.Value, Core.GradientColors.Color2.Value), 45, false
-
-    local Sidebar = Instance.new("Frame", MainFrame)
-    Sidebar.Size, Sidebar.Position, Sidebar.BackgroundColor3, Sidebar.BackgroundTransparency, Sidebar.BorderSizePixel =
-        UDim2.new(0, 150, 1, -50), UDim2.new(0, 0, 0, 50), Color3.fromRGB(15, 15, 20), 0.2, 0
-
-    local SidebarGradient = Instance.new("UIGradient", Sidebar)
-    SidebarGradient.Color, SidebarGradient.Rotation = ColorSequence.new(Core.GradientColors.Color1.Value, Core.GradientColors.Color2.Value), 45
-
-    local SidebarList = Instance.new("UIListLayout", Sidebar)
-    SidebarList.Padding, SidebarList.SortOrder = UDim.new(0, 5), Enum.SortOrder.LayoutOrder
-
-    local Sections = {
-        {Name = "Main", Icon = "rbxassetid://11982164035"},
-        {Name = "Autofarm", Icon = "rbxassetid://74133076168703"},
-        {Name = "Settings", Icon = "rbxassetid://14134158045"},
-        {Name = "Logs & Debug", Icon = "rbxassetid://116108099038795"}
+local GunSilent = {
+    Settings = {
+        Enabled = { Value = false, Default = false },
+        RangePlus = { Value = 50, Default = 50 },
+        Rage = { Value = false, Default = false },
+        HitPart = { Value = "Head", Default = "Head" },
+        PredictBullet = { Value = 2500, Default = 2500 },
+        YCorrection = { Value = 0.01, Default = 0.01 },
+        FakeDistance = { Value = 3, Default = 3 },
+        UseFOV = { Value = true, Default = true },
+        FOV = { Value = 120, Default = 120 },
+        ShowCircle = { Value = true, Default = true },
+        CircleMethod = { Value = "Cursor", Default = "Cursor" },
+        SortMethod = { Value = "Mouse&Distance", Default = "Mouse&Distance" },
+        TargetVisual = { Value = true, Default = true },
+        HitboxVisual = { Value = true, Default = true },
+        PredictVisual = { Value = true, Default = true },
+        ShowDirection = { Value = true, Default = true },
+        HitChance = { Value = 100, Default = 100 },
+        GradientCircle = { Value = false, Default = false },
+        GradientSpeed = { Value = 2, Default = 2 },
+        AdvancedEnabled = { Value = false, Default = false },
+        AdvancedVehicleFactor = { Value = 0.9, Default = 0.9 },
+        AdvancedPedestrianFactor = { Value = 0.55, Default = 0.55 },
+        AdvancedTeleportThreshold = { Value = 600, Default = 600 },
+        AdvancedMaxSpeed = { Value = 500, Default = 500 },
+        AdvancedVehicleYCorrection = { Value = 0, Default = 0 },
+        AdvancedPredictionAggressiveness = { Value = 1.2, Default = 1.2 },
+        AdvancedSmoothingFactor = { Value = 0.1, Default = 0.1 },
+        AdvancedSmallDistanceSpeedFactorMultiplier = { Value = 1.7, Default = 1.7 },
+        AdvancedSlowVehiclePredictionFactor = { Value = 1.95, Default = 1.95 },
+        AdvancedFastVehiclePredictionLimit = { Value = 2.2, Default = 2.2 },
+        VisualUpdateFrequency = { Value = 0.1, Default = 0.1 },
+        AdvancedPositionHistorySize = { Value = 20, Default = 20 },
+        LatencyCompensation = { Value = 0.2, Default = 0.2 },
+        ShowTrajectoryBeam = { Value = true, Default = true },
+        ShowFullTrajectory = { Value = true, Default = true },
+        ShotgunSupport = { Value = false, Default = false },
+        GenBullet = { Value = 4, Default = 4 },
+        TestGenBullet = { Value = false, Default = false },
+        DoubleTap = { Value = false, Default = false }
+    },
+    FixedPredictionValues = {
+        VehicleFactor = 0.9,
+        PedestrianFactor = 0.55,
+        PredictionAggressiveness = 1.2,
+        SmallDistanceSpeedFactorMultiplier = 1.7,
+        SlowVehiclePredictionFactor = 1.95,
+        FastVehiclePredictionLimit = 2.2,
+        PositionHistorySize = 20,
+        SmoothingFactor = 0.1,
+        TeleportThreshold = 600,
+        MaxSpeed = 500,
+        PredictBullet = 600
+    },
+    State = {
+        LastEventId = 0,
+        LastTool = nil,
+        TargetVisualPart = nil,
+        HitboxVisualPart = nil,
+        PredictVisualPart = nil,
+        DirectionVisualPart = nil,
+        RealDirectionVisualPart = nil,
+        FovCircle = nil,
+        V_U_4 = nil,
+        Connection = nil,
+        OldFireServer = nil,
+        GradientTime = 0,
+        PositionHistory = {},
+        LastVisualUpdateTime = 0,
+        IsTeleporting = false,
+        LastTargetPosition = {},
+        TrajectoryBeam = nil,
+        FullTrajectoryParts = nil,
+        LastFriendsList = nil,
+        LastTargetUpdate = 0,
+        TargetUpdateInterval = 0.5,
+        LocalCharacter = nil,
+        LocalRoot = nil,
+        LastTargetPos = nil,
+        LastPredictionPos = nil,
+        CachedPing = 0.1 -- Кэшированный пинг
     }
+}
 
-    local SectionFrames = {}
-    local DebugList
-
-    for i, section in ipairs(Sections) do
-        local SectionButton = Instance.new("TextButton", Sidebar)
-        SectionButton.Size, SectionButton.Position, SectionButton.BackgroundColor3, SectionButton.BackgroundTransparency,
-        SectionButton.Text, SectionButton.LayoutOrder =
-            UDim2.new(1, -10, 0, 40), UDim2.new(0, 5, 0, 0), CurrentSection == section.Name and Color3.fromRGB(35, 35, 45) or Color3.fromRGB(20, 20, 25),
-            0.3, "", i
-        Instance.new("UICorner", SectionButton).CornerRadius = UDim.new(0, 6)
-
-        local Icon = Instance.new("ImageLabel", SectionButton)
-        Icon.Size, Icon.Position, Icon.BackgroundTransparency, Icon.Image =
-            UDim2.new(0, 20, 0, 20), UDim2.new(0, 10, 0, 10), 1, section.Icon
-
-        local Label = Instance.new("TextLabel", SectionButton)
-        Label.Size, Label.Position, Label.BackgroundTransparency, Label.Text, Label.TextColor3, Label.TextSize,
-        Label.Font, Label.TextXAlignment, Label.Name =
-            UDim2.new(1, -40, 1, 0), UDim2.new(0, 40, 0, 0), 1, section.Name, Color3.fromRGB(255, 255, 255),
-            16, Enum.Font.Montserrat, Enum.TextXAlignment.Left, "TextLabel"
-
-        SectionButton.MouseButton1Click:Connect(function()
-            if CurrentTab == "Chat" then return end
-            CurrentSection, CurrentTab = section.Name, "Loader"
-            for _, btn in ipairs(Sidebar:GetChildren()) do
-                if btn:IsA("TextButton") then
-                    btn.BackgroundColor3 = btn.TextLabel.Text == section.Name and Color3.fromRGB(35, 35, 45) or Color3.fromRGB(20, 20, 25)
-                end
-            end
-            for secName, frame in pairs(SectionFrames) do
-                if frame then
-                    frame.BackgroundTransparency, frame.Visible = secName == section.Name and 0 or 0.3, secName == section.Name
-                    if frame.Visible then
-                        Core.Services.TweenService:Create(frame, TweenInfo.new(0.3), {BackgroundTransparency = 0}):Play()
-                    end
-                end
-            end
-            LoaderTabGradient.Enabled, ChatTabGradient.Enabled = true, false
-            if ChatSection then ChatSection.Visible = false end
-            if OutputSection then
-                OutputSection.Position, OutputSection.Size, OutputSection.Visible =
-                    UDim2.new(0, 150, 1, -100), UDim2.new(1, -150, 0, 100), ChatLocation ~= "AsOutput"
-            end
-            if Sidebar then Sidebar.Visible = true end
-            if ChatSection and ChatSection.Parent then
-                ChatSection.Position = UDim2.new(0, 150, 0, 50)
-                ChatSection.Size = UDim2.new(1, -150, 0, 400)
-            end
-        end)
-
-        SectionButton.MouseEnter:Connect(function()
-            Core.Services.TweenService:Create(SectionButton, TweenInfo.new(0.2), {BackgroundTransparency = 0.1}):Play()
-        end)
-        SectionButton.MouseLeave:Connect(function()
-            Core.Services.TweenService:Create(SectionButton, TweenInfo.new(0.2), {BackgroundTransparency = 0.3}):Play()
-        end)
+-- Получение пинга с сглаживанием
+local function getSmoothedPing()
+    local success, ping = pcall(function()
+        local dataPing = Stats.Network.ServerStatsItem["Data Ping"]
+        return (dataPing and (dataPing.GetValue and dataPing:GetValue() or dataPing.Value) or 100) / 1000
+    end)
+    if not success then
+        warn("Ошибка получения пинга:", ping)
+        return GunSilent.State.CachedPing
     end
+    -- Сглаживание пинга
+    local smoothingFactor = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedSmoothingFactor.Value or GunSilent.FixedPredictionValues.SmoothingFactor
+    GunSilent.State.CachedPing = GunSilent.State.CachedPing * (1 - smoothingFactor) + ping * smoothingFactor
+    return GunSilent.State.CachedPing
+end
 
-    local SectionContainer = Instance.new("Frame", MainFrame)
-    SectionContainer.Size, SectionContainer.Position, SectionContainer.BackgroundTransparency =
-        UDim2.new(1, -150, 0, 400), UDim2.new(0, 150, 0, 50), 1
+local function isGunTool(tool)
+    local items = game:GetService("ReplicatedStorage"):FindFirstChild("Items")
+    if not items then return false end
+    local gunFolder = items:FindFirstChild("gun")
+    if not gunFolder then return false end
+    return gunFolder:FindFirstChild(tool.Name) ~= nil
+end
 
-    local MainSection = Instance.new("Frame", SectionContainer)
-    MainSection.Size, MainSection.BackgroundTransparency, MainSection.BackgroundColor3, MainSection.Visible =
-        UDim2.new(1, 0, 1, 0), 0, Color3.fromRGB(30, 30, 40), true
-    SectionFrames["Main"] = MainSection
+local function getGunRange(tool)
+    return (tool and tool:GetAttribute("Range") or 50) + GunSilent.Settings.RangePlus.Value
+end
 
-    local MainLabel = Instance.new("TextLabel", MainSection)
-    MainLabel.Size, MainLabel.Position, MainLabel.BackgroundTransparency, MainLabel.Text, MainLabel.TextColor3,
-    MainLabel.TextSize, MainLabel.Font, MainLabel.TextXAlignment =
-        UDim2.new(1, -20, 0, 30), UDim2.new(0, 10, 0, 10), 1, "Main", Color3.fromRGB(255, 255, 255),
-        16, Enum.Font.Montserrat, Enum.TextXAlignment.Left
+local function isShotgun(tool)
+    if not tool then return false end
+    local ammoType = tool:GetAttribute("AmmoType")
+    return ammoType and ammoType:lower() == "shotgun"
+end
 
-    local MainDivider = Instance.new("Frame", MainSection)
-    MainDivider.Size, MainDivider.Position, MainDivider.BackgroundColor3, MainDivider.BorderSizePixel =
-        UDim2.new(1, -20, 0, 2), UDim2.new(0, 10, 0, 40), Color3.fromRGB(50, 50, 50), 0
-
-    local ModuleList = Instance.new("ScrollingFrame", MainSection)
-    ModuleList.Size, ModuleList.Position, ModuleList.BackgroundTransparency, ModuleList.BorderSizePixel,
-    ModuleList.CanvasSize, ModuleList.ScrollBarThickness =
-        UDim2.new(1, -20, 1, -100), UDim2.new(0, 10, 0, 55), 1, 0, UDim2.new(0, 0, 0, #Core.Modules * 50), 6
-
-    local ModuleListLayout = Instance.new("UIListLayout", ModuleList)
-    ModuleListLayout.Padding, ModuleListLayout.SortOrder = UDim.new(0, 5), Enum.SortOrder.LayoutOrder
-
-    local LoadButton = Instance.new("TextButton", MainSection)
-    LoadButton.Size, LoadButton.Position, LoadButton.BackgroundColor3, LoadButton.BackgroundTransparency,
-    LoadButton.Text, LoadButton.TextColor3, LoadButton.TextSize, LoadButton.Font =
-        UDim2.new(1, -20, 0, 40), UDim2.new(0, 10, 1, -50), Color3.fromRGB(40, 40, 50), 0.3,
-        "Load Selected Modules", Color3.fromRGB(255, 255, 255), 16, Enum.Font.Montserrat
-    Instance.new("UICorner", LoadButton).CornerRadius = UDim.new(0, 8)
-
-    LoadButton.MouseEnter:Connect(function()
-        Core.Services.TweenService:Create(LoadButton, TweenInfo.new(0.2), {BackgroundTransparency = 0.1}):Play()
-    end)
-    LoadButton.MouseLeave:Connect(function()
-        Core.Services.TweenService:Create(LoadButton, TweenInfo.new(0.2), {BackgroundTransparency = 0.3}):Play()
-    end)
-    LoadButton.MouseButton1Down:Connect(function()
-        Core.Services.TweenService:Create(LoadButton, TweenInfo.new(0.1), {Size = UDim2.new(1, -20, 0, 38)}):Play()
-    end)
-    LoadButton.MouseButton1Up:Connect(function()
-        Core.Services.TweenService:Create(LoadButton, TweenInfo.new(0.1), {Size = UDim2.new(1, -20, 0, 40)}):Play()
-    end)
-    LoadButton.MouseButton1Click:Connect(function()
-        if Core.UI and Core.UI.loadModules then
-            Core.UI.loadModules()
-        end
-    end)
-
-    local AutofarmSection = Instance.new("Frame", SectionContainer)
-    AutofarmSection.Size, AutofarmSection.BackgroundTransparency, AutofarmSection.BackgroundColor3, AutofarmSection.Visible =
-        UDim2.new(1, 0, 1, 0), 0.3, Color3.fromRGB(30, 30, 40), false
-    SectionFrames["Autofarm"] = AutofarmSection
-
-    local AutofarmLabel = Instance.new("TextLabel", AutofarmSection)
-    AutofarmLabel.Size, AutofarmLabel.Position, AutofarmLabel.BackgroundTransparency, AutofarmLabel.Text,
-    AutofarmLabel.TextColor3, AutofarmLabel.TextSize, AutofarmLabel.Font, AutofarmLabel.TextXAlignment =
-        UDim2.new(1, -20, 0, 30), UDim2.new(0, 10, 0, 10), 1, "Autofarm", Color3.fromRGB(255, 255, 255),
-        14, Enum.Font.Montserrat, Enum.TextXAlignment.Left
-
-    local AutofarmDivider = Instance.new("Frame", AutofarmSection)
-    AutofarmDivider.Size, AutofarmDivider.Position, AutofarmDivider.BackgroundColor3, AutofarmDivider.BorderSizePixel =
-        UDim2.new(1, -20, 0, 2), UDim2.new(0, 10, 0, 40), Color3.fromRGB(50, 50, 50), 0
-
-    local AutofarmPlaceholder = Instance.new("TextLabel", AutofarmSection)
-    AutofarmPlaceholder.Size, AutofarmPlaceholder.Position, AutofarmPlaceholder.BackgroundTransparency,
-    AutofarmPlaceholder.Text, AutofarmPlaceholder.TextColor3, AutofarmPlaceholder.TextSize, AutofarmPlaceholder.Font,
-    AutofarmPlaceholder.TextXAlignment =
-        UDim2.new(1, -20, 0, 30), UDim2.new(0, 10, 0, 55), 1, "Coming Soon...", Color3.fromRGB(150, 150, 150),
-        14, Enum.Font.Montserrat, Enum.TextXAlignment.Left
-
-    local SettingsSection = Instance.new("Frame", SectionContainer)
-    SettingsSection.Size, SettingsSection.BackgroundTransparency, SettingsSection.BackgroundColor3, SettingsSection.Visible =
-        UDim2.new(1, 0, 1, 0), 0.3, Color3.fromRGB(30, 30, 40), false
-    SectionFrames["Settings"] = SettingsSection
-
-    local SettingsLabel = Instance.new("TextLabel", SettingsSection)
-    SettingsLabel.Size, SettingsLabel.Position, SettingsLabel.BackgroundTransparency, SettingsLabel.Text,
-    SettingsLabel.TextColor3, SettingsLabel.TextSize, SettingsLabel.Font, SettingsLabel.TextXAlignment =
-        UDim2.new(1, -20, 0, 30), UDim2.new(0, 10, 0, 10), 1, "Settings", Color3.fromRGB(255, 255, 255),
-        16, Enum.Font.Montserrat, Enum.TextXAlignment.Left
-
-    local SettingsDivider = Instance.new("Frame", SettingsSection)
-    SettingsDivider.Size, SettingsDivider.Position, SettingsDivider.BackgroundColor3, SettingsDivider.BorderSizePixel =
-        UDim2.new(1, -20, 0, 2), UDim2.new(0, 10, 0, 40), Color3.fromRGB(50, 50, 50), 0
-
-    local ChatLocationContainer = Instance.new("Frame", SettingsSection)
-    ChatLocationContainer.Size, ChatLocationContainer.Position, ChatLocationContainer.BackgroundColor3,
-    ChatLocationContainer.BackgroundTransparency, ChatLocationContainer.BorderSizePixel =
-        UDim2.new(1, -20, 0, 60), UDim2.new(0, 10, 0, 55), Color3.fromRGB(40, 40, 50), 0.3, 0
-    Instance.new("UICorner", ChatLocationContainer).CornerRadius = UDim.new(0, 6)
-
-    local ChatLocationLabel = Instance.new("TextLabel", ChatLocationContainer)
-    ChatLocationLabel.Size, ChatLocationLabel.Position, ChatLocationLabel.BackgroundTransparency,
-    ChatLocationLabel.Text, ChatLocationLabel.TextColor3, ChatLocationLabel.TextSize, ChatLocationLabel.Font,
-    ChatLocationLabel.TextXAlignment =
-        UDim2.new(1, -10, 0, 20), UDim2.new(0, 5, 0, 5), 1, "Chat Location", Color3.fromRGB(255, 255, 255),
-        14, Enum.Font.Montserrat, Enum.TextXAlignment.Left
-
-    local ChatLocationFrame = Instance.new("Frame", ChatLocationContainer)
-    ChatLocationFrame.Size, ChatLocationFrame.Position, ChatLocationFrame.BackgroundColor3 =
-        UDim2.new(0, 80, 0, 20), UDim2.new(0, 5, 0, 30), Color3.fromRGB(50, 50, 50)
-    Instance.new("UICorner", ChatLocationFrame).CornerRadius = UDim.new(1, 0)
-
-    local ChatLocationIndicator = Instance.new("Frame", ChatLocationFrame)
-    ChatLocationIndicator.Size, ChatLocationIndicator.Position, ChatLocationIndicator.BackgroundColor3 =
-        UDim2.new(0, 40, 0, 20), UDim2.new(0, 0, 0, 0), Color3.fromRGB(80, 80, 80)
-    Instance.new("UICorner", ChatLocationIndicator).CornerRadius = UDim.new(1, 0)
-
-    local ChatLocationText = Instance.new("TextLabel", ChatLocationFrame)
-    ChatLocationText.Size, ChatLocationText.BackgroundTransparency, ChatLocationText.Text,
-    ChatLocationText.TextColor3, ChatLocationText.TextSize, ChatLocationText.Font, ChatLocationText.TextXAlignment =
-        UDim2.new(1, 0, 1, 0), 1, "In Menu", Color3.fromRGB(255, 255, 255), 14, Enum.Font.Montserrat, Enum.TextXAlignment.Center
-
-    local BlurContainer = Instance.new("Frame", SettingsSection)
-    BlurContainer.Size, BlurContainer.Position, BlurContainer.BackgroundColor3, BlurContainer.BackgroundTransparency,
-    BlurContainer.BorderSizePixel =
-        UDim2.new(1, -20, 0, 60), UDim2.new(0, 10, 0, 125), Color3.fromRGB(40, 40, 50), 0.3, 0
-    Instance.new("UICorner", BlurContainer).CornerRadius = UDim.new(0, 6)
-
-    local BlurLabel = Instance.new("TextLabel", BlurContainer)
-    BlurLabel.Size, BlurLabel.Position, BlurLabel.BackgroundTransparency, BlurLabel.Text,
-    BlurLabel.TextColor3, BlurLabel.TextSize, BlurLabel.Font, BlurLabel.TextXAlignment =
-        UDim2.new(1, -10, 0, 20), UDim2.new(0, 5, 0, 5), 1, "Blur Background", Color3.fromRGB(255, 255, 255),
-        14, Enum.Font.Montserrat, Enum.TextXAlignment.Left
-
-    local BlurFrame = Instance.new("Frame", BlurContainer)
-    BlurFrame.Size, BlurFrame.Position, BlurFrame.BackgroundColor3 =
-        UDim2.new(0, 80, 0, 20), UDim2.new(0, 5, 0, 30), Color3.fromRGB(50, 50, 50)
-    Instance.new("UICorner", BlurFrame).CornerRadius = UDim.new(1, 0)
-
-    local BlurEntry = Instance.new("Frame", BlurFrame)
-    BlurEntry.Size, BlurEntry.Position, BlurEntry.BackgroundColor3 =
-        UDim2.new(0, 40, 0, 20), UDim2.new(1, -40, 0, 0), Color3.fromRGB(70, 130, 255)
-    Instance.new("UICorner", BlurEntry).CornerRadius = UDim.new(1, 0)
-
-    local BlurText = Instance.new("TextLabel", BlurFrame)
-    BlurText.Size, BlurText.BackgroundTransparency, BlurText.Text, BlurText.TextColor3,
-    BlurText.TextSize, BlurText.Font, BlurText.TextXAlignment =
-        UDim2.new(1, 0, 1, 0), 1, "Enabled", Color3.fromRGB(255, 255, 255), 14, Enum.Font.Montserrat, Enum.TextXAlignment.Center
-
-    local DebugSection = Instance.new("Frame", SectionContainer)
-    DebugSection.Size, DebugSection.BackgroundTransparency, DebugSection.BackgroundColor3, DebugSection.Visible =
-        UDim2.new(1, 0, 1, 0), 0.3, Color3.fromRGB(30, 30, 40), false
-    SectionFrames["Logs & Debug"] = DebugSection
-
-    local DebugLabel = Instance.new("TextLabel", DebugSection)
-    DebugLabel.Size, DebugLabel.Position, DebugLabel.BackgroundTransparency, DebugLabel.Text,
-    DebugLabel.TextColor3, DebugLabel.TextSize, DebugLabel.Font, DebugLabel.TextXAlignment =
-        UDim2.new(1, -20, 0, 30), UDim2.new(0, 10, 0, 10), 1, "Logs & Debug", Color3.fromRGB(255, 255, 255),
-        16, Enum.Font.Montserrat, Enum.TextXAlignment.Left
-
-    local DebugDivider = Instance.new("Frame", DebugSection)
-    DebugDivider.Size, DebugDivider.Position, DebugDivider.BackgroundColor3, DebugDivider.BorderSizePixel =
-        UDim2.new(1, -20, 0, 2), UDim2.new(0, 10, 0, 40), Color3.fromRGB(50, 50, 50), 0
-
-    local DebugFilterFrame = Instance.new("Frame", DebugSection)
-    DebugFilterFrame.Size, DebugFilterFrame.Position, DebugFilterFrame.BackgroundColor3, DebugFilterFrame.BackgroundTransparency =
-        UDim2.new(1, -20, 0, 40), UDim2.new(0, 10, 0, 55), Color3.fromRGB(40, 40, 50), 0.3
-    Instance.new("UICorner", DebugFilterFrame).CornerRadius = UDim.new(0, 6)
-
-    local DebugFilterLabel = Instance.new("TextLabel", DebugFilterFrame)
-    DebugFilterLabel.Size, DebugFilterLabel.Position, DebugFilterLabel.BackgroundTransparency,
-    DebugFilterLabel.Text, DebugFilterLabel.TextColor3, DebugFilterLabel.TextSize, DebugFilterLabel.Font =
-        UDim2.new(0, 100, 0, 20), UDim2.new(0, -5, 0, 10), 1, "Filter:", Color3.fromRGB(255, 255, 255), 14, Enum.Font.Montserrat
-
-    local DebugFilterToggle = Instance.new("Frame", DebugFilterFrame)
-    DebugFilterToggle.Size, DebugFilterToggle.Position, DebugFilterToggle.BackgroundColor3 =
-        UDim2.new(0, 80, 0, 20), UDim2.new(0, 70, 0, 10), Color3.fromRGB(50, 50, 50)
-    Instance.new("UICorner", DebugFilterToggle).CornerRadius = UDim.new(1, 0)
-
-    local DebugFilterIndicator = Instance.new("Frame", DebugFilterToggle)
-    DebugFilterIndicator.Size, DebugFilterIndicator.Position, DebugFilterIndicator.BackgroundColor3 =
-        UDim2.new(0, 40, 0, 20), UDim2.new(0, 0, 0, 0), Color3.fromRGB(80, 80, 80)
-    Instance.new("UICorner", DebugFilterIndicator).CornerRadius = UDim.new(1, 0)
-
-    local DebugFilterText = Instance.new("TextLabel", DebugFilterToggle)
-    DebugFilterText.Size, DebugFilterText.BackgroundTransparency, DebugFilterText.Text,
-    DebugFilterText.TextColor3, DebugFilterText.TextSize, DebugFilterText.Font, DebugFilterText.TextXAlignment =
-        UDim2.new(1, 0, 1, 0), 1, "All", Color3.fromRGB(255, 255, 255), 14, Enum.Font.Montserrat, Enum.TextXAlignment.Center
-
-    local DebugClearButton = Instance.new("TextButton", DebugFilterFrame)
-    DebugClearButton.Size, DebugClearButton.Position, DebugClearButton.BackgroundColor3,
-    DebugClearButton.Text, DebugClearButton.TextColor3, DebugClearButton.TextSize, DebugClearButton.Font =
-        UDim2.new(0, 100, 0, 30), UDim2.new(1, -110, 0, 5), Color3.fromRGB(50, 50, 60),
-        "Clear Logs", Color3.fromRGB(255, 255, 255), 14, Enum.Font.Montserrat
-    Instance.new("UICorner", DebugClearButton).CornerRadius = UDim.new(0, 6)
-
-    local ChatSection = Instance.new("Frame", MainFrame)
-    ChatSection.Size, ChatSection.Position, ChatSection.BackgroundTransparency, ChatSection.Visible =
-        UDim2.new(1, -150, 0, 400), UDim2.new(0, 150, 0, 50), 1, false
-
-    local ChatLabel = Instance.new("TextLabel", ChatSection)
-    ChatLabel.Size, ChatLabel.Position, ChatLabel.BackgroundTransparency, ChatLabel.Text,
-    ChatLabel.TextColor3, ChatLabel.TextSize, ChatLabel.Font, ChatLabel.TextXAlignment =
-        UDim2.new(1, -20, 0, 30), UDim2.new(0, 10, 0, 10), 1, "Chat", Color3.fromRGB(255, 255, 255),
-        16, Enum.Font.Montserrat, Enum.TextXAlignment.Left
-
-    local ChatDivider = Instance.new("Frame", ChatSection)
-    ChatDivider.Size, ChatDivider.Position, ChatDivider.BackgroundColor3, ChatDivider.BorderSizePixel, ChatDivider.ZIndex =
-        UDim2.new(1, -20, 0, 2), UDim2.new(0, 10, 0, 40), Color3.fromRGB(50, 50, 50), 0, 2
-
-    local ChatFrame = Instance.new("Frame", ChatSection)
-    ChatFrame.Size, ChatFrame.Position, ChatFrame.BackgroundColor3, ChatFrame.BackgroundTransparency,
-    ChatFrame.BorderSizePixel, ChatFrame.BorderColor3, ChatFrame.ZIndex =
-        UDim2.new(1, -20, 1, -50), UDim2.new(0, 10, 0, 40), Color3.fromRGB(20, 20, 25), 0.3, 1, Color3.fromRGB(60, 60, 60), 1
-    Instance.new("UICorner", ChatFrame).CornerRadius = UDim.new(0, 12)
-
-    local ChatPadding = Instance.new("UIPadding", ChatFrame)
-    ChatPadding.PaddingLeft, ChatPadding.PaddingRight, ChatPadding.PaddingTop, ChatPadding.PaddingBottom =
-        UDim.new(0, 5), UDim.new(0, 5), UDim.new(0, 5), UDim.new(0, 5)
-
-    local ChatList = Instance.new("ScrollingFrame", ChatFrame)
-    ChatList.Size, ChatList.Position, ChatList.BackgroundTransparency, ChatList.BorderSizePixel,
-    ChatList.CanvasSize, ChatList.ScrollBarThickness =
-        UDim2.new(1, 0, 1, -50), UDim2.new(0, 0, 0, 0), 1, 0, UDim2.new(0, 0, 0, 0), 4
-
-    local ChatListLayout = Instance.new("UIListLayout", ChatList)
-    ChatListLayout.Padding, ChatListLayout.SortOrder = UDim.new(0, 5), Enum.SortOrder.LayoutOrder
-
-    local PMInstructionLabel = Instance.new("TextLabel", ChatFrame)
-    PMInstructionLabel.Size, PMInstructionLabel.Position, PMInstructionLabel.BackgroundTransparency,
-    PMInstructionLabel.Text, PMInstructionLabel.TextColor3, PMInstructionLabel.TextSize, PMInstructionLabel.Font,
-    PMInstructionLabel.TextXAlignment =
-        UDim2.new(1, -10, 0, 15), UDim2.new(0, 5, 1, -50), 1,
-        "Use /pm <userId> <message> or /pmjobid <userId> to send private messages",
-        Color3.fromRGB(150, 150, 150), 12, Enum.Font.Montserrat, Enum.TextXAlignment.Left
-
-    local ChatInput = Instance.new("TextBox", ChatFrame)
-    ChatInput.Size, ChatInput.Position, ChatInput.BackgroundColor3, ChatInput.Text, ChatInput.PlaceholderText,
-    ChatInput.TextColor3, ChatInput.TextSize, ChatInput.Font, ChatInput.TextXAlignment, ChatInput.PlaceholderColor3 =
-        UDim2.new(1, -110, 0, 30), UDim2.new(0, 5, 1, -35), Color3.fromRGB(40, 40, 40), "", "Type your message...",
-        Color3.fromRGB(255, 255, 255), 14, Enum.Font.Montserrat, Enum.TextXAlignment.Left, Color3.fromRGB(150, 150, 150)
-    Instance.new("UICorner", ChatInput).CornerRadius = UDim.new(0, 5)
-
-    local ShareJobIdButton = Instance.new("TextButton", ChatFrame)
-    ShareJobIdButton.Size, ShareJobIdButton.Position, ShareJobIdButton.BackgroundColor3,
-    ShareJobIdButton.Text, ShareJobIdButton.TextColor3, ShareJobIdButton.TextSize, ShareJobIdButton.Font =
-        UDim2.new(0, 100, 0, 30), UDim2.new(1, -105, 1, -35), Color3.fromRGB(80, 80, 80),
-        "Share JobId", Color3.fromRGB(255, 255, 255), 14, Enum.Font.Montserrat
-    Instance.new("UICorner", ShareJobIdButton).CornerRadius = UDim.new(0, 5)
-
-    local OutputSection = Instance.new("Frame", MainFrame)
-    OutputSection.Size, OutputSection.Position, OutputSection.BackgroundColor3 =
-        UDim2.new(1, -150, 0, 100), UDim2.new(0, 150, 1, -100), Color3.fromRGB(18, 18, 18)
-
-    local OutputLabel = Instance.new("TextLabel", OutputSection)
-    OutputLabel.Size, OutputLabel.Position, OutputLabel.BackgroundTransparency, OutputLabel.Text,
-    OutputLabel.TextColor3, OutputLabel.TextSize, OutputLabel.Font, OutputLabel.TextXAlignment =
-        UDim2.new(1, -20, 0, 20), UDim2.new(0, 10, 0, 0), 1, "Output", Color3.fromRGB(255, 255, 255),
-        16, Enum.Font.Montserrat, Enum.TextXAlignment.Left
-
-    local OutputList = Instance.new("ScrollingFrame", OutputSection)
-    OutputList.Size, OutputList.Position, OutputList.BackgroundTransparency, OutputList.BorderSizePixel,
-    OutputList.CanvasSize, OutputList.ScrollBarThickness =
-        UDim2.new(1, -20, 1, -30), UDim2.new(0, 10, 0, 20), 1, 0, UDim2.new(0, 0, 0, 0), 6
-
-    local OutputListLayout = Instance.new("UIListLayout", OutputList)
-    OutputListLayout.Padding, OutputListLayout.SortOrder = UDim.new(0, 5), Enum.SortOrder.LayoutOrder
-
-    for i, module in ipairs(Core.Modules) do
-        local ModuleFrame = Instance.new("Frame", ModuleList)
-        ModuleFrame.Size, ModuleFrame.BackgroundColor3, ModuleFrame.LayoutOrder =
-            UDim2.new(1, 0, 0, 40), Color3.fromRGB(20, 20, 25), i
-        Instance.new("UICorner", ModuleFrame).CornerRadius = UDim.new(0, 6)
-
-        local ModuleLabel = Instance.new("TextLabel", ModuleFrame)
-        ModuleLabel.Size, ModuleLabel.Position, ModuleLabel.BackgroundTransparency, ModuleLabel.Text,
-        ModuleLabel.TextColor3, ModuleLabel.TextSize, ModuleLabel.Font, ModuleLabel.TextXAlignment =
-            UDim2.new(0.7, 0, 1, 0), UDim2.new(0, 10, 0, 0), 1, module.Name, Color3.fromRGB(255, 255, 255),
-            16, Enum.Font.Montserrat, Enum.TextXAlignment.Left
-
-        local ToggleFrame = Instance.new("Frame", ModuleFrame)
-        ToggleFrame.Size, ToggleFrame.Position, ToggleFrame.BackgroundColor3 =
-            UDim2.new(0, 40, 0, 20), UDim2.new(1, -50, 0, 10), Color3.fromRGB(50, 50, 60)
-        Instance.new("UICorner", ToggleFrame).CornerRadius = UDim.new(1, 0)
-
-        local ToggleIndicator = Instance.new("Frame", ToggleFrame)
-        ToggleIndicator.Size, ToggleIndicator.Position, ToggleIndicator.BackgroundColor3 =
-            UDim2.new(0, 20, 0, 20), module.Enabled and UDim2.new(1, -20, 0, 0) or UDim2.new(0, 0, 0, 0),
-            module.Enabled and Color3.fromRGB(70, 130, 255) or Color3.fromRGB(80, 80, 80)
-        Instance.new("UICorner", ToggleIndicator).CornerRadius = UDim.new(1, 0)
-
-        ToggleFrame.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                module.Enabled = not module.Enabled
-                Core.Services.TweenService:Create(ToggleIndicator, TweenInfo.new(0.2), {
-                    Position = module.Enabled and UDim2.new(1, -20, 0, 0) or UDim2.new(0, 0, 0, 0)
-                }):Play()
-                ToggleIndicator.BackgroundColor3 = module.Enabled and Color3.fromRGB(70, 130, 255) or Color3.fromRGB(80, 80, 80)
-            end
-        end)
-    end
-
-    local DebugFilterState = "All"
-
-    local function addLog(message, isError)
-        table.insert(Logs, {Text = message, IsError = isError})
-        if OutputList then
-            local LogLabel = Instance.new("TextLabel", OutputList)
-            LogLabel.Size, LogLabel.BackgroundTransparency, LogLabel.Text, LogLabel.TextColor3,
-            LogLabel.TextSize, LogLabel.Font, LogLabel.TextXAlignment =
-                UDim2.new(1, 0, 0, 20), 1, message, isError and Color3.fromRGB(255, 50, 50) or Color3.fromRGB(200, 200, 200),
-                14, Enum.Font.Montserrat, Enum.TextXAlignment.Left
-            OutputList.CanvasSize = UDim2.new(0, 0, 0, #Logs * 25)
-            OutputList.CanvasPosition = Vector2.new(0, OutputList.CanvasSize.Y.Offset)
-        end
-        if DebugList and (DebugFilterState == "All" or (DebugFilterState == "Errors" and isError) or (DebugFilterState == "Success" and not isError)) then
-            local DebugLogLabel = Instance.new("TextLabel", DebugList)
-            DebugLogLabel.Size, DebugLogLabel.BackgroundTransparency, DebugLogLabel.Text, DebugLogLabel.TextColor3,
-            DebugLogLabel.TextSize, DebugLogLabel.Font, DebugLogLabel.TextXAlignment =
-                UDim2.new(1, 0, 0, 20), 1, message, isError and Color3.fromRGB(255, 50, 50) or Color3.fromRGB(200, 200, 200),
-                14, Enum.Font.Montserrat, Enum.TextXAlignment.Left
-            DebugList.CanvasSize = UDim2.new(0, 0, 0, #Logs * 25)
-            DebugList.CanvasPosition = Vector2.new(0, DebugList.CanvasSize.Y.Offset)
+local function getEquippedGunTool(character)
+    if not character then return nil end
+    for _, child in pairs(character:GetChildren()) do
+        if child.ClassName == "Tool" and isGunTool(child) then
+            return child
         end
     end
+    return nil
+end
 
-    DebugFilterToggle.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            DebugFilterState = DebugFilterState == "All" and "Errors" or DebugFilterState == "Errors" and "Success" or "All"
-            DebugFilterText.Text = DebugFilterState
-            Core.Services.TweenService:Create(DebugFilterIndicator, TweenInfo.new(0.2), {
-                Position = DebugFilterState == "All" and UDim2.new(0, 0, 0, 0) or
-                           DebugFilterState == "Errors" and UDim2.new(0, 20, 0, 0) or
-                           UDim2.new(0, 40, 0, 0)
-            }):Play()
-            DebugFilterIndicator.BackgroundColor3 = DebugFilterState == "All" and Color3.fromRGB(80, 80, 80) or
-                                                   DebugFilterState == "Errors" and Color3.fromRGB(255, 50, 50) or
-                                                   Color3.fromRGB(50, 255, 50)
-            for _, child in ipairs(DebugList:GetChildren()) do
-                if child:IsA("TextLabel") then child:Destroy() end
-            end
-            for _, log in ipairs(Logs) do
-                if DebugFilterState == "All" or (DebugFilterState == "Errors" and log.IsError) or (DebugFilterState == "Success" and not log.IsError) then
-                    local DebugLogLabel = Instance.new("TextLabel", DebugList)
-                    DebugLogLabel.Size, DebugLogLabel.BackgroundTransparency, DebugLogLabel.Text, DebugLogLabel.TextColor3,
-                    DebugLogLabel.TextSize, DebugLogLabel.Font, DebugLogLabel.TextXAlignment =
-                        UDim2.new(1, 0, 0, 20), 1, log.Text, log.IsError and Color3.fromRGB(255, 50, 50) or Color3.fromRGB(200, 200, 200),
-                        14, Enum.Font.Montserrat, Enum.TextXAlignment.Left
-                end
-            end
-            DebugList.CanvasSize = UDim2.new(0, 0, 0, #DebugList:GetChildren() * 25)
+local function updateFovCircle(deltaTime)
+    if not GunSilent.Settings.ShowCircle.Value then
+        if GunSilent.State.FovCircle then
+            GunSilent.State.FovCircle.Visible = false
         end
-    end)
-
-    DebugClearButton.MouseButton1Click:Connect(function()
-        Logs = {}
-        for _, child in ipairs(DebugList:GetChildren()) do
-            if child:IsA("TextLabel") then child:Destroy() end
-        end
-        for _, child in ipairs(OutputList:GetChildren()) do
-            if child:IsA("TextLabel") then child:Destroy() end
-        end
-        DebugList.CanvasSize, OutputList.CanvasSize = UDim2.new(0, 0, 0, 0), UDim2.new(0, 0, 0, 0)
-        addLog("Logs cleared!", false)
-    end)
-
-    local dragging, dragInput, dragStart, startPos
-    TopBar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            dragStart = input.Position
-            startPos = MainFrame.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
-        end
-    end)
-    TopBar.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement then
-            dragInput = input
-        end
-    end)
-    Core.Services.UserInputService.InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            local delta = input.Position - dragStart
-            MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-        end
-    end)
-
-    local BASE_RESOLUTION = Vector2.new(1920, 1080)
-    local function rescaleUI()
-        local camera = Core.Services.Workspace.CurrentCamera
-        if not camera then return end
-        local currentResolution = camera.ViewportSize
-        local scale = Core.Services.UserInputService.TouchEnabled and 0.6 or math.min(math.min(currentResolution.X / BASE_RESOLUTION.X, currentResolution.Y / BASE_RESOLUTION.Y), 1)
-        MainFrame.Size, MainFrame.Position = UDim2.new(0, 650 * scale, 0, 550 * scale), UDim2.new(0.5, -325 * scale, 0.5, -275 * scale)
-    end
-    rescaleUI()
-    Core.Services.Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(rescaleUI)
-
-    _G.SetUIScale = function(scale)
-        MainFrame.Size, MainFrame.Position = UDim2.new(0, 650 * scale, 0, 550 * scale), UDim2.new(0.5, -325 * scale, 0.5, -275 * scale)
+        return
     end
 
-    local function isValidJobId(jobId)
-        return jobId:match("^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$") ~= nil
+    local camera = GunSilent.Core.PlayerData.Camera
+    if not camera then return end
+
+    local fovCircle = GunSilent.State.FovCircle
+    if not fovCircle then
+        fovCircle = Drawing.new("Circle")
+        fovCircle.Thickness = 2
+        fovCircle.NumSides = 100
+        fovCircle.Color = Color3.fromRGB(255, 255, 255)
+        fovCircle.Visible = true
+        fovCircle.Filled = false
+        GunSilent.State.FovCircle = fovCircle
     end
 
-    local function fetchUsernames()
-        local success, response = pcall(function()
-            return Core.Services.HttpService:JSONDecode(request({Url = USERNAMES_URL, Method = "GET"}).Body)
-        end)
-        if success and response and type(response) == "table" then
-            Usernames = response
-        else
-            Usernames = {[UserId] = UserId}
-            warn("Failed to fetch usernames: " .. tostring(response or "nil"))
-        end
+    local newRadius = math.tan(math.rad(GunSilent.Settings.FOV.Value) / 2) * camera.ViewportSize.X / 2
+    local circlePos
+    if GunSilent.Settings.CircleMethod.Value == "Middle" then
+        circlePos = camera.ViewportSize / 2
+    else
+        circlePos = GunSilent.Core.Services.UserInputService:GetMouseLocation()
     end
 
-    local function fetchFriends()
-        local success, response = pcall(function()
-            return Core.Services.HttpService:JSONDecode(request({Url = FRIENDS_URL, Method = "GET"}).Body)
-        end)
-        if success then
-            if type(response) == "table" then
-                FriendsList = response[UserId] or {}
-            else
-                addLog("Error: fetchFriends response is not a table, got: " .. tostring(response), true)
-                FriendsList = {}
-            end
-        else
-            addLog("Failed to fetch friends: " .. tostring(response), true)
-            FriendsList = {}
-        end
+    if fovCircle.Radius ~= newRadius or fovCircle.Position ~= circlePos then
+        fovCircle.Radius = newRadius
+        fovCircle.Position = circlePos
+    end
+    fovCircle.Visible = true
+
+    if GunSilent.Settings.GradientCircle.Value then
+        GunSilent.State.GradientTime = (GunSilent.State.GradientTime or 0) + deltaTime
+        local t = (math.sin(GunSilent.State.GradientTime / GunSilent.Settings.GradientSpeed.Value * 2 * math.pi) + 1) / 2
+        fovCircle.Color = GunSilent.Core.GradientColors.Color1.Value:Lerp(GunSilent.Core.GradientColors.Color2.Value, t)
+    end
+end
+
+local function isInFov(targetPos, camera)
+    if not GunSilent.Settings.UseFOV.Value then return true end
+    local screenPos, onScreen = camera:WorldToViewportPoint(targetPos)
+    if not onScreen then return false end
+    local referencePos = GunSilent.Settings.CircleMethod.Value == "Middle" and camera.ViewportSize / 2 or GunSilent.Core.Services.UserInputService:GetMouseLocation()
+    local distanceFromReference = (Vector2.new(screenPos.X, screenPos.Y) - referencePos).Magnitude
+    return distanceFromReference <= math.tan(math.rad(GunSilent.Settings.FOV.Value) / 2) * camera.ViewportSize.X / 2
+end
+
+local function getNearestPlayerGun(gunRange)
+    local currentTime = tick()
+    local friendsList = GunSilent.Core.Services.FriendsList or {}
+    local friendsHash = {}
+    for k in pairs(friendsList) do
+        friendsHash[k:lower()] = true
     end
 
-    local function addFriend(targetUserId)
-        FriendsList[targetUserId] = true
-        local success, err = pcall(function()
-            return request({
-                Url = FRIENDS_URL,
-                Method = "PATCH",
-                Headers = {["Content-Type"] = "application/json"},
-                Body = Core.Services.HttpService:JSONEncode({[UserId] = FriendsList})
-            })
-        end)
-        if success then
-            addLog("Added friend: " .. targetUserId, false)
-            fetchFriends()
-        else
-            FriendsList[targetUserId] = nil
-            addLog("Failed to add friend: " .. targetUserId .. ". Error: " .. tostring(err), true)
-        end
+    local target = GunSilent.Core.GunSilentTarget.CurrentTarget
+    if currentTime - GunSilent.State.LastTargetUpdate < GunSilent.State.TargetUpdateInterval and
+       target and target.Character and target.Character.Humanoid and target.Character.Humanoid.Health > 0 and
+       not friendsHash[target.Name:lower()] then
+        return target
     end
+    GunSilent.State.LastTargetUpdate = currentTime
 
-    local function removeFriend(targetUserId)
-        FriendsList[targetUserId] = nil
-        local success, err = pcall(function()
-            return request({
-                Url = FRIENDS_URL,
-                Method = "PATCH",
-                Headers = {["Content-Type"] = "application/json"},
-                Body = Core.Services.HttpService:JSONEncode({[UserId] = FriendsList})
-            })
-        end)
-        if success then
-            addLog("Removed friend: " .. targetUserId, false)
-            fetchFriends()
-        else
-            FriendsList[targetUserId] = true
-            addLog("Failed to remove friend: " .. targetUserId .. ". Error: " .. tostring(err), true)
-        end
-    end
+    local localRoot = GunSilent.State.LocalRoot
+    if not localRoot then return nil end
+    local rootPos = localRoot.Position
+    local camera = GunSilent.Core.PlayerData.Camera
+    local nearestPlayer, shortestDistance, closestToCursor, bestScore = nil, gunRange, math.huge, math.huge
+    local sortMethod = GunSilent.Settings.SortMethod.Value
 
-    local function sendJobIdViaPM(targetUserId)
-        local jobId = game.JobId ~= "" and game.JobId or nil
-        if not jobId then
-            return addLog("Error: No JobId available", true)
-        end
-        local currentTime = os.time()
-        if currentTime - LastJobIdTime < JOBID_COOLDOWN then
-            return addLog("JobId share cooldown active. Wait " .. math.ceil(JOBID_COOLDOWN - (currentTime - LastJobIdTime)) .. " seconds.", true)
-        end
-        local chatId = UserId < targetUserId and UserId .. "-" .. targetUserId or targetUserId .. "-" .. UserId
-        local message = "JobId: " .. jobId
-        local success, err = pcall(function()
-            local requestFunc = syn and syn.request or request or http_request
-            if not requestFunc then error("HTTP request function not available in your exploit") end
-            return requestFunc({
-                Url = PRIVATE_MESSAGES_URL,
-                Method = "POST",
-                Headers = {["Content-Type"] = "application/json"},
-                Body = Core.Services.HttpService:JSONEncode({
-                    chatId = chatId,
-                    senderId = UserId,
-                    recipientId = targetUserId,
-                    message = message,
-                    timestamp = currentTime
-                })
-            })
-        end)
-        if success then
-            LastJobIdTime = currentTime
-            LastMessageTime = currentTime
-            local successFetch, errFetch = pcall(function()
-                local response = Core.Services.HttpService:JSONDecode(request({Url = PRIVATE_MESSAGES_URL, Method = "GET"}).Body)
-                if type(response) == "table" then
-                    local sortedMessages = {}
-                    for messageId, msg in pairs(response) do
-                        if msg.chatId and msg.senderId and msg.recipientId and msg.message and msg.timestamp then
-                            local expectedChatId1 = UserId .. "-" .. msg.recipientId
-                            local expectedChatId2 = msg.recipientId .. "-" .. UserId
-                            if msg.chatId == expectedChatId1 or msg.chatId == expectedChatId2 then
-                                table.insert(sortedMessages, {
-                                    id = messageId,
-                                    userId = msg.senderId,
-                                    message = msg.message,
-                                    timestamp = msg.timestamp,
-                                    recipientId = msg.recipientId
-                                })
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= GunSilent.Core.PlayerData.LocalPlayer and not friendsHash[player.Name:lower()] then
+            local targetChar = player.Character
+            if targetChar then
+                local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
+                local targetHumanoid = targetChar:FindFirstChild("Humanoid")
+                if targetRoot and targetHumanoid and targetHumanoid.Health > 0 then
+                    local distance = (rootPos - targetRoot.Position).Magnitude
+                    if distance <= shortestDistance or sortMethod ~= "Distance" then
+                        if isInFov(targetRoot.Position, camera) then
+                            if sortMethod == "Mouse&Distance" then
+                                local screenPos = camera:WorldToViewportPoint(targetRoot.Position)
+                                local cursorDistance = (Vector2.new(screenPos.X, screenPos.Y) - GunSilent.Core.Services.UserInputService:GetMouseLocation()).Magnitude
+                                local score = (distance / (GunSilent.Settings.RangePlus.Value + 50)) + (cursorDistance / camera.ViewportSize.X)
+                                if score < bestScore then
+                                    bestScore = score
+                                    nearestPlayer = player
+                                end
+                            elseif sortMethod == "Distance" and distance < shortestDistance then
+                                shortestDistance = distance
+                                nearestPlayer = player
+                            elseif sortMethod == "Mouse" then
+                                local screenPos = camera:WorldToViewportPoint(targetRoot.Position)
+                                local cursorDistance = (Vector2.new(screenPos.X, screenPos.Y) - GunSilent.Core.Services.UserInputService:GetMouseLocation()).Magnitude
+                                if cursorDistance < closestToCursor then
+                                    closestToCursor = cursorDistance
+                                    nearestPlayer = player
+                                end
                             end
                         end
                     end
-                    table.sort(sortedMessages, function(a, b) return a.timestamp < b.timestamp end)
-                    for _, msg in ipairs(sortedMessages) do
-                        if not DisplayedMessageIds[msg.id] and (msg.userId == UserId or msg.recipientId == UserId) then
-                            addChatMessage(msg.userId, msg.message, msg.id, true, msg.recipientId)
-                            DisplayedMessageIds[msg.id] = true
-                        end
-                    end
                 end
-            end)
-            if not successFetch then
-                addLog("Failed to fetch updated messages after sending JobId: " .. tostring(errFetch), true)
-            end
-            addLog("Shared JobId via PM to " .. targetUserId, false)
-            addChatMessage("System", "You sent a PM to " .. targetUserId, "pm_jobid_" .. currentTime, false)
-        else
-            addLog("Failed to send JobId to " .. targetUserId .. ". Error: " .. tostring(err), true)
-        end
-    end
-
-    local function addChatMessage(userId, message, messageId, isPrivate, recipientId)
-        if DisplayedMessageIds[messageId] then return end
-        table.insert(ChatMessages, {userId = userId, message = message, messageId = messageId, isPrivate = isPrivate, recipientId = recipientId})
-        DisplayedMessageIds[messageId] = true
-        local frame = Instance.new("Frame", ChatList)
-        frame.Size, frame.BackgroundTransparency = UDim2.new(1, 0, 0, 20), 1
-        frame:SetAttribute("UserId", userId)
-        frame:SetAttribute("IsPrivate", isPrivate)
-        local displayName = Usernames[userId] or userId
-        local label = Instance.new("TextLabel", frame)
-        label.Size, label.BackgroundTransparency, label.Text, label.TextColor3, label.TextSize, label.Font, label.TextXAlignment, label.TextWrapped =
-            UDim2.new(1, -250, 1, 0), 1, (isPrivate and "[PM] " or "") .. displayName .. ": " .. message,
-            isPrivate and Color3.fromRGB(255, 165, 0) or (FriendsList[userId] and Color3.fromRGB(50, 255, 50) or Color3.fromRGB(200, 200, 200)),
-            14, Enum.Font.Montserrat, Enum.TextXAlignment.Left, true
-        label.Name = "ChatMessageLabel"
-        local friendBtn = Instance.new("TextButton", frame)
-        friendBtn.Size, friendBtn.Position, friendBtn.BackgroundColor3, friendBtn.Text, friendBtn.TextColor3, friendBtn.TextSize, friendBtn.Font =
-            UDim2.new(0, 80, 0, 20), UDim2.new(1, -90, 0, 0), Color3.fromRGB(50, 50, 60),
-            FriendsList[userId] and "Unfriend" or "Add Friend", Color3.fromRGB(255, 255, 255), 12, Enum.Font.Montserrat
-        friendBtn.Name = "AddFriendButton"
-        Instance.new("UICorner", friendBtn).CornerRadius = UDim.new(0, 4)
-        if userId == UserId or userId == "System" then
-            friendBtn.Visible = false
-        else
-            friendBtn.MouseButton1Click:Connect(function()
-                if FriendsList[userId] then removeFriend(userId) else addFriend(userId) end
-                for _, msgFrame in ipairs(ChatList:GetChildren()) do
-                    if not msgFrame:IsA("Frame") then continue end
-                    local msgUserId, isPrivateMsg = msgFrame:GetAttribute("UserId"), msgFrame:GetAttribute("IsPrivate")
-                    local msgLabel, addFriendBtn = msgFrame:FindFirstChild("ChatMessageLabel"), msgFrame:FindFirstChild("AddFriendButton")
-                    local sendPMBtn, pmJobIdBtn = msgFrame:FindFirstChild("SendPMButton"), msgFrame:FindFirstChild("PMJobIdButton")
-                    if msgUserId ~= userId or not msgLabel then continue end
-                    msgLabel.TextColor3 = isPrivateMsg and Color3.fromRGB(255, 165, 0) or (FriendsList[userId] and Color3.fromRGB(50, 255, 50) or Color3.fromRGB(200, 200, 200))
-                    if addFriendBtn then addFriendBtn.Text = FriendsList[userId] and "Unfriend" or "Add Friend" end
-                    if FriendsList[userId] and not send Vijay
-                    local newSendPM = Instance.new("TextButton", msgFrame)
-                    newSendPM.Size, newSendPM.Position, newSendPM.BackgroundColor3, newSendPM.Text, newSendPM.TextColor3, newSendPM.TextSize, newSendPM.Font =
-                        UDim2.new(0, 80, 0, 20), UDim2.new(1, -170, 0, 0), Color3.fromRGB(50, 50, 60), "Send PM", Color3.fromRGB(255, 255, 255), 12, Enum.Font.Montserrat
-                    newSendPM.Name, newSendPM.ZIndex = "SendPMButton", 5
-                    Instance.new("UICorner", newSendPM).CornerRadius = UDim.new(0, 4)
-                    newSendPM.MouseButton1Click:Connect(function()
-                        if ChatInput then
-                            ChatInput:SetAttribute("PMTarget", userId)
-                            ChatInput.Text, ChatInput.TextColor3 = "", Color3.fromRGB(255, 165, 0)
-                            ChatInput.PlaceholderText = "Type PM to " .. displayName .. "..."
-                            ChatInput:CaptureFocus()
-                            addLog("Initiated PM to user " .. userId, false)
-                        else
-                            addLog("Error: ChatInput not found", true)
-                        end
-                    end)
-                elseif sendPMBtn and not FriendsList[userId] then
-                    sendPMBtn:Destroy()
-                end
-                if FriendsList[userId] and not pmJobIdBtn and userId ~= UserId and userId ~= "System" then
-                    local newPMJobId = Instance.new("TextButton", msgFrame)
-                    newPMJobId.Size, newPMJobId.Position, newPMJobId.BackgroundColor3, newPMJobId.Text, newPMJobId.TextColor3, newPMJobId.TextSize, newPMJobId.Font =
-                        UDim2.new(0, 80, 0, 20), UDim2.new(1, -250, 0, 0), Color3.fromRGB(50, 50, 60), "PM JobId", Color3.fromRGB(255, 255, 255), 12, Enum.Font.Montserrat
-                    newPMJobId.Name, newPMJobId.ZIndex = "PMJobIdButton", 5
-                    Instance.new("UICorner", newPMJobId).CornerRadius = UDim.new(0, 4)
-                    newPMJobId.MouseButton1Click:Connect(function()
-                        sendJobIdViaPM(userId)
-                    end)
-                elseif pmJobIdBtn and not FriendsList[userId] then
-                    pmJobIdBtn:Destroy()
-                end
-            end)
-        end
-        local jobId = message:match("JobId: (%S+)")
-        if jobId and isValidJobId(jobId) then
-            local joinBtn = Instance.new("TextButton", frame)
-            joinBtn.Size, joinBtn.Position, joinBtn.BackgroundColor3, joinBtn.Text, joinBtn.TextColor3, joinBtn.TextSize, joinBtn.Font =
-                UDim2.new(0, 80, 0, 20), FriendsList[userId] and UDim2.new(1, -330, 0, 0) or UDim2.new(1, -170, 0, 0),
-                Color3.fromRGB(50, 50, 60), "Join Server", Color3.fromRGB(255, 255, 255), 12, Enum.Font.Montserrat
-            Instance.new("UICorner", joinBtn).CornerRadius = UDim.new(0, 4)
-            joinBtn.MouseButton1Click:Connect(function()
-                local success, err = pcall(function()
-                    Core.Services.TeleportService:TeleportToPlaceInstance(PlaceId, jobId, Core.PlayerData.LocalPlayer)
-                end)
-                addLog(success and "Teleporting to server with JobId: " .. jobId or "Failed to teleport: " .. tostring(err), not success)
-            end)
-        end
-        ChatList.CanvasSize = UDim2.new(0, 0, 0, #ChatMessages * 25)
-        ChatList.CanvasPosition = Vector2.new(0, ChatList.CanvasSize.Y.Offset)
-    end
-
-    local function fetchMessages()
-        local success, response = pcall(function()
-            return Core.Services.HttpService:JSONDecode(request({Url = FIREBASE_URL, Method = "GET"}).Body)
-        end)
-        if success then
-            if type(response) == "table" then
-                local sortedMessages = {}
-                for messageId, msg in pairs(response) do
-                    if msg.userId and msg.message and msg.timestamp then
-                        table.insert(sortedMessages, {id = messageId, userId = msg.userId, message = msg.message, timestamp = msg.timestamp})
-                    end
-                end
-                table.sort(sortedMessages, function(a, b) return a.timestamp < b.timestamp end)
-                for _, msg in ipairs(sortedMessages) do
-                    if not DisplayedMessageIds[msg.id] then
-                        addChatMessage(msg.userId, msg.message, msg.id, false)
-                    end
-                end
-            else
-                addLog("Error: fetchMessages response is not a table, got: " .. tostring(response), true)
-            end
-        else
-            addLog("Failed to fetch messages: " .. tostring(response), true)
-        end
-    end
-
-    local function fetchPrivateMessages()
-        local success, response = pcall(function()
-            return Core.Services.HttpService:JSONDecode(request({Url = PRIVATE_MESSAGES_URL, Method = "GET"}).Body)
-        end)
-        if success then
-            if type(response) == "table" then
-                local sortedMessages = {}
-                for messageId, msg in pairs(response) do
-                    if msg.chatId and msg.senderId and msg.recipientId and msg.message and msg.timestamp then
-                        local chatId = msg.chatId
-                        local expectedChatId1 = UserId .. "-" .. msg.recipientId
-                        local expectedChatId2 = msg.recipientId .. "-" .. UserId
-                        if chatId == expectedChatId1 or chatId == expectedChatId2 then
-                            table.insert(sortedMessages, {
-                                id = messageId,
-                                userId = msg.senderId,
-                                message = msg.message,
-                                timestamp = msg.timestamp,
-                                recipientId = msg.recipientId
-                            })
-                        end
-                    end
-                end
-                table.sort(sortedMessages, function(a, b) return a.timestamp < b.timestamp end)
-                for _, msg in ipairs(sortedMessages) do
-                    if not DisplayedMessageIds[msg.id] and (msg.userId == UserId or msg.recipientId == UserId) then
-                        addChatMessage(msg.userId, msg.message, msg.id, true, msg.recipientId)
-                        DisplayedMessageIds[msg.id] = true
-                    end
-                end
-            else
-                addLog("Error: fetchPrivateMessages response is not a table, got: " .. tostring(response), true)
-            end
-        else
-            addLog("Failed to fetch private messages: " .. tostring(response), true)
-        end
-    end
-
-    local function sendMessage(message)
-        local currentTime = os.time()
-        local timeSinceLastMessage = currentTime - LastMessageTime
-        if timeSinceLastMessage < MESSAGE_COOLDOWN then
-            addLog("Message cooldown active. Wait " .. math.ceil(MESSAGE_COOLDOWN - timeSinceLastMessage) .. " seconds.", true)
-            return
-        end
-        local success = pcall(function()
-            request({
-                Url = FIREBASE_URL,
-                Method = "POST",
-                Headers = {["Content-Type"] = "application/json"},
-                Body = Core.Services.HttpService:JSONEncode({userId = UserId, message = message, timestamp = currentTime})
-            })
-        end)
-        if success then
-            LastMessageTime = currentTime
-            fetchMessages()
-        end
-    end
-
-    local function sendPrivateMessage(targetUserId, message)
-        local currentTime = os.time()
-        if currentTime - LastMessageTime < MESSAGE_COOLDOWN then
-            return addLog("Message cooldown active. Wait " .. math.ceil(MESSAGE_COOLDOWN - (currentTime - LastMessageTime)) .. " seconds.", true)
-        end
-        local chatId = UserId < targetUserId and UserId .. "-" .. targetUserId or targetUserId .. "-" .. UserId
-        local success, err = pcall(function()
-            local requestFunc = syn and syn.request or request
-            if not requestFunc then error("HTTP request function not available") end
-            return requestFunc({
-                Url = PRIVATE_MESSAGES_URL,
-                Method = "POST",
-                Headers = {["Content-Type"] = "application/json"},
-                Body = Core.Services.HttpService:JSONEncode({
-                    chatId = chatId,
-                    senderId = UserId,
-                    recipientId = targetUserId,
-                    message = message,
-                    timestamp = currentTime
-                })
-            })
-        end)
-        if success then
-            LastMessageTime = currentTime
-            fetchPrivateMessages()
-            addLog("Sent PM to " .. targetUserId, false)
-            addChatMessage("System", "You sent a PM to " .. targetUserId, "pm_sent_" .. currentTime, false)
-        else
-            addLog("Failed to send PM to " .. targetUserId .. ". Error: " .. tostring(err), true)
-        end
-    end
-
-    ShareJobIdButton.MouseButton1Click:Connect(function()
-        local currentTime = os.time()
-        local timeSinceLastJobId = currentTime - LastJobIdTime
-        if timeSinceLastJobId < JOBID_COOLDOWN then
-            addLog("JobId share cooldown active. Wait " .. math.ceil(JOBID_COOLDOWN - timeSinceLastJobId) .. " seconds.", true)
-            return
-        end
-        local jobId = game.JobId
-        jobId = jobId and jobId ~= "" and jobId or nil
-        if jobId then
-            sendMessage("JobId: " .. jobId)
-            LastJobIdTime = currentTime
-            addLog("Shared JobId: " .. jobId, false)
-        else
-            addLog("Error: No JobId available", true)
-        end
-    end)
-
-    local function updateChatLocation()
-        if ChatLocation == "InMenu" then
-            ChatFrame.Parent, ChatFrame.Size, ChatFrame.Position = ChatSection, UDim2.new(1, -20, 1, -50), UDim2.new(0, 10, 0, 50)
-            ChatList.Size, ChatList.Position = UDim2.new(1, 0, 1, -50), UDim2.new(0, 0, 0, 0)
-            ChatInput.Size, ChatInput.Position = UDim2.new(1, -110, 0, 30), UDim2.new(0, 5, 1, -35)
-            ShareJobIdButton.Position = UDim2.new(1, -105, 1, -35)
-            if ChatTab then ChatTab.Visible = true end
-            if OutputSection then
-                OutputSection.Position, OutputSection.Size, OutputSection.Visible =
-                    UDim2.new(0, 150, 1, -100), UDim2.new(1, -150, 0, 100), ChatLocation ~= "AsOutput"
-            end
-            if Sidebar then Sidebar.Visible = CurrentTab == "Loader" end
-        else
-            ChatFrame.Parent, ChatFrame.Size, ChatFrame.Position = MainFrame, UDim2.new(1, -150, 0, 100), UDim2.new(0, 150, 1, -100)
-            ChatList.Size, ChatList.Position = UDim2.new(1, 0, 1, -50), UDim2.new(0, 0, 0, 0)
-            ChatInput.Size, ChatInput.Position = UDim2.new(1, -110, 0, 30), UDim2.new(0, 5, 1, -35)
-            ShareJobIdButton.Position = UDim2.new(1, -105, 1, -35)
-            if ChatTab then ChatTab.Visible = false end
-            CurrentTab = "Loader"
-            LoaderTabGradient.Enabled, ChatTabGradient.Enabled = true, false
-            if ChatSection then
-                ChatSection.Position, ChatSection.Size, ChatSection.Visible = UDim2.new(0, 150, 0, 50), UDim2.new(1, -150, 0, 400), false
-            end
-            if OutputSection then
-                OutputSection.Position, OutputSection.Size, OutputSection.Visible = UDim2.new(0, 150, 1, -100), UDim2.new(1, -150, 0, 100), false
-            end
-            if Sidebar then Sidebar.Visible = true end
-            for secName, frame in pairs(SectionFrames) do
-                if frame then frame.Visible = (secName == CurrentSection) and (CurrentTab == "Loader") end
             end
         end
     end
 
-    LoaderTab.MouseButton1Click:Connect(function()
-        CurrentTab = "Loader"
-        LoaderTabGradient.Enabled, ChatTabGradient.Enabled = true, false
-        if ChatSection then
-            ChatSection.Position, ChatSection.Size, ChatSection.Visible = UDim2.new(0, 150, 0, 50), UDim2.new(1, -150, 0, 400), false
-        end
-        if OutputSection then
-            OutputSection.Position, OutputSection.Size, OutputSection.Visible =
-                UDim2.new(0, 150, 1, -100), UDim2.new(1, -150, 0, 100), ChatLocation ~= "AsOutput"
-        end
-        if Sidebar then Sidebar.Visible = true end
-        for secName, frame in pairs(SectionFrames) do
-            if frame then frame.Visible = (secName == CurrentSection) and (CurrentTab == "Loader") end
-        end
-    end)
+    GunSilent.Core.GunSilentTarget.CurrentTarget = nearestPlayer
+    GunSilent.State.LastFriendsList = friendsList
+    return nearestPlayer
+end
 
-    ChatTab.MouseButton1Click:Connect(function()
-        CurrentTab = "Chat"
-        LoaderTabGradient.Enabled, ChatTabGradient.Enabled = false, true
-        for secName, frame in pairs(SectionFrames) do
-            if frame then frame.Visible = false end
-        end
-        if ChatSection then
-            ChatSection.Position, ChatSection.Size, ChatSection.Visible = UDim2.new(0, 0, 0, 50), UDim2.new(1, 0, 0, 400), true
-        end
-        if OutputSection then
-            OutputSection.Position, OutputSection.Size, OutputSection.Visible = UDim2.new(0, 0, 1, -100), UDim2.new(1, 0, 0, 100), ChatLocation ~= "AsOutput"
-        end
-        if Sidebar then Sidebar.Visible = false end
-    end)
+-- Новая функция предикции
+local function predictTargetPositionGun(target, applyFakeDistance)
+    local localRoot = GunSilent.State.LocalRoot
+    if not target or not target.Character or not localRoot then
+        return { position = nil, direction = nil, realDirection = nil, fakePosition = nil, timeToTarget = 0 }
+    end
 
-    ChatLocationFrame.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            ChatLocation = ChatLocation == "InMenu" and "AsOutput" or "InMenu"
-            ChatLocationText.Text = ChatLocation == "InMenu" and "In Menu" or "As Output"
-            Core.Services.TweenService:Create(ChatLocationIndicator, TweenInfo.new(0.2), {
-                Position = ChatLocation == "InMenu" and UDim2.new(0, 0, 0, 0) or UDim2.new(0, 40, 0, 0)
-            }):Play()
-            ChatLocationIndicator.BackgroundColor3 = ChatLocation == "InMenu" and Color3.fromRGB(80, 80, 80) or Color3.fromRGB(70, 130, 255)
-            updateChatLocation()
-        end
-    end)
+    local targetChar = target.Character
+    local myPos = localRoot.Position
+    local hitPart = targetChar:FindFirstChild(GunSilent.Settings.HitPart.Value == "Random" and (math.random() > 0.5 and "Head" or "UpperTorso") or GunSilent.Settings.HitPart.Value) or targetChar:FindFirstChild("HumanoidRootPart")
+    local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
+    if not hitPart or not targetRoot then
+        return { position = nil, direction = nil, realDirection = nil, fakePosition = nil, timeToTarget = 0 }
+    end
 
-    BlurFrame.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            BlurEnabled = not BlurEnabled
-            BlurText.Text = BlurEnabled and "Enabled" or "Disabled"
-            Core.Services.TweenService:Create(BlurEntry, TweenInfo.new(0.2), {
-                Position = BlurEnabled and UDim2.new(1, -40, 0, 0) or UDim2.new(0, 0, 0, 0)
-            }):Play()
-            BlurEntry.BackgroundColor3 = BlurEnabled and Color3.fromRGB(70, 130, 255) or Color3.fromRGB(80, 80, 80)
-            BlurEffect.Enabled = ScreenGui.Enabled and BlurEnabled
-            addLog("Game Background Blur " .. (BlurEnabled and "Enabled" or "Disabled"), false)
-        end
-    end)
+    local currentTime = tick()
+    local ping = getSmoothedPing()
+    local bulletSpeed = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.PredictBullet.Value or GunSilent.FixedPredictionValues.PredictBullet
 
-    ChatInput.FocusLost:Connect(function(enterPressed)
-        if not enterPressed or ChatInput.Text == "" then return end
-        local message, targetUserId = ChatInput.Text, ChatInput:GetAttribute("PMTarget")
-        if targetUserId then
-            sendPrivateMessage(targetUserId, message)
-        elseif message:match("^/pm%s+(%S+)%s+(.+)$") then
-            local _, _, userId, pmMessage = message:find("^/pm%s+(%S+)%s+(.+)$")
-            if userId and pmMessage then sendPrivateMessage(userId, pmMessage) end
-        elseif message:match("^/pmjobid%s+(%S+)$") then
-            local _, _, userId = message:find("^/pmjobid%s+(%S+)$")
-            if userId then
-                local jobId = game.JobId ~= "" and game.JobId or nil
-                if not jobId then return addLog("Error: No JobId available", true) end
-                local currentTime = os.time()
-                if currentTime - LastJobIdTime < JOBID_COOLDOWN then
-                    return addLog("JobId share cooldown active. Wait " .. math.ceil(JOBID_COOLDOWN - (currentTime - LastJobIdTime)) .. " seconds.", true)
-                end
-                sendPrivateMessage(userId, "JobId: " .. jobId)
-                LastJobIdTime = currentTime
-                addLog("Shared JobId via PM to " .. userId, false)
+    -- Обновление истории позиций
+    local positionHistory = GunSilent.State.PositionHistory[target] or {}
+    GunSilent.State.PositionHistory[target] = positionHistory
+    table.insert(positionHistory, { time = currentTime, position = hitPart.Position, velocity = targetRoot.Velocity })
+    local historySize = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedPositionHistorySize.Value or GunSilent.FixedPredictionValues.PositionHistorySize
+    while #positionHistory > historySize do
+        table.remove(positionHistory, 1)
+    end
+
+    -- Проверка телепортации
+    local targetId = tostring(target.UserId)
+    local targetPos = hitPart.Position
+    GunSilent.State.IsTeleporting = GunSilent.State.LastTargetPosition[targetId] and (targetPos - GunSilent.State.LastTargetPosition[targetId]).Magnitude > 50
+    GunSilent.State.LastTargetPosition[targetId] = targetPos
+
+    -- Находим позицию в прошлом с учетом пинга
+    local targetTime = currentTime - ping
+    local pastPos, pastVel
+    if #positionHistory < 2 or GunSilent.State.IsTeleporting then
+        pastPos = targetPos
+        pastVel = targetRoot.Velocity
+    else
+        for i = 1, #positionHistory - 1 do
+            if positionHistory[i].time <= targetTime and positionHistory[i + 1].time >= targetTime then
+                local t = (targetTime - positionHistory[i].time) / (positionHistory[i + 1].time - positionHistory[i].time)
+                pastPos = positionHistory[i].position:Lerp(positionHistory[i + 1].position, t)
+                pastVel = positionHistory[i].velocity:Lerp(positionHistory[i + 1].velocity, t)
+                break
             end
-        else
-            sendMessage(message)
         end
-        ChatInput.Text, ChatInput.TextColor3, ChatInput.PlaceholderText = "", Color3.fromRGB(255, 255, 255), "Type your message..."
-        ChatInput:SetAttribute("PMTarget", nil)
-    end)
-
-    spawn(function()
-        while true do
-            fetchMessages()
-            fetchPrivateMessages()
-            wait(5)
+        if not pastPos then
+            pastPos = positionHistory[#positionHistory].position
+            pastVel = positionHistory[#positionHistory].velocity
         end
-    end)
+    end
 
-    fetchFriends()
-    fetchUsernames()
-    DisplayedMessageIds = {}
-    addChatMessage("System", "Chat initialized. Your ID: " .. UserId, "system_init", false)
-    addChatMessage("System", "Connected to Firebase!", "system_connect", false)
-    fetchMessages()
-    fetchPrivateMessages()
+    -- Ограничиваем скорость
+    local maxSpeed = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedMaxSpeed.Value or GunSilent.FixedPredictionValues.MaxSpeed
+    if pastVel.Magnitude > maxSpeed then
+        pastVel = pastVel.Unit * maxSpeed
+    end
 
-    local function cleanup()
-        BlurEffect.Enabled = false
-        BlurEffect:Destroy()
-        ScreenGui:Destroy()
+    -- Вычисляем время полета пули
+    local fakePos = applyFakeDistance and GunSilent.Settings.FakeDistance.Value > 0 and (pastPos - (pastPos - myPos).Unit * math.max(1, (pastPos - myPos).Magnitude - GunSilent.Settings.FakeDistance.Value)) or myPos
+    local distance = (pastPos - fakePos).Magnitude
+    local realDistance = (pastPos - myPos).Magnitude
+    local timeToTarget = distance / bulletSpeed
+    local realTimeToTarget = realDistance / bulletSpeed
+
+    -- Предсказываем позицию
+    local predictedPos = pastPos + pastVel * (timeToTarget + GunSilent.Settings.LatencyCompensation.Value)
+    local realPredictedPos = pastPos + pastVel * (realTimeToTarget + GunSilent.Settings.LatencyCompensation.Value)
+
+    -- Учет гравитации (для дробовиков или дальних выстрелов)
+    local gravity = Vector3.new(0, -Workspace.Gravity, 0)
+    if GunSilent.Settings.ShotgunSupport.Value or distance > 100 then
+        predictedPos = predictedPos + 0.5 * gravity * timeToTarget * timeToTarget
+        realPredictedPos = realPredictedPos + 0.5 * gravity * realTimeToTarget * realTimeToTarget
+    end
+
+    -- Коррекция по Y для транспорта
+    local humanoid = targetChar:FindFirstChild("Humanoid")
+    local isInVehicle = humanoid and humanoid.SeatPart ~= nil
+    if isInVehicle then
+        local yCorrection = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedVehicleYCorrection.Value or 0
+        predictedPos = predictedPos + Vector3.new(0, yCorrection, 0)
+        realPredictedPos = realPredictedPos + Vector3.new(0, yCorrection, 0)
     end
 
     return {
-        addLog = addLog,
-        cleanup = cleanup
+        position = predictedPos,
+        direction = (predictedPos - (fakePos + Vector3.new(0, 1.5, 0))).Unit,
+        realDirection = (realPredictedPos - (myPos + Vector3.new(0, 1.5, 0))).Unit,
+        fakePosition = fakePos,
+        timeToTarget = timeToTarget
     }
 end
 
-return createMenu
+local function getAimCFrameGun(target)
+    local localRoot = GunSilent.State.LocalRoot
+    if not target or not target.Character or not localRoot then return nil end
+    local prediction = predictTargetPositionGun(target, true)
+    if not prediction.position or not prediction.direction then return nil end
+    return CFrame.new(localRoot.Position, localRoot.Position + prediction.direction)
+end
+
+local function createHitDataGun(target)
+    local localRoot = GunSilent.State.LocalRoot
+    if not target or not target.Character or not localRoot then return nil end
+    local targetChar = target.Character
+    local prediction = predictTargetPositionGun(target, true)
+    if not prediction.position or not prediction.direction or not prediction.fakePosition then return nil end
+
+    local hitPart = targetChar:FindFirstChild(GunSilent.Settings.HitPart.Value == "Random" and (math.random() > 0.5 and "Head" or "UpperTorso") or GunSilent.Settings.HitPart.Value) or targetChar:FindFirstChild("HumanoidRootPart")
+    if not hitPart then return nil end
+
+    local equippedTool = getEquippedGunTool(GunSilent.State.LocalCharacter)
+    local isShotgunWeapon = GunSilent.Settings.ShotgunSupport.Value and equippedTool and isShotgun(equippedTool)
+    local useMultiBullets = isShotgunWeapon or GunSilent.Settings.TestGenBullet.Value
+    local numBullets = useMultiBullets and (isShotgunWeapon and GunSilent.Settings.GenBullet.Value or 4) or 1
+    local hitData = {}
+
+    if useMultiBullets then
+        for i = 1, numBullets do
+            hitData[i] = {{Normal = prediction.direction, Instance = hitPart, Position = prediction.position}}
+        end
+    else
+        hitData[1] = {{Normal = prediction.direction, Instance = hitPart, Position = prediction.position}}
+    end
+    return hitData
+end
+
+local function updateVisualsGun(target, hasWeapon)
+    local currentTime = tick()
+    if currentTime - GunSilent.State.LastVisualUpdateTime < GunSilent.Settings.VisualUpdateFrequency.Value then return end
+    GunSilent.State.LastVisualUpdateTime = currentTime
+
+    local localRoot = GunSilent.State.LocalRoot
+    if not GunSilent.Settings.Enabled.Value or not hasWeapon or not target or not target.Character or not localRoot then
+        if GunSilent.State.TargetVisualPart then GunSilent.State.TargetVisualPart.Transparency = 1 end
+        if GunSilent.State.HitboxVisualPart then GunSilent.State.HitboxVisualPart.Transparency = 1 end
+        if GunSilent.State.PredictVisualPart then GunSilent.State.PredictVisualPart.Transparency = 1 end
+        if GunSilent.State.DirectionVisualPart then GunSilent.State.DirectionVisualPart.Transparency = 1 end
+        if GunSilent.State.RealDirectionVisualPart then GunSilent.State.RealDirectionVisualPart.Transparency = 1 end
+        if GunSilent.State.TrajectoryBeam then GunSilent.State.TrajectoryBeam.Enabled = false end
+        if GunSilent.State.FullTrajectoryParts then
+            for _, part in pairs(GunSilent.State.FullTrajectoryParts) do part.Transparency = 1 end
+        end
+        GunSilent.State.LastTargetPos = nil
+        GunSilent.State.LastPredictionPos = nil
+        return
+    end
+
+    local prediction = predictTargetPositionGun(target, true)
+    if not prediction.position or not prediction.direction then return end
+
+    local targetChar = target.Character
+    local targetHead = targetChar:FindFirstChild("Head") or targetChar:FindFirstChild("HumanoidRootPart")
+    local hitPart = targetChar:FindFirstChild(GunSilent.Settings.HitPart.Value == "Random" and (math.random() > 0.5 and "Head" or "UpperTorso") or GunSilent.Settings.HitPart.Value) or targetChar:FindFirstChild("HumanoidRootPart")
+    if not targetHead or not hitPart then return end
+
+    local targetPos, predictionPos = targetHead.Position, prediction.position
+    local shouldUpdate = not GunSilent.State.LastTargetPos or not GunSilent.State.LastPredictionPos or
+        (targetPos - GunSilent.State.LastTargetPos).Magnitude > 0.1 or (predictionPos - GunSilent.State.LastPredictionPos).Magnitude > 0.1
+    GunSilent.State.LastTargetPos, GunSilent.State.LastPredictionPos = targetPos, predictionPos
+
+    local startPos = localRoot.Position + Vector3.new(0, 1.5, 0)
+    if GunSilent.Settings.TargetVisual.Value and shouldUpdate then
+        local targetVisualPart = GunSilent.State.TargetVisualPart
+        if not targetVisualPart then
+            targetVisualPart = Instance.new("Part")
+            targetVisualPart.Size = Vector3.new(1, 1, 1)
+            targetVisualPart.Shape = Enum.PartType.Ball
+            targetVisualPart.Anchored = true
+            targetVisualPart.CanCollide = false
+            targetVisualPart.Color = Color3.fromRGB(255, 0, 0)
+            targetVisualPart.Parent = Workspace
+            GunSilent.State.TargetVisualPart = targetVisualPart
+        end
+        targetVisualPart.Position = targetHead.Position + Vector3.new(0, 3, 0)
+        targetVisualPart.Transparency = 0.5
+    elseif GunSilent.State.TargetVisualPart then
+        GunSilent.State.TargetVisualPart.Transparency = 1
+    end
+
+    if GunSilent.Settings.HitboxVisual.Value and shouldUpdate then
+        local hitboxVisualPart = GunSilent.State.HitboxVisualPart
+        if not hitboxVisualPart then
+            hitboxVisualPart = Instance.new("Part")
+            hitboxVisualPart.Anchored = true
+            hitboxVisualPart.CanCollide = false
+            hitboxVisualPart.Color = Color3.fromRGB(0, 255, 0)
+            hitboxVisualPart.Parent = Workspace
+            GunSilent.State.HitboxVisualPart = hitboxVisualPart
+        end
+        hitboxVisualPart.Size = hitPart.Size + Vector3.new(0.2, 0.2, 0.2)
+        hitboxVisualPart.CFrame = hitPart.CFrame
+        hitboxVisualPart.Transparency = 0.7
+    elseif GunSilent.State.HitboxVisualPart then
+        GunSilent.State.HitboxVisualPart.Transparency = 1
+    end
+
+    if GunSilent.Settings.PredictVisual.Value and shouldUpdate then
+        local predictVisualPart = GunSilent.State.PredictVisualPart
+        if not predictVisualPart then
+            predictVisualPart = Instance.new("Part")
+            predictVisualPart.Size = Vector3.new(0.7, 0.7, 0.7)
+            predictVisualPart.Shape = Enum.PartType.Ball
+            predictVisualPart.Anchored = true
+            predictVisualPart.CanCollide = false
+            predictVisualPart.Parent = Workspace
+            GunSilent.State.PredictVisualPart = predictVisualPart
+        end
+        predictVisualPart.Position = prediction.position
+        predictVisualPart.Color = GunSilent.State.IsTeleporting and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(0, 255, 255)
+        predictVisualPart.Transparency = 0.3
+    elseif GunSilent.State.PredictVisualPart then
+        GunSilent.State.PredictVisualPart.Transparency = 1
+    end
+
+    if GunSilent.Settings.ShowDirection.Value and shouldUpdate then
+        local directionVisualPart = GunSilent.State.DirectionVisualPart
+        if not directionVisualPart then
+            directionVisualPart = Instance.new("Part")
+            directionVisualPart.Size = Vector3.new(0.2, 0.2, 5)
+            directionVisualPart.Anchored = true
+            directionVisualPart.CanCollide = false
+            directionVisualPart.Color = Color3.fromRGB(255, 215, 0)
+            directionVisualPart.Parent = Workspace
+            GunSilent.State.DirectionVisualPart = directionVisualPart
+        end
+        local realDirectionVisualPart = GunSilent.State.RealDirectionVisualPart
+        if not realDirectionVisualPart then
+            realDirectionVisualPart = Instance.new("Part")
+            realDirectionVisualPart.Size = Vector3.new(0.2, 0.2, 5)
+            realDirectionVisualPart.Anchored = true
+            realDirectionVisualPart.CanCollide = false
+            realDirectionVisualPart.Color = Color3.fromRGB(255, 255, 255)
+            realDirectionVisualPart.Parent = Workspace
+            GunSilent.State.RealDirectionVisualPart = realDirectionVisualPart
+        end
+        directionVisualPart.CFrame = CFrame.lookAt(startPos, startPos + (prediction.direction * 5))
+        directionVisualPart.Position = startPos + (prediction.direction * 2.5)
+        directionVisualPart.Transparency = 0.5
+        realDirectionVisualPart.CFrame = CFrame.lookAt(startPos, startPos + (prediction.realDirection * 5))
+        realDirectionVisualPart.Position = startPos + (prediction.realDirection * 2.5)
+        realDirectionVisualPart.Transparency = 0.5
+    elseif GunSilent.State.DirectionVisualPart then
+        GunSilent.State.DirectionVisualPart.Transparency = 1
+        GunSilent.State.RealDirectionVisualPart.Transparency = 1
+    end
+
+    if GunSilent.Settings.PredictVisual.Value and GunSilent.Settings.ShowTrajectoryBeam and shouldUpdate then
+        local trajectoryBeam = GunSilent.State.TrajectoryBeam
+        if not trajectoryBeam then
+            trajectoryBeam = Instance.new("Beam")
+            trajectoryBeam.FaceCamera = true
+            trajectoryBeam.Width0 = 0.2
+            trajectoryBeam.Width1 = 0.2
+            trajectoryBeam.Transparency = NumberSequence.new(0.5)
+            trajectoryBeam.Color = ColorSequence.new(Color3.fromRGB(147, 112, 219))
+            trajectoryBeam.Parent = Workspace
+            local attachment0 = Instance.new("Attachment")
+            local attachment1 = Instance.new("Attachment")
+            trajectoryBeam.Attachment0 = attachment0
+            trajectoryBeam.Attachment1 = attachment1
+            GunSilent.State.TrajectoryBeam = trajectoryBeam
+        end
+        trajectoryBeam.Attachment0.Parent = localRoot
+        trajectoryBeam.Attachment1.Parent = GunSilent.State.PredictVisualPart
+        trajectoryBeam.Enabled = true
+    elseif GunSilent.State.TrajectoryBeam then
+        GunSilent.State.TrajectoryBeam.Enabled = false
+    end
+
+    if GunSilent.Settings.PredictVisual.Value and GunSilent.Settings.ShowFullTrajectory and shouldUpdate then
+        local fullTrajectoryParts = GunSilent.State.FullTrajectoryParts
+        if not fullTrajectoryParts then
+            fullTrajectoryParts = {}
+            for i = 1, 5 do
+                local trajectoryPart = Instance.new("Part")
+                trajectoryPart.Size = Vector3.new(0.3, 0.3, 0.3)
+                trajectoryPart.Shape = Enum.PartType.Ball
+                trajectoryPart.Anchored = true
+                trajectoryPart.CanCollide = false
+                trajectoryPart.Color = Color3.fromRGB(255, 165, 0)
+                trajectoryPart.Parent = Workspace
+                table.insert(fullTrajectoryParts, trajectoryPart)
+            end
+            GunSilent.State.FullTrajectoryParts = fullTrajectoryParts
+        end
+        local bulletSpeed = GunSilent.Settings.PredictBullet.Value
+        local gravity = Vector3.new(0, -Workspace.Gravity, 0)
+        local distance = (prediction.position - startPos).Magnitude
+        local steps = 5
+        local stepTime = prediction.timeToTarget / steps
+
+        for i = 0, steps - 1 do
+            local t = stepTime * i
+            local pos = startPos + (prediction.direction * bulletSpeed * t) + (0.5 * gravity * t * t * math.clamp(distance / 100, 0.5, 2))
+            fullTrajectoryParts[i + 1].Position = pos
+            fullTrajectoryParts[i + 1].Transparency = 0.5
+        end
+    elseif GunSilent.State.FullTrajectoryParts then
+        for _, part in pairs(GunSilent.State.FullTrajectoryParts) do
+            part.Transparency = 1
+        end
+    end
+end
+
+local function initializeGunSilent()
+    if GunSilent.State.Connection then GunSilent.State.Connection:Disconnect() end
+    if not GunSilent.State.V_U_4 then
+        for _, obj in pairs(getgc(true)) do
+            if type(obj) == "table" and not getmetatable(obj) and obj.event and obj.func then
+                GunSilent.State.V_U_4 = obj
+                break
+            end
+        end
+    end
+
+    if not GunSilent.State.OldFireServer then
+        GunSilent.State.OldFireServer = hookfunction(game:GetService("ReplicatedStorage").Remotes.Send.FireServer, function(self, ...)
+            local args = {...}
+            local modifiedArgs = args
+            if GunSilent.Settings.Enabled.Value and #args >= 2 and typeof(args[1]) == "number" and math.random(100) <= GunSilent.Settings.HitChance.Value then
+                GunSilent.State.LastEventId = args[1]
+                local equippedTool = getEquippedGunTool(GunSilent.State.LocalCharacter)
+                if equippedTool and args[2] == "shoot_gun" then
+                    local gunRange = getGunRange(equippedTool)
+                    local nearestPlayer = getNearestPlayerGun(gunRange)
+                    if nearestPlayer then
+                        local aimCFrame = getAimCFrameGun(nearestPlayer)
+                        local hitData = createHitDataGun(nearestPlayer)
+                        if aimCFrame and hitData then
+                            modifiedArgs = {args[1], args[2], equippedTool, aimCFrame, hitData}
+                        end
+                    end
+                end
+            end
+
+            local result = GunSilent.State.OldFireServer(self, unpack(modifiedArgs))
+            if GunSilent.Settings.DoubleTap.Value and GunSilent.State.V_U_4 and #modifiedArgs >= 2 and modifiedArgs[2] == "shoot_gun" then
+                local equippedTool, aimCFrame, hitData = modifiedArgs[3], modifiedArgs[4], modifiedArgs[5]
+                if equippedTool and aimCFrame and hitData then
+                    GunSilent.State.V_U_4.event = GunSilent.State.V_U_4.event + 1
+                    game:GetService("ReplicatedStorage").Remotes.Send:FireServer(GunSilent.State.V_U_4.event, "shoot_gun", equippedTool, aimCFrame, hitData)
+                end
+            end
+            return result
+        end)
+    end
+
+    GunSilent.State.Connection = RunService.Heartbeat:Connect(function(deltaTime)
+        if not GunSilent.Settings.Enabled.Value then
+            if GunSilent.State.FovCircle then GunSilent.State.FovCircle.Visible = false end
+            GunSilent.Core.GunSilentTarget.CurrentTarget = nil
+            return
+        end
+
+        local character = GunSilent.State.LocalCharacter
+        local currentTool = getEquippedGunTool(character)
+        if currentTool ~= GunSilent.State.LastTool then
+            if currentTool and not GunSilent.State.LastTool then
+                GunSilent.notify("GunSilent", "Equipped: " .. currentTool.Name .. " (Total Range: " .. getGunRange(currentTool) .. ")", true)
+            elseif GunSilent.State.LastTool and not currentTool then
+                GunSilent.notify("GunSilent", "Unequipped: " .. GunSilent.State.LastTool.Name, true)
+            elseif currentTool and GunSilent.State.LastTool then
+                GunSilent.notify("GunSilent", "Switched to " .. currentTool.Name .. " (Range: " .. getGunRange(currentTool) .. ")", true)
+            end
+            GunSilent.State.LastTool = currentTool
+        end
+
+        updateFovCircle(deltaTime)
+        if not currentTool then
+            GunSilent.Core.GunSilentTarget.CurrentTarget = nil
+            updateVisualsGun(nil, false)
+            return
+        end
+
+        local gunRange = getGunRange(currentTool)
+        local nearestPlayer = getNearestPlayerGun(gunRange)
+        updateVisualsGun(nearestPlayer, true)
+        if GunSilent.Settings.Rage.Value and GunSilent.State.V_U_4 and nearestPlayer then
+            local aimCFrame = getAimCFrameGun(nearestPlayer)
+            local hitData = createHitDataGun(nearestPlayer)
+            if aimCFrame and hitData then
+                GunSilent.State.V_U_4.event = GunSilent.State.V_U_4.event + 1
+                game:GetService("ReplicatedStorage").Remotes.Send:FireServer(GunSilent.State.V_U_4.event, "shoot_gun", currentTool, aimCFrame, hitData)
+            end
+        end
+    end)
+end
+
+local function Init(UI, Core, notify)
+    GunSilent.Core = Core
+    GunSilent.notify = notify
+
+    local LocalPlayer = Core.PlayerData.LocalPlayer
+    if LocalPlayer then
+        LocalPlayer.CharacterAdded:Connect(function(character)
+            character:WaitForChild("HumanoidRootPart")
+            GunSilent.State.LocalCharacter = character
+            GunSilent.State.LocalRoot = character.HumanoidRootPart
+        end)
+        if LocalPlayer.Character then
+            GunSilent.State.LocalCharacter = LocalPlayer.Character
+            GunSilent.State.LocalRoot = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        end
+    end
+
+    if UI.Tabs.Combat then
+        UI.Sections.GunSilent = UI.Tabs.Combat:Section({ Side = "Right", Name = "GunSilent" })
+        if UI.Sections.GunSilent then
+            -- Таблица для хранения UI-элементов и их коллбэков
+            local uiElements = {}
+
+            UI.Sections.GunSilent:Header({ Name = "GunSilent" })
+            uiElements.GSEnabled = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Enabled",
+                    Default = GunSilent.Settings.Enabled.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.Enabled.Value = value
+                        initializeGunSilent()
+                        notify("GunSilent", "GunSilent " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'GSEnabled'),
+                callback = function(value)
+                    GunSilent.Settings.Enabled.Value = value
+                    initializeGunSilent()
+                    notify("GunSilent", "GunSilent " .. (value and "Enabled" or "Disabled"), true)
+                end
+            }
+            uiElements.RangePlus = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Range Plus",
+                    Minimum = 0,
+                    Maximum = 200,
+                    Default = GunSilent.Settings.RangePlus.Value,
+                    Precision = 0,
+                    Callback = function(value)
+                        GunSilent.Settings.RangePlus.Value = value
+                        notify("GunSilent", "Range Plus set to: " .. value, false)
+                    end
+                }, 'RangePlus'),
+                callback = function(value)
+                    GunSilent.Settings.RangePlus.Value = value
+                    notify("GunSilent", "Range Plus set to: " .. value, false)
+                end
+            }
+            uiElements.Rage = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Rage",
+                    Default = GunSilent.Settings.Rage.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.Rage.Value = value
+                        initializeGunSilent()
+                        notify("GunSilent", "Rage " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'Rage'),
+                callback = function(value)
+                    GunSilent.Settings.Rage.Value = value
+                    initializeGunSilent()
+                    notify("GunSilent", "Rage " .. (value and "Enabled" or "Disabled"), true)
+                end
+            }
+            uiElements.RageKeybind = {
+                element = UI.Sections.GunSilent:Keybind({
+                    Name = "Rage Keybind",
+                    Default = nil,
+                    Callback = function()
+                        GunSilent.Settings.Rage.Value = not GunSilent.Settings.Rage.Value
+                        initializeGunSilent()
+                        notify("GunSilent", "Rage " .. (GunSilent.Settings.Rage.Value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'RageKeybind'),
+                callback = function()
+                    GunSilent.Settings.Rage.Value = not GunSilent.Settings.Rage.Value
+                    initializeGunSilent()
+                    notify("GunSilent", "Rage " .. (GunSilent.Settings.Rage.Value and "Enabled" or "Disabled"), true)
+                end
+            }
+            uiElements.DoubleTap = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "DoubleTap",
+                    Default = GunSilent.Settings.DoubleTap.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.DoubleTap.Value = value
+                        notify("GunSilent", "DoubleTap " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'DoubleTap'),
+                callback = function(value)
+                    GunSilent.Settings.DoubleTap.Value = value
+                    notify("GunSilent", "DoubleTap " .. (value and "Enabled" or "Disabled"), true)
+                end
+            }
+            uiElements.DoubleTapKeybind = {
+                element = UI.Sections.GunSilent:Keybind({
+                    Name = "DoubleTap Keybind",
+                    Default = nil,
+                    Callback = function()
+                        GunSilent.Settings.DoubleTap.Value = not GunSilent.Settings.DoubleTap.Value
+                        notify("GunSilent", "DoubleTap " .. (GunSilent.Settings.DoubleTap.Value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'DoubleTapKeybind'),
+                callback = function()
+                    GunSilent.Settings.DoubleTap.Value = not GunSilent.Settings.DoubleTap.Value
+                    notify("GunSilent", "DoubleTap " .. (GunSilent.Settings.DoubleTap.Value and "Enabled" or "Disabled"), true)
+                end
+            }
+            uiElements.HitPart = {
+                element = UI.Sections.GunSilent:Dropdown({
+                    Name = "Hit Part",
+                    Default = GunSilent.Settings.HitPart.Value,
+                    Options = {"Head", "UpperTorso", "HumanoidRootPart", "Random"},
+                    Callback = function(value)
+                        GunSilent.Settings.HitPart.Value = value
+                        notify("GunSilent", "Hit Part set to: " .. value, true)
+                    end
+                }, 'HitPart'),
+                callback = function(value)
+                    GunSilent.Settings.HitPart.Value = value
+                    notify("GunSilent", "Hit Part set to: " .. value, true)
+                end
+            }
+            uiElements.FakeDistance = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Fake Distance",
+                    Default = GunSilent.Settings.FakeDistance.Value,
+                    Minimum = 0,
+                    Maximum = 15,
+                    DisplayMethod = "Value",
+                    Precision = 0,
+                    Callback = function(value)
+                        GunSilent.Settings.FakeDistance.Value = value
+                        notify("GunSilent", "Fake Distance set to: " .. value)
+                    end
+                }, 'FakeDistance'),
+                callback = function(value)
+                    GunSilent.Settings.FakeDistance.Value = value
+                    notify("GunSilent", "Fake Distance set to: " .. value)
+                end
+            }
+            uiElements.ShotgunSupport = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Shotgun Support",
+                    Default = GunSilent.Settings.ShotgunSupport.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.ShotgunSupport.Value = value
+                        notify("GunSilent", "Shotgun Support " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'ShotgunSupport'),
+                callback = function(value)
+                    GunSilent.Settings.ShotgunSupport.Value = value
+                    notify("GunSilent", "Shotgun Support " .. (value and "Enabled" or "Disabled"), true)
+                end
+            }
+            uiElements.GenerateBullets = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Generate Bullets",
+                    Default = GunSilent.Settings.GenBullet.Value,
+                    Minimum = 1,
+                    Maximum = 10,
+                    DisplayMethod = "Value",
+                    Precision = 0,
+                    Callback = function(value)
+                        GunSilent.Settings.GenBullet.Value = value
+                        notify("GunSilent", "Number of Bullets set to: " .. value)
+                    end
+                }, 'GenerateBullets'),
+                callback = function(value)
+                    GunSilent.Settings.GenBullet.Value = value
+                    notify("GunSilent", "Number of Bullets set to: " .. value)
+                end
+            }
+            uiElements.TestGenerateBullets = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Test Generate Bullets",
+                    Default = GunSilent.Settings.TestGenBullet.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.TestGenBullet.Value = value
+                        notify("GunSilent", "Test Generate Bullets " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'TestGenerateBullets'),
+                callback = function(value)
+                    GunSilent.Settings.TestGenBullet.Value = value
+                    notify("GunSilent", "Test Generate Bullets " .. (value and "Enabled" or "Disabled"), true)
+                end
+            }
+            uiElements.GSUSEFOV = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Use FOV",
+                    Default = GunSilent.Settings.UseFOV.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.UseFOV.Value = value
+                        notify("GunSilent", "Use FOV " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'GSUSEFOV'),
+                callback = function(value)
+                    GunSilent.Settings.UseFOV.Value = value
+                    notify("GunSilent", "Use FOV " .. (value and "Enabled" or "Disabled"), true)
+                end
+            }
+            uiElements.GSFOV = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "FOV",
+                    Default = GunSilent.Settings.FOV.Value,
+                    Minimum = 0,
+                    Maximum = 120,
+                    DisplayMethod = "Value",
+                    Precision = 0,
+                    Callback = function(value)
+                        GunSilent.Settings.FOV.Value = value
+                        notify("GunSilent", "FOV set to: " .. value)
+                    end
+                }, 'GSFOV'),
+                callback = function(value)
+                    GunSilent.Settings.FOV.Value = value
+                    notify("GunSilent", "FOV set to: " .. value)
+                end
+            }
+            uiElements.GSShowCircle = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Show Circle",
+                    Default = GunSilent.Settings.ShowCircle.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.ShowCircle.Value = value
+                        notify("GunSilent", "Show Circle " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'GSShowCircle'),
+                callback = function(value)
+                    GunSilent.Settings.ShowCircle.Value = value
+                    notify("GunSilent", "Show Circle " .. (value and "Enabled" or "Disabled"), true)
+                end
+            }
+            uiElements.GSCircleMethod = {
+                element = UI.Sections.GunSilent:Dropdown({
+                    Name = "Circle Method",
+                    Default = GunSilent.Settings.CircleMethod.Value,
+                    Options = {"Cursor", "Middle"},
+                    Callback = function(value)
+                        GunSilent.Settings.CircleMethod.Value = value
+                        notify("GunSilent", "Circle Method set to: " .. value, true)
+                    end
+                }, 'GSCircleMethod'),
+                callback = function(value)
+                    GunSilent.Settings.CircleMethod.Value = value
+                    notify("GunSilent", "Circle Method set to: " .. value, true)
+                end
+            }
+            uiElements.GSGradientCircle = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Gradient Circle",
+                    Default = GunSilent.Settings.GradientCircle.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.GradientCircle.Value = value
+                        notify("GunSilent", "Gradient Circle " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'GSGradientCircle'),
+                callback = function(value)
+                    GunSilent.Settings.GradientCircle.Value = value
+                    notify("GunSilent", "Gradient Circle " .. (value and "Enabled" or "Disabled"), true)
+                end
+            }
+            uiElements.GSGradientSpeed = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Gradient Speed",
+                    Default = GunSilent.Settings.GradientSpeed.Value,
+                    Minimum = 0.1,
+                    Maximum = 3.5,
+                    DisplayMethod = "Value",
+                    Precision = 1,
+                    Callback = function(value)
+                        GunSilent.Settings.GradientSpeed.Value = value
+                        notify("GunSilent", "Gradient Speed set to: " .. value)
+                    end
+                }, 'GSGradientSpeed'),
+                callback = function(value)
+                    GunSilent.Settings.GradientSpeed.Value = value
+                    notify("GunSilent", "Gradient Speed set to: " .. value)
+                end
+            }
+            uiElements.SortMethod = {
+                element = UI.Sections.GunSilent:Dropdown({
+                    Name = "Sort Method",
+                    Default = GunSilent.Settings.SortMethod.Value,
+                    Options = {"Mouse", "Distance", "Mouse&Distance"},
+                    Callback = function(value)
+                        GunSilent.Settings.SortMethod.Value = value
+                        notify("GunSilent", "Sort Method set to: " .. value, true)
+                    end
+                }, 'SortMethod'),
+                callback = function(value)
+                    GunSilent.Settings.SortMethod.Value = value
+                    notify("GunSilent", "Sort Method set to: " .. value, true)
+                end
+            }
+            uiElements.TargetVisual = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Target Visual",
+                    Default = GunSilent.Settings.TargetVisual.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.TargetVisual.Value = value
+                        notify("GunSilent", "Target Visual " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'TargetVisual'),
+                callback = function(value)
+                    GunSilent.Settings.TargetVisual.Value = value
+                    notify("GunSilent", "Target Visual " .. (value and "Enabled" or "Disabled"), true)
+                end
+            }
+            uiElements.HitboxVisual = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Hitbox Visual",
+                    Default = GunSilent.Settings.HitboxVisual.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.HitboxVisual.Value = value
+                        notify("GunSilent", "Hitbox Visual " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'HitboxVisual'),
+                callback = function(value)
+                    GunSilent.Settings.HitboxVisual.Value = value
+                    notify("GunSilent", "Hitbox Visual " .. (value and "Enabled" or "Disabled"), true)
+                end
+            }
+            uiElements.PredictVisual = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Predict Visual",
+                    Default = GunSilent.Settings.PredictVisual.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.PredictVisual.Value = value
+                        notify("GunSilent", "Predict Visual " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'PredictVisual'),
+                callback = function(value)
+                    GunSilent.Settings.PredictVisual.Value = value
+                    notify("GunSilent", "Predict Visual " .. (value and "Enabled" or "Disabled"), true)
+                end
+            }
+            uiElements.ShowDirection = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Show Direction",
+                    Default = GunSilent.Settings.ShowDirection.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.ShowDirection.Value = value
+                        notify("GunSilent", "Show Direction " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'ShowDirection'),
+                callback = function(value)
+                    GunSilent.Settings.ShowDirection.Value = value
+                    notify("GunSilent", "Show Direction " .. (value and "Enabled" or "Disabled"), true)
+                end
+            }
+            uiElements.ShowTrajectory = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Show Trajectory",
+                    Default = GunSilent.Settings.ShowTrajectoryBeam.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.ShowTrajectoryBeam = value
+                        notify("GunSilent", "Trajectory Beam " .. (value and "enabled" or "disabled"), true)
+                    end
+                }, 'ShowTrajectory'),
+                callback = function(value)
+                    GunSilent.Settings.ShowTrajectoryBeam = value
+                    notify("GunSilent", "Trajectory Beam " .. (value and "enabled" or "disabled"), true)
+                end
+            }
+            uiElements.ShowFullTrajectory = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Show Full Trajectory",
+                    Default = GunSilent.Settings.ShowFullTrajectory.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.ShowFullTrajectory = value
+                        notify("GunSilent", "Full Trajectory " .. (value and "enabled" or "disabled"), true)
+                    end
+                }, 'ShowFullTrajectory'),
+                callback = function(value)
+                    GunSilent.Settings.ShowFullTrajectory = value
+                    notify("GunSilent", "Full Trajectory " .. (value and "enabled" or "disabled"), true)
+                end
+            }
+            uiElements.HitChance = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Hit Chance",
+                    Default = GunSilent.Settings.HitChance.Value,
+                    Minimum = 0,
+                    Maximum = 100,
+                    DisplayMethod = "Percent",
+                    Precision = 0,
+                    Callback = function(value)
+                        GunSilent.Settings.HitChance.Value = value
+                        notify("GunSilent", "Hit Chance set to: " .. value .. "%")
+                    end
+                }, 'HitChance'),
+                callback = function(value)
+                    GunSilent.Settings.HitChance.Value = value
+                    notify("GunSilent", "Hit Chance set to: " .. value .. "%")
+                end
+            }
+            uiElements.LatencyCompensation = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Latency Compensation",
+                    Minimum = 0.0,
+                    Maximum = 0.5,
+                    Default = GunSilent.Settings.LatencyCompensation.Value,
+                    Precision = 3,
+                    Callback = function(value)
+                        GunSilent.Settings.LatencyCompensation.Value = value
+                        notify("GunSilent", "Latency Compensation set to: " .. value .. "s", false)
+                    end
+                }, 'LatencyCompensation'),
+                callback = function(value)
+                    GunSilent.Settings.LatencyCompensation.Value = value
+                    notify("GunSilent", "Latency Compensation set to: " .. value .. "s", false)
+                end
+            }
+            UI.Sections.GunSilent:Header({ Name = "Prediction Settings" })
+            uiElements.AdvancedPrediction = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Advanced Prediction",
+                    Default = GunSilent.Settings.AdvancedEnabled.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.AdvancedEnabled.Value = value
+                        notify("GunSilent", "Advanced Prediction " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'AdvancedPrediction'),
+                callback = function(value)
+                    GunSilent.Settings.AdvancedEnabled.Value = value
+                    notify("GunSilent", "Advanced Prediction " .. (value and "Enabled" or "Disabled"), true)
+                end
+            }
+            uiElements.VehicleYCorrection = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Vehicle Y Correction",
+                    Minimum = 0,
+                    Maximum = 5,
+                    Default = GunSilent.Settings.AdvancedVehicleYCorrection.Value,
+                    Precision = 2,
+                    Callback = function(value)
+                        GunSilent.Settings.AdvancedVehicleYCorrection.Value = value
+                        notify("GunSilent", "Vehicle Y Correction set to: " .. value, false)
+                    end
+                }, 'VehicleYCorrection'),
+                callback = function(value)
+                    GunSilent.Settings.AdvancedVehicleYCorrection.Value = value
+                    notify("GunSilent", "Vehicle Y Correction set to: " .. value, false)
+                end
+            }
+            uiElements.PositionHistory = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Position History",
+                    Minimum = 2,
+                    Maximum = 20,
+                    Default = GunSilent.Settings.AdvancedPositionHistorySize.Value,
+                    Precision = 0,
+                    Callback = function(value)
+                        GunSilent.Settings.AdvancedPositionHistorySize.Value = value
+                        notify("GunSilent", "Position History Size set to: " .. value, false)
+                    end
+                }, 'PositionHistory'),
+                callback = function(value)
+                    GunSilent.Settings.AdvancedPositionHistorySize.Value = value
+                    notify("GunSilent", "Position History Size set to: " .. value, false)
+                end
+            }
+            uiElements.SmoothingFactor = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Smoothing Factor",
+                    Minimum = 0.1,
+                    Maximum = 0.9,
+                    Default = GunSilent.Settings.AdvancedSmoothingFactor.Value,
+                    Precision = 1,
+                    Callback = function(value)
+                        GunSilent.Settings.AdvancedSmoothingFactor.Value = value
+                        notify("GunSilent", "Smoothing Factor set to: " .. value, false)
+                    end
+                }, 'SmoothingFactor'),
+                callback = function(value)
+                    GunSilent.Settings.AdvancedSmoothingFactor.Value = value
+                    notify("GunSilent", "Smoothing Factor set to: " .. value, false)
+                end
+            }
+            uiElements.TeleportSpeed = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Teleport Speed",
+                    Minimum = 300,
+                    Maximum = 1000,
+                    Default = GunSilent.Settings.AdvancedTeleportThreshold.Value,
+                    Precision = 0,
+                    Callback = function(value)
+                        GunSilent.Settings.AdvancedTeleportThreshold.Value = value
+                        notify("GunSilent", "Teleport Threshold set to: " .. value, false)
+                    end
+                }, 'TeleportSpeed'),
+                callback = function(value)
+                    GunSilent.Settings.AdvancedTeleportThreshold.Value = value
+                    notify("GunSilent", "Teleport Threshold set to: " .. value, false)
+                end
+            }
+            uiElements.TPLimit = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "TP Limit",
+                    Minimum = 100,
+                    Maximum = 500,
+                    Default = GunSilent.Settings.AdvancedMaxSpeed.Value,
+                    Precision = 0,
+                    Callback = function(value)
+                        GunSilent.Settings.AdvancedMaxSpeed.Value = value
+                        notify("GunSilent", "Max Speed Limit set to: " .. value, false)
+                    end
+                }, 'TPLimit'),
+                callback = function(value)
+                    GunSilent.Settings.AdvancedMaxSpeed.Value = value
+                    notify("GunSilent", "Max Speed Limit set to: " .. value, false)
+                end
+            }
+            uiElements.BulletSpeed = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Bullet Speed",
+                    Minimum = 500,
+                    Maximum = 5000,
+                    Default = GunSilent.Settings.PredictBullet.Value,
+                    Precision = 0,
+                    Callback = function(value)
+                        GunSilent.Settings.PredictBullet.Value = value
+                        notify("GunSilent", "Bullet Speed set to: " .. value, false)
+                    end
+                }, 'BulletSpeed'),
+                callback = function(value)
+                    GunSilent.Settings.PredictBullet.Value = value
+                    notify("GunSilent", "Bullet Speed set to: " .. value, false)
+                end
+            }
+
+            -- Добавляем кнопку синхронизации
+            UI.Sections.GunSilent:Button({
+                Name = "Sync Settings",
+                Callback = function()
+                    -- Синхронизация через вызов коллбэков с текущими значениями UI
+                    uiElements.GSEnabled.callback(uiElements.GSEnabled.element:GetState())
+                    uiElements.RangePlus.callback(uiElements.RangePlus.element:GetValue())
+                    uiElements.Rage.callback(uiElements.Rage.element:GetState())
+                    uiElements.DoubleTap.callback(uiElements.DoubleTap.element:GetState())
+                    local hitPartOptions = uiElements.HitPart.element:GetOptions()
+                    for option, selected in pairs(hitPartOptions) do
+                        if selected then
+                            uiElements.HitPart.callback(option)
+                            break
+                        end
+                    end
+                    uiElements.FakeDistance.callback(uiElements.FakeDistance.element:GetValue())
+                    uiElements.ShotgunSupport.callback(uiElements.ShotgunSupport.element:GetState())
+                    uiElements.GenerateBullets.callback(uiElements.GenerateBullets.element:GetValue())
+                    uiElements.TestGenerateBullets.callback(uiElements.TestGenerateBullets.element:GetState())
+                    uiElements.GSUSEFOV.callback(uiElements.GSUSEFOV.element:GetState())
+                    uiElements.GSFOV.callback(uiElements.GSFOV.element:GetValue())
+                    uiElements.GSShowCircle.callback(uiElements.GSShowCircle.element:GetState())
+                    local circleMethodOptions = uiElements.GSCircleMethod.element:GetOptions()
+                    for option, selected in pairs(circleMethodOptions) do
+                        if selected then
+                            uiElements.GSCircleMethod.callback(option)
+                            break
+                        end
+                    end
+                    uiElements.GSGradientCircle.callback(uiElements.GSGradientCircle.element:GetState())
+                    uiElements.GSGradientSpeed.callback(uiElements.GSGradientSpeed.element:GetValue())
+                    local sortMethodOptions = uiElements.SortMethod.element:GetOptions()
+                    for option, selected in pairs(sortMethodOptions) do
+                        if selected then
+                            uiElements.SortMethod.callback(option)
+                            break
+                        end
+                    end
+                    uiElements.TargetVisual.callback(uiElements.TargetVisual.element:GetState())
+                    uiElements.HitboxVisual.callback(uiElements.HitboxVisual.element:GetState())
+                    uiElements.PredictVisual.callback(uiElements.PredictVisual.element:GetState())
+                    uiElements.ShowDirection.callback(uiElements.ShowDirection.element:GetState())
+                    uiElements.ShowTrajectory.callback(uiElements.ShowTrajectory.element:GetState())
+                    uiElements.ShowFullTrajectory.callback(uiElements.ShowFullTrajectory.element:GetState())
+                    uiElements.HitChance.callback(uiElements.HitChance.element:GetValue())
+                    uiElements.LatencyCompensation.callback(uiElements.LatencyCompensation.element:GetValue())
+                    uiElements.AdvancedPrediction.callback(uiElements.AdvancedPrediction.element:GetState())
+                    uiElements.VehicleYCorrection.callback(uiElements.VehicleYCorrection.element:GetValue())
+                    uiElements.PositionHistory.callback(uiElements.PositionHistory.element:GetValue())
+                    uiElements.SmoothingFactor.callback(uiElements.SmoothingFactor.element:GetValue())
+                    uiElements.TeleportSpeed.callback(uiElements.TeleportSpeed.element:GetValue())
+                    uiElements.TPLimit.callback(uiElements.TPLimit.element:GetValue())
+                    uiElements.BulletSpeed.callback(uiElements.BulletSpeed.element:GetValue())
+
+                    notify("GunSilent", "Settings synchronized with UI!", true)
+                end
+            }, 'SyncSettings')
+        end
+    end
+
+    initializeGunSilent()
+end
+
+return { Init = Init }
