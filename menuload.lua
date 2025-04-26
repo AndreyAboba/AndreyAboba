@@ -300,12 +300,6 @@ local function predictTargetPositionGun(target, applyFakeDistance)
     local predictedPos = pastPos + pastVel * (timeToTarget + GunSilent.Settings.LatencyCompensation.Value)
     local realPredictedPos = pastPos + pastVel * (realTimeToTarget + GunSilent.Settings.LatencyCompensation.Value)
 
-    local gravity = Vector3.new(0, -Workspace.Gravity, 0)
-    if GunSilent.Settings.ShotgunSupport.Value or distance > 100 then
-        predictedPos = predictedPos + 0.5 * gravity * timeToTarget * timeToTarget
-        realPredictedPos = realPredictedPos + 0.5 * gravity * realTimeToTarget * realTimeToTarget
-    end
-
     local humanoid = targetChar:FindFirstChild("Humanoid")
     local isInVehicle = humanoid and humanoid.SeatPart ~= nil
     if isInVehicle then
@@ -388,7 +382,8 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
         (targetPos - GunSilent.State.LastTargetPos).Magnitude > 0.1 or (predictionPos - GunSilent.State.LastPredictionPos).Magnitude > 0.1
     GunSilent.State.LastTargetPos, GunSilent.State.LastPredictionPos = targetPos, predictionPos
 
-    local startPos = localRoot.Position
+    local localHead = GunSilent.State.LocalCharacter and GunSilent.State.LocalCharacter:FindFirstChild("Head")
+    local startPos = localHead and localHead.Position or localRoot.Position
     local smoothingFactor = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.SmoothingVisualFactor.Value or GunSilent.FixedPredictionValues.SmoothingVisualFactor
     GunSilent.State.SmoothedVisualPositions = GunSilent.State.SmoothedVisualPositions or {}
 
@@ -509,18 +504,18 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
             GunSilent.State.TrajectoryBeam = trajectoryBeam
         end
         local currentAttachment0Pos = GunSilent.State.SmoothedVisualPositions.TrajectoryBeam0 or startPos
-        local currentAttachment1Pos = GunSilent.State.SmoothedVisualPositions.TrajectoryBeam1 or prediction.fakePosition
+        local currentAttachment1Pos = GunSilent.State.SmoothedVisualPositions.TrajectoryBeam1 or prediction.position
         GunSilent.State.SmoothedVisualPositions.TrajectoryBeam0 = currentAttachment0Pos:Lerp(startPos, smoothingFactor)
-        GunSilent.State.SmoothedVisualPositions.TrajectoryBeam1 = currentAttachment1Pos:Lerp(prediction.fakePosition, smoothingFactor)
+        GunSilent.State.SmoothedVisualPositions.TrajectoryBeam1 = currentAttachment1Pos:Lerp(prediction.position, smoothingFactor)
         trajectoryBeam.Attachment0.WorldPosition = GunSilent.State.SmoothedVisualPositions.TrajectoryBeam0
         trajectoryBeam.Attachment1.WorldPosition = GunSilent.State.SmoothedVisualPositions.TrajectoryBeam1
-        trajectoryBeam.Attachment0.Parent = localRoot
+        trajectoryBeam.Attachment0.Parent = localHead or localRoot
         if GunSilent.State.PredictVisualPart then
             trajectoryBeam.Attachment1.Parent = GunSilent.State.PredictVisualPart
         else
             local tempPart = Instance.new("Part")
             tempPart.Size = Vector3.new(0.1, 0.1, 0.1)
-            tempPart.Position = prediction.fakePosition
+            tempPart.Position = prediction.position
             tempPart.Anchored = true
             tempPart.CanCollide = false
             tempPart.Transparency = 1
@@ -552,14 +547,13 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
             GunSilent.State.FullTrajectoryParts = fullTrajectoryParts
         end
         local bulletSpeed = GunSilent.Settings.PredictBullet.Value
-        local gravity = Vector3.new(0, -Workspace.Gravity, 0)
         local distance = (prediction.position - startPos).Magnitude
         local steps = 5
         local stepTime = prediction.timeToTarget / steps
 
         for i = 0, steps - 1 do
             local t = stepTime * i
-            local pos = startPos + (prediction.realDirection * bulletSpeed * t) + (0.5 * gravity * t * t * math.clamp(distance / 100, 0.5, 2))
+            local pos = startPos + (prediction.realDirection * bulletSpeed * t)
             local currentPos = GunSilent.State.SmoothedVisualPositions["FullTrajectory" .. i] or pos
             GunSilent.State.SmoothedVisualPositions["FullTrajectory" .. i] = currentPos:Lerp(pos, smoothingFactor)
             fullTrajectoryParts[i + 1].Position = GunSilent.State.SmoothedVisualPositions["FullTrajectory" .. i]
@@ -597,6 +591,12 @@ local function initializeGunSilent()
                         local aimCFrame = getAimCFrameGun(nearestPlayer)
                         local hitData = createHitDataGun(nearestPlayer)
                         if aimCFrame and hitData then
+                            if GunSilent.State.LocalCharacter then
+                                local localHead = GunSilent.State.LocalCharacter:FindFirstChild("Head")
+                                if localHead then
+                                    aimCFrame = CFrame.new(localHead.Position, localHead.Position + (aimCFrame.Position - localHead.Position).Unit)
+                                end
+                            end
                             modifiedArgs = {args[1], args[2], equippedTool, aimCFrame, hitData}
                         end
                     end
