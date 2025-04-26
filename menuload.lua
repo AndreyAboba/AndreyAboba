@@ -1518,4 +1518,4 @@ local function Init(UI, Core, notify)
     initializeGunSilent()
 end
 
-return { Init =
+return { Init = Init }
