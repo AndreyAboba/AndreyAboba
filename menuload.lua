@@ -42,7 +42,8 @@ local GunSilent = {
         ShotgunSupport = { Value = false, Default = false },
         GenBullet = { Value = 4, Default = 4 },
         TestGenBullet = { Value = false, Default = false },
-        DoubleTap = { Value = false, Default = false }
+        DoubleTap = { Value = false, Default = false },
+        TrackTarget = { Value = true, Default = true }, -- Новая настройка для чамсов
     },
     FixedPredictionValues = {
         VehicleFactor = 0.9,
@@ -82,7 +83,8 @@ local GunSilent = {
         LocalCharacter = nil,
         LocalRoot = nil,
         LastTargetPos = nil,
-        LastPredictionPos = nil
+        LastPredictionPos = nil,
+        TrackTargetHitboxes = nil, -- Для хранения чамсов TrackTarget
     }
 }
 
@@ -392,6 +394,68 @@ local function createHitDataGun(target)
     return hitData
 end
 
+-- Функция для создания чамсов для таргета на основе предсказанной позиции
+local function SetupTrackTargetHitboxes(character, predictedPos, targetRoot)
+    if not character or not predictedPos or not targetRoot then
+        return nil
+    end
+
+    -- Удаляем старые чамсы
+    for _, child in pairs(character:GetChildren()) do
+        if child.Name:match("TrackTargetHitbox_") then
+            child:Destroy()
+        end
+    end
+
+    -- Список частей тела (R15 и R6)
+    local bodyParts = {
+        "Head",
+        "UpperTorso",
+        "LowerTorso",
+        "Torso",
+        "LeftUpperLeg",
+        "LeftLowerLeg",
+        "RightUpperLeg",
+        "RightLowerLeg",
+        "LeftLeg",
+        "RightLeg",
+        "LeftUpperArm",
+        "LeftLowerArm",
+        "RightUpperArm",
+        "RightLowerArm",
+        "LeftArm",
+        "RightArm"
+    }
+
+    local hitboxes = {}
+
+    for _, partName in ipairs(bodyParts) do
+        local bodyPart = character:FindFirstChild(partName)
+        if bodyPart and bodyPart:IsA("BasePart") then
+            -- Создаём чамс для части тела
+            local hitboxPart = Instance.new("Part")
+            hitboxPart.Name = "TrackTargetHitbox_" .. partName
+            hitboxPart.Anchored = true
+            hitboxPart.CanCollide = false
+            hitboxPart.Size = bodyPart.Size * 1.1 -- Увеличиваем размер для наглядности
+            hitboxPart.Transparency = 0.5
+            hitboxPart.Color = Color3.fromRGB(255, 0, 255) -- Фиолетовый цвет, как в антиаиме
+            hitboxPart.Parent = character
+
+            -- Сохраняем относительный CFrame для синхронизации с предсказанной позицией
+            local relativeCFrame = targetRoot.CFrame:ToObjectSpace(bodyPart.CFrame)
+            hitboxes[partName] = {
+                Part = hitboxPart,
+                BodyPart = bodyPart,
+                RelativeCFrame = relativeCFrame
+            }
+        end
+    end
+
+    return hitboxes
+end
+
+-- Обновлённая функция визуализации с TrackTarget
 local function updateVisualsGun(target, hasWeapon)
     local currentTime = tick()
     if currentTime - GunSilent.State.LastVisualUpdateTime < GunSilent.Settings.VisualUpdateFrequency.Value then return end
@@ -408,6 +472,14 @@ local function updateVisualsGun(target, hasWeapon)
         if GunSilent.State.FullTrajectoryParts then
             for _, part in pairs(GunSilent.State.FullTrajectoryParts) do part.Transparency = 1 end
         end
+        if GunSilent.State.TrackTargetHitboxes then
+            for _, hitboxData in pairs(GunSilent.State.TrackTargetHitboxes) do
+                if hitboxData.Part then
+                    hitboxData.Part.Transparency = 1
+                end
+            end
+            GunSilent.State.TrackTargetHitboxes = nil
+        end
         GunSilent.State.LastTargetPos = nil
         GunSilent.State.LastPredictionPos = nil
         return
@@ -419,7 +491,8 @@ local function updateVisualsGun(target, hasWeapon)
     local targetChar = target.Character
     local targetHead = targetChar:FindFirstChild("Head") or targetChar:FindFirstChild("HumanoidRootPart")
     local hitPart = targetChar:FindFirstChild(GunSilent.Settings.HitPart.Value == "Random" and (math.random() > 0.5 and "Head" or "UpperTorso") or GunSilent.Settings.HitPart.Value) or targetChar:FindFirstChild("HumanoidRootPart")
-    if not targetHead or not hitPart then return end
+    local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
+    if not targetHead or not hitPart or not targetRoot then return end
 
     local targetPos, predictionPos = targetHead.Position, prediction.position
     local shouldUpdate = not GunSilent.State.LastTargetPos or not GunSilent.State.LastPredictionPos or
@@ -566,6 +639,45 @@ local function updateVisualsGun(target, hasWeapon)
     elseif GunSilent.State.FullTrajectoryParts then
         for _, part in pairs(GunSilent.State.FullTrajectoryParts) do
             part.Transparency = 1
+        end
+    end
+
+    -- Визуализация TrackTarget (чамсы на предсказанной позиции)
+    if GunSilent.Settings.TrackTarget.Value and shouldUpdate then
+        -- Создаём чамсы, если их ещё нет
+        if not GunSilent.State.TrackTargetHitboxes then
+            GunSilent.State.TrackTargetHitboxes = SetupTrackTargetHitboxes(targetChar, prediction.position, targetRoot)
+        end
+
+        -- Обновляем позиции чамсов на основе предсказанной позиции
+        if GunSilent.State.TrackTargetHitboxes then
+            -- Вычисляем смещение между текущей позицией targetRoot и предсказанной позицией
+            local predictedRootPos = prediction.position
+            local currentRootPos = targetRoot.Position
+            local offset = predictedRootPos - currentRootPos
+
+            for partName, hitboxData in pairs(GunSilent.State.TrackTargetHitboxes) do
+                local hitboxPart = hitboxData.Part
+                local bodyPart = hitboxData.BodyPart
+                if hitboxPart and bodyPart and hitboxPart:IsA("BasePart") and bodyPart:IsA("BasePart") then
+                    -- Обновляем относительный CFrame с учётом текущей анимации
+                    local relativeCFrame = targetRoot.CFrame:ToObjectSpace(bodyPart.CFrame)
+                    hitboxData.RelativeCFrame = relativeCFrame
+                    -- Применяем предсказанную позицию с учётом смещения
+                    local predictedCFrame = targetRoot.CFrame:ToWorldSpace(relativeCFrame) + offset
+                    hitboxPart.CFrame = predictedCFrame
+                    hitboxPart.Transparency = 0.5
+                else
+                    warn("Не удалось обновить чамс для", partName)
+                end
+            end
+        end
+    elseif GunSilent.State.TrackTargetHitboxes then
+        -- Скрываем чамсы, если TrackTarget отключён
+        for _, hitboxData in pairs(GunSilent.State.TrackTargetHitboxes) do
+            if hitboxData.Part then
+                hitboxData.Part.Transparency = 1
+            end
         end
     end
 end
@@ -1042,6 +1154,20 @@ local function Init(UI, Core, notify)
                     notify("GunSilent", "Full Trajectory " .. (value and "enabled" or "disabled"), true)
                 end
             }
+            uiElements.TrackTarget = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Track Target",
+                    Default = GunSilent.Settings.TrackTarget.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.TrackTarget.Value = value
+                        notify("GunSilent", "Track Target " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'TrackTarget'),
+                callback = function(value)
+                    GunSilent.Settings.TrackTarget.Value = value
+                    notify("GunSilent", "Track Target " .. (value and "Enabled" or "Disabled"), true)
+                end
+            },
             uiElements.HitChance = {
                 element = UI.Sections.GunSilent:Slider({
                     Name = "Hit Chance",
@@ -1361,6 +1487,7 @@ local function Init(UI, Core, notify)
                     uiElements.ShowDirection.callback(uiElements.ShowDirection.element:GetState())
                     uiElements.ShowTrajectory.callback(uiElements.ShowTrajectory.element:GetState())
                     uiElements.ShowFullTrajectory.callback(uiElements.ShowFullTrajectory.element:GetState())
+                    uiElements.TrackTarget.callback(uiElements.TrackTarget.element:GetState())
                     uiElements.HitChance.callback(uiElements.HitChance.element:GetValue())
                     uiElements.LatencyCompensation.callback(uiElements.LatencyCompensation.element:GetValue())
                     uiElements.AdvancedPrediction.callback(uiElements.AdvancedPrediction.element:GetState())
