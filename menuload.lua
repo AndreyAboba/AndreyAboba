@@ -38,7 +38,7 @@ local GunSilent = {
         AdvancedPositionHistorySize = { Value = 20, Default = 20 },
         LatencyCompensation = { Value = 0.2, Default = 0.2 },
         ShowTrajectoryBeam = { Value = true, Default = true },
-        ShowFullTrajectory = { Value = true, Default = true },
+        ShowFullTrajectory = { Value = true, Default =  true },
         ShotgunSupport = { Value = false, Default = false },
         GenBullet = { Value = 4, Default = 4 },
         TestGenBullet = { Value = false, Default = false },
@@ -653,24 +653,11 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
         end
 
         if GunSilent.State.TrackTargetHitboxes and GunSilent.State.TrackTargetHitboxes.Hitboxes then
-            local predictedRootPos = prediction.position
-            local targetOffset = predictedRootPos - targetRoot.Position
-
-            local smoothingFactor = 5
-            local adjustedDeltaTime = math.clamp(deltaTime, 0, 0.1)
-
             for partName, hitboxData in pairs(GunSilent.State.TrackTargetHitboxes.Hitboxes) do
                 local hitboxPart = hitboxData.Part
                 local bodyPart = hitboxData.BodyPart
                 if hitboxPart and bodyPart and hitboxPart:IsA("BasePart") and bodyPart:IsA("BasePart") then
-                    local relativeCFrame = hitboxData.RelativeCFrame
-                    local targetCFrame = (targetRoot.CFrame + targetOffset) * relativeCFrame
-
-                    local currentCFrame = hitboxPart.CFrame
-                    local alpha = 1 - math.exp(-smoothingFactor * adjustedDeltaTime)
-                    local newCFrame = currentCFrame:Lerp(targetCFrame, alpha)
-
-                    hitboxPart.CFrame = newCFrame
+                    hitboxPart.CFrame = bodyPart.CFrame
                     hitboxPart.Transparency = 0.5
                     hitboxPart.Color = GunSilent.Settings.ChamsColor.Value
                 else
@@ -1017,7 +1004,7 @@ local function Init(UI, Core, notify)
                         GunSilent.Settings.CircleMethod.Value = value
                         notify("GunSilent", "Circle Method set to: " .. value, true)
                     end
-                }, 'GSCircleMethod'),
+                }, 'GsCircleMethod'),
                 callback = function(value)
                     GunSilent.Settings.CircleMethod.Value = value
                     notify("GunSilent", "Circle Method set to: " .. value, true)
@@ -1382,7 +1369,7 @@ local function Init(UI, Core, notify)
                 }, 'VehicleYCorrection'),
                 callback = function(value)
                     GunSilent.Settings.AdvancedVehicleYCorrection.Value = value
-                    notify("GunSil ent", "Vehicle Y Correction set to: " .. value, false)
+                    notify("GunSilent", "Vehicle Y Correction set to: " .. value, false)
                 end
             }
             uiElements.VisualUpdate = {
