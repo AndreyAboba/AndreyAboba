@@ -414,10 +414,10 @@ local function predictTargetPositionGun(target, applyFakeDistance)
                 (GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedPedestrianFactor.Value or GunSilent.FixedPredictionValues.PedestrianFactor)) *
                 (GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedPredictionAggressiveness.Value or GunSilent.FixedPredictionValues.PredictionAggressiveness)
 
+            -- Исправление: используем проверенное значение bulletSpeed
             local bulletSpeed = GunSilent.Settings.PredictBullet.Value
-            -- Проверка на nil и использование значения по умолчанию
             if not bulletSpeed then
-                warn("BulletSpeed is nil, using default value of 2500")
+                warn("BulletSpeed is nil in predictTargetPositionGun, using default value of 2500")
                 bulletSpeed = 2500
             end
 
@@ -438,6 +438,7 @@ local function predictTargetPositionGun(target, applyFakeDistance)
     local targetPos = predictedParts[hitPart.Name] or hitPart.Position
     local fakePos = applyFakeDistance and GunSilent.Settings.FakeDistance.Value > 0 and (targetPos - (targetPos - myPos).Unit * math.max(1, (targetPos - myPos).Magnitude - GunSilent.Settings.FakeDistance.Value)) or myPos
     local distance, realDistance = (targetPos - fakePos).Magnitude, (targetPos - myPos).Magnitude
+    -- Исправление: используем уже проверенное значение bulletSpeed
     local timeToTarget, realTimeToTarget = distance / bulletSpeed, realDistance / bulletSpeed
 
     return {
@@ -519,8 +520,12 @@ local function updateVisualsGun(target, hasWeapon)
         GunSilent.State.VisualHitboxes = SetupVisualHitboxes(targetChar)
     end
 
+    -- Исправление: проверяем результат predictTargetPositionGun
     local prediction = predictTargetPositionGun(target, true)
-    if not prediction.position or not prediction.direction then return end
+    if not prediction or not prediction.position or not prediction.direction then
+        warn("Prediction failed in updateVisualsGun, skipping update")
+        return
+    end
 
     local targetHead = targetChar:FindFirstChild("Head") or targetChar:FindFirstChild("HumanoidRootPart")
     local hitPart = targetChar:FindFirstChild(GunSilent.Settings.HitPart.Value == "Random" and (math.random() > 0.5 and "Head" or "UpperTorso") or GunSilent.Settings.HitPart.Value) or targetChar:FindFirstChild("HumanoidRootPart")
@@ -667,7 +672,7 @@ local function updateVisualsGun(target, hasWeapon)
             end
             GunSilent.State.FullTrajectoryParts = fullTrajectoryParts
         end
-        local bulletSpeed = 2500
+        local bulletSpeed = GunSilent.Settings.PredictBullet.Value or 2500 -- Используем проверку здесь тоже
         local gravity = Vector3.new(0, -Workspace.Gravity, 0)
         local distance = (prediction.position - startPos).Magnitude
         local steps = 5
@@ -741,7 +746,7 @@ local function initializeGunSilent()
         if currentTool ~= GunSilent.State.LastTool then
             if currentTool and not GunSilent.State.LastTool then
                 GunSilent.notify("GunSilent", "Equipped: " .. currentTool.Name .. " (Total Range: " .. getGunRange(currentTool) .. ")", true)
-            elseif GunSilent.State.LastTool and not currentTool then
+            elseif GunSilent.State.ConcurrentModificationException and not currentTool then
                 GunSilent.notify("GunSilent", "Unequipped: " .. GunSilent.State.LastTool.Name, true)
             elseif currentTool and GunSilent.State.LastTool then
                 GunSilent.notify("GunSilent", "Switched to " .. currentTool.Name .. " (Range: " .. getGunRange(currentTool) .. ")", true)
@@ -758,7 +763,12 @@ local function initializeGunSilent()
 
         local gunRange = getGunRange(currentTool)
         local nearestPlayer = getNearestPlayerGun(gunRange)
-        updateVisualsGun(nearestPlayer, true)
+        -- Исправление: добавляем проверку перед вызовом updateVisualsGun
+        if nearestPlayer then
+            updateVisualsGun(nearestPlayer, true)
+        else
+            updateVisualsGun(nil, false)
+        end
         if GunSilent.Settings.Rage.Value and GunSilent.State.V_U_4 and nearestPlayer then
             local aimCFrame = getAimCFrameGun(nearestPlayer)
             local hitData = createHitDataGun(nearestPlayer)
