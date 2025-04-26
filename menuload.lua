@@ -28,7 +28,7 @@ local GunSilent = {
         AdvancedTeleportThreshold = { Value = 600, Default = 600 },
         AdvancedMaxSpeed = { Value = 500, Default = 500 },
         AdvancedSmoothingFactor = { Value = 0.1, Default = 0.1 },
-        SmoothingVisualFactor = { Value = 0.3, Default = 0.3 }, -- Новая настройка для сглаживания визуализаций
+        SmoothingVisualFactor = { Value = 0.3, Default = 0.3 },
         AdvancedPositionHistorySize = { Value = 20, Default = 20 },
         LatencyCompensation = { Value = 0.2, Default = 0.2 },
         ShowTrajectoryBeam = { Value = true, Default = true },
@@ -73,7 +73,7 @@ local GunSilent = {
         LastTargetPos = nil,
         LastPredictionPos = nil,
         CachedPing = 0.1,
-        SmoothedVisualPositions = {} -- Для хранения сглаженных позиций визуализаций
+        SmoothedVisualPositions = {}
     }
 }
 
@@ -315,9 +315,9 @@ local function predictTargetPositionGun(target, applyFakeDistance)
     end
 
     return {
-        position = realPredictedPos, -- Используем realPredictedPos для серверной позиции
-        direction = (predictedPos - fakePos).Unit, -- Клиентское направление с FakeDistance
-        realDirection = (realPredictedPos - myPos).Unit, -- Серверное направление
+        position = realPredictedPos,
+        direction = (predictedPos - fakePos).Unit,
+        realDirection = (realPredictedPos - myPos).Unit,
         fakePosition = fakePos,
         timeToTarget = timeToTarget
     }
@@ -328,7 +328,7 @@ local function getAimCFrameGun(target)
     if not target or not target.Character or not localRoot then return nil end
     local prediction = predictTargetPositionGun(target, true)
     if not prediction.position or not prediction.realDirection then return nil end
-    return CFrame.new(localRoot.Position, localRoot.Position + prediction.realDirection) -- Используем realDirection
+    return CFrame.new(localRoot.Position, localRoot.Position + prediction.realDirection)
 end
 
 local function createHitDataGun(target)
@@ -467,10 +467,10 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
         local realDirectionVisualPart = GunSilent.State.RealDirectionVisualPart
         if not realDirectionVisualPart then
             realDirectionVisualPart = Instance.new("Part")
-            realDirectionVisualPart.Size = Vector3.new(0.3, 0.3, 6) -- Увеличиваем размер для заметности
+            realDirectionVisualPart.Size = Vector3.new(0.3, 0.3, 6)
             realDirectionVisualPart.Anchored = true
             realDirectionVisualPart.CanCollide = false
-            realDirectionVisualPart.Color = Color3.fromRGB(0, 255, 0) -- Ярко-зеленый для реального направления
+            realDirectionVisualPart.Color = Color3.fromRGB(0, 255, 0)
             realDirectionVisualPart.Parent = Workspace
             GunSilent.State.RealDirectionVisualPart = realDirectionVisualPart
         end
@@ -500,7 +500,7 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
             trajectoryBeam.Width0 = 0.3
             trajectoryBeam.Width1 = 0.3
             trajectoryBeam.Transparency = NumberSequence.new(0.4)
-            trajectoryBeam.Color = ColorSequence.new(Color3.fromRGB(147, 112, 219)) -- Фиолетовый для клиентской позиции
+            trajectoryBeam.Color = ColorSequence.new(Color3.fromRGB(147, 112, 219))
             trajectoryBeam.Parent = Workspace
             local attachment0 = Instance.new("Attachment")
             local attachment1 = Instance.new("Attachment")
@@ -515,7 +515,21 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
         trajectoryBeam.Attachment0.WorldPosition = GunSilent.State.SmoothedVisualPositions.TrajectoryBeam0
         trajectoryBeam.Attachment1.WorldPosition = GunSilent.State.SmoothedVisualPositions.TrajectoryBeam1
         trajectoryBeam.Attachment0.Parent = localRoot
-        trajectoryBeam.Attachment1.Parent = Workspace
+        if GunSilent.State.PredictVisualPart then
+            trajectoryBeam.Attachment1.Parent = GunSilent.State.PredictVisualPart
+        else
+            local tempPart = Instance.new("Part")
+            tempPart.Size = Vector3.new(0.1, 0.1, 0.1)
+            tempPart.Position = prediction.fakePosition
+            tempPart.Anchored = true
+            tempPart.CanCollide = false
+            tempPart.Transparency = 1
+            tempPart.Parent = Workspace
+            trajectoryBeam.Attachment1.Parent = tempPart
+            RunService.Heartbeat:Once(function()
+                tempPart:Destroy()
+            end)
+        end
         trajectoryBeam.Enabled = true
     elseif GunSilent.State.TrajectoryBeam then
         GunSilent.State.TrajectoryBeam.Enabled = false
