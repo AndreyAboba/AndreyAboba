@@ -8,8 +8,8 @@ local GunSilent = {
         RangePlus = { Value = 50, Default = 50 },
         Rage = { Value = false, Default = false },
         HitPart = { Value = "Head", Default = "Head" },
-        HitPartYOffset = { Value = -0.5, Default = -0.5 }, -- Новая настройка для смещения hitPart по Y
         PredictBullet = { Value = 2500, Default = 2500 },
+        YCorrection = { Value = 0.01, Default = 0.01 },
         FakeDistance = { Value = 3, Default = 3 },
         UseFOV = { Value = true, Default = true },
         FOV = { Value = 120, Default = 120 },
@@ -24,14 +24,19 @@ local GunSilent = {
         GradientCircle = { Value = false, Default = false },
         GradientSpeed = { Value = 2, Default = 2 },
         AdvancedEnabled = { Value = false, Default = false },
-        AdvancedVehicleYCorrection = { Value = 0, Default = 0 },
+        AdvancedVehicleFactor = { Value = 0.9, Default = 0.9 },
+        AdvancedPedestrianFactor = { Value = 0.55, Default = 0.55 },
         AdvancedTeleportThreshold = { Value = 600, Default = 600 },
         AdvancedMaxSpeed = { Value = 500, Default = 500 },
+        AdvancedVehicleYCorrection = { Value = 0, Default = 0 },
+        AdvancedPredictionAggressiveness = { Value = 1.2, Default = 1.2 },
         AdvancedSmoothingFactor = { Value = 0.1, Default = 0.1 },
-        SmoothingVisualFactor = { Value = 0.3, Default = 0.3 },
+        AdvancedSmallDistanceSpeedFactorMultiplier = { Value = 1.7, Default = 1.7 },
+        AdvancedSlowVehiclePredictionFactor = { Value = 1.95, Default = 1.95 },
+        AdvancedFastVehiclePredictionLimit = { Value = 2.2, Default = 2.2 },
+        VisualUpdateFrequency = { Value = 0.1, Default = 0.1 },
         AdvancedPositionHistorySize = { Value = 20, Default = 20 },
         LatencyCompensation = { Value = 0.2, Default = 0.2 },
-        PingEstimate = { Value = 0.03, Default = 0.03 },
         ShowTrajectoryBeam = { Value = true, Default = true },
         ShowFullTrajectory = { Value = true, Default = true },
         ShotgunSupport = { Value = false, Default = false },
@@ -40,9 +45,14 @@ local GunSilent = {
         DoubleTap = { Value = false, Default = false }
     },
     FixedPredictionValues = {
+        VehicleFactor = 0.9,
+        PedestrianFactor = 0.55,
+        PredictionAggressiveness = 1.2,
+        SmallDistanceSpeedFactorMultiplier = 1.7,
+        SlowVehiclePredictionFactor = 1.95,
+        FastVehiclePredictionLimit = 2.2,
         PositionHistorySize = 20,
         SmoothingFactor = 0.1,
-        SmoothingVisualFactor = 0.3,
         TeleportThreshold = 600,
         MaxSpeed = 500,
         PredictBullet = 600
@@ -50,7 +60,6 @@ local GunSilent = {
     State = {
         LastEventId = 0,
         LastTool = nil,
-        ToolCache = nil,
         TargetVisualPart = nil,
         HitboxVisualPart = nil,
         PredictVisualPart = nil,
@@ -73,8 +82,7 @@ local GunSilent = {
         LocalCharacter = nil,
         LocalRoot = nil,
         LastTargetPos = nil,
-        LastPredictionPos = nil,
-        SmoothedVisualPositions = {}
+        LastPredictionPos = nil
     }
 }
 
@@ -86,44 +94,23 @@ local function isGunTool(tool)
     return gunFolder:FindFirstChild(tool.Name) ~= nil
 end
 
-local function updateToolCache(tool)
-    if not tool then
-        GunSilent.State.ToolCache = nil
-        return
-    end
-    if GunSilent.State.ToolCache and GunSilent.State.ToolCache.Tool == tool then
-        return
-    end
-    GunSilent.State.ToolCache = {
-        Tool = tool,
-        Range = tool:GetAttribute("Range") or 50,
-        AmmoType = tool:GetAttribute("AmmoType") or ""
-    }
-end
-
 local function getGunRange(tool)
-    if not tool or not GunSilent.State.ToolCache or GunSilent.State.ToolCache.Tool ~= tool then
-        updateToolCache(tool)
-    end
-    return (GunSilent.State.ToolCache and GunSilent.State.ToolCache.Range or 50) + GunSilent.Settings.RangePlus.Value
+    return (tool and tool:GetAttribute("Range") or 50) + GunSilent.Settings.RangePlus.Value
 end
 
 local function isShotgun(tool)
-    if not tool or not GunSilent.State.ToolCache or GunSilent.State.ToolCache.Tool ~= tool then
-        updateToolCache(tool)
-    end
-    return GunSilent.State.ToolCache and GunSilent.State.ToolCache.AmmoType and GunSilent.State.ToolCache.AmmoType:lower() == "shotgun"
+    if not tool then return false end
+    local ammoType = tool:GetAttribute("AmmoType")
+    return ammoType and ammoType:lower() == "shotgun"
 end
 
 local function getEquippedGunTool(character)
     if not character then return nil end
     for _, child in pairs(character:GetChildren()) do
         if child.ClassName == "Tool" and isGunTool(child) then
-            updateToolCache(child)
             return child
         end
     end
-    updateToolCache(nil)
     return nil
 end
 
@@ -245,93 +232,70 @@ end
 
 local function predictTargetPositionGun(target, applyFakeDistance)
     local localRoot = GunSilent.State.LocalRoot
-    local localHead = GunSilent.State.LocalCharacter and GunSilent.State.LocalCharacter:FindFirstChild("Head")
     if not target or not target.Character or not localRoot then
         return { position = nil, direction = nil, realDirection = nil, fakePosition = nil, timeToTarget = 0 }
     end
 
     local targetChar = target.Character
-    local myPos = localHead and localHead.Position or localRoot.Position -- Используем голову, если доступна
+    local myPos = localRoot.Position
     local hitPart = targetChar:FindFirstChild(GunSilent.Settings.HitPart.Value == "Random" and (math.random() > 0.5 and "Head" or "UpperTorso") or GunSilent.Settings.HitPart.Value) or targetChar:FindFirstChild("HumanoidRootPart")
     local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
     if not hitPart or not targetRoot then
         return { position = nil, direction = nil, realDirection = nil, fakePosition = nil, timeToTarget = 0 }
     end
 
-    local currentTime = tick()
-    local ping = GunSilent.Settings.PingEstimate.Value
+    local targetPos = hitPart.Position
+    local targetId = tostring(target.UserId)
+    GunSilent.State.IsTeleporting = GunSilent.State.LastTargetPosition[targetId] and (targetPos - GunSilent.State.LastTargetPosition[targetId]).Magnitude > 50
+    GunSilent.State.LastTargetPosition[targetId] = targetPos
+
+    local fakePos = applyFakeDistance and GunSilent.Settings.FakeDistance.Value > 0 and (targetPos - (targetPos - myPos).Unit * math.max(1, (targetPos - myPos).Magnitude - GunSilent.Settings.FakeDistance.Value)) or myPos
+    local distance, realDistance = (targetPos - fakePos).Magnitude, (targetPos - myPos).Magnitude
     local bulletSpeed = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.PredictBullet.Value or GunSilent.FixedPredictionValues.PredictBullet
+    local timeToTarget, realTimeToTarget = distance / bulletSpeed, realDistance / bulletSpeed
 
     local positionHistory = GunSilent.State.PositionHistory[target] or {}
     GunSilent.State.PositionHistory[target] = positionHistory
-    table.insert(positionHistory, { time = currentTime, position = hitPart.Position, velocity = targetRoot.Velocity })
+    local currentTime = tick()
+    positionHistory[#positionHistory + 1] = { pos = targetPos, time = currentTime }
     local historySize = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedPositionHistorySize.Value or GunSilent.FixedPredictionValues.PositionHistorySize
     while #positionHistory > historySize do
         table.remove(positionHistory, 1)
     end
 
-    local targetId = tostring(target.UserId)
-    local targetPos = hitPart.Position + Vector3.new(0, GunSilent.Settings.HitPartYOffset.Value, 0) -- Применяем смещение по Y
-    GunSilent.State.IsTeleporting = GunSilent.State.LastTargetPosition[targetId] and (targetPos - GunSilent.State.LastTargetPosition[targetId]).Magnitude > 50
-    GunSilent.State.LastTargetPosition[targetId] = targetPos
-
-    local targetTime = currentTime - ping
-    local pastPos, pastVel
-    if #positionHistory < 2 or GunSilent.State.IsTeleporting then
-        pastPos = targetPos
-        pastVel = targetRoot.Velocity
-    else
-        for i = 1, #positionHistory - 1 do
-            if positionHistory[i].time <= targetTime and positionHistory[i + 1].time >= targetTime then
-                local t = (targetTime - positionHistory[i].time) / (positionHistory[i + 1].time - positionHistory[i].time)
-                pastPos = positionHistory[i].position:Lerp(positionHistory[i + 1].position, t)
-                pastVel = positionHistory[i].velocity:Lerp(positionHistory[i + 1].velocity, t)
-                break
-            end
-        end
-        if not pastPos then
-            pastPos = positionHistory[#positionHistory].position
-            pastVel = positionHistory[#positionHistory].velocity
-        end
-    end
-
-    local maxSpeed = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedMaxSpeed.Value or GunSilent.FixedPredictionValues.MaxSpeed
-    if pastVel.Magnitude > maxSpeed then
-        pastVel = pastVel.Unit * maxSpeed
-    end
-
-    local isStationary = pastVel.Magnitude < 1 -- Цель считается неподвижной, если скорость < 1 stud/sec
-    local fakePos = myPos
-    if not isStationary and applyFakeDistance and GunSilent.Settings.FakeDistance.Value > 0 then
-        fakePos = pastPos - (pastPos - myPos).Unit * math.max(1, (pastPos - myPos).Magnitude - GunSilent.Settings.FakeDistance.Value)
-    end
-
-    local distance = (pastPos - fakePos).Magnitude
-    local realDistance = (pastPos - myPos).Magnitude
-    local timeToTarget = math.max(distance / bulletSpeed, 0.01)
-    local realTimeToTarget = math.max(realDistance / bulletSpeed, 0.01)
-
-    local predictedPos, realPredictedPos
-    if isStationary then
-        predictedPos = pastPos -- Для стоячих целей предсказание не нужно
-        realPredictedPos = pastPos
-    else
-        predictedPos = pastPos + pastVel * timeToTarget
-        realPredictedPos = pastPos + pastVel * realTimeToTarget
+    local effectiveVelocity = targetRoot.Velocity
+    local effectiveSpeed = effectiveVelocity.Magnitude
+    local teleportThreshold = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedTeleportThreshold.Value or GunSilent.FixedPredictionValues.TeleportThreshold
+    local maxSpeedLimit = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedMaxSpeed.Value or GunSilent.FixedPredictionValues.MaxSpeed
+    if effectiveSpeed > teleportThreshold then
+        effectiveVelocity = Vector3.new(0, 0, 0)
+        effectiveSpeed = 0
+        GunSilent.State.IsTeleporting = true
+    elseif effectiveSpeed > maxSpeedLimit then
+        effectiveVelocity = effectiveVelocity.Unit * maxSpeedLimit
     end
 
     local humanoid = targetChar:FindFirstChild("Humanoid")
     local isInVehicle = humanoid and humanoid.SeatPart ~= nil
-    if isInVehicle then
-        local yCorrection = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedVehicleYCorrection.Value or 0
-        predictedPos = predictedPos + Vector3.new(0, yCorrection, 0)
-        realPredictedPos = realPredictedPos + Vector3.new(0, yCorrection, 0)
+    local adjustedTimeToTarget = timeToTarget + GunSilent.Settings.LatencyCompensation.Value
+    local adjustedRealTimeToTarget = realTimeToTarget + GunSilent.Settings.LatencyCompensation.Value
+
+    local predictedPos, realPredictedPos = targetPos, targetPos
+    if not GunSilent.State.IsTeleporting then
+        local speedFactor = math.clamp(effectiveSpeed / (isInVehicle and 50 or 20), 0.5, isInVehicle and 2.5 or 1)
+        local predictionFactor = speedFactor * (isInVehicle and
+            (GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedVehicleFactor.Value or GunSilent.FixedPredictionValues.VehicleFactor) or
+            (GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedPedestrianFactor.Value or GunSilent.FixedPredictionValues.PedestrianFactor)) *
+            (GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedPredictionAggressiveness.Value or GunSilent.FixedPredictionValues.PredictionAggressiveness)
+
+        predictedPos = targetPos + effectiveVelocity * adjustedTimeToTarget * predictionFactor
+        realPredictedPos = targetPos + effectiveVelocity * adjustedRealTimeToTarget * predictionFactor
     end
 
     return {
-        position = realPredictedPos,
-        direction = (predictedPos - fakePos).Unit,
-        realDirection = (realPredictedPos - myPos).Unit,
+        position = predictedPos,
+        direction = (predictedPos - (fakePos + Vector3.new(0, 1.5, 0))).Unit,
+        realDirection = (realPredictedPos - (myPos + Vector3.new(0, 1.5, 0))).Unit,
         fakePosition = fakePos,
         timeToTarget = timeToTarget
     }
@@ -341,8 +305,8 @@ local function getAimCFrameGun(target)
     local localRoot = GunSilent.State.LocalRoot
     if not target or not target.Character or not localRoot then return nil end
     local prediction = predictTargetPositionGun(target, true)
-    if not prediction.position or not prediction.realDirection then return nil end
-    return CFrame.new(localRoot.Position, localRoot.Position + prediction.realDirection)
+    if not prediction.position or not prediction.direction then return nil end
+    return CFrame.new(localRoot.Position, localRoot.Position + prediction.direction)
 end
 
 local function createHitDataGun(target)
@@ -350,7 +314,7 @@ local function createHitDataGun(target)
     if not target or not target.Character or not localRoot then return nil end
     local targetChar = target.Character
     local prediction = predictTargetPositionGun(target, true)
-    if not prediction.position or not prediction.realDirection or not prediction.fakePosition then return nil end
+    if not prediction.position or not prediction.direction or not prediction.fakePosition then return nil end
 
     local hitPart = targetChar:FindFirstChild(GunSilent.Settings.HitPart.Value == "Random" and (math.random() > 0.5 and "Head" or "UpperTorso") or GunSilent.Settings.HitPart.Value) or targetChar:FindFirstChild("HumanoidRootPart")
     if not hitPart then return nil end
@@ -363,15 +327,19 @@ local function createHitDataGun(target)
 
     if useMultiBullets then
         for i = 1, numBullets do
-            hitData[i] = {{Normal = prediction.realDirection, Instance = hitPart, Position = prediction.position}}
+            hitData[i] = {{Normal = prediction.direction, Instance = hitPart, Position = prediction.position}}
         end
     else
-        hitData[1] = {{Normal = prediction.realDirection, Instance = hitPart, Position = prediction.position}}
+        hitData[1] = {{Normal = prediction.direction, Instance = hitPart, Position = prediction.position}}
     end
     return hitData
 end
 
-local function updateVisualsGun(target, hasWeapon, deltaTime)
+local function updateVisualsGun(target, hasWeapon)
+    local currentTime = tick()
+    if currentTime - GunSilent.State.LastVisualUpdateTime < GunSilent.Settings.VisualUpdateFrequency.Value then return end
+    GunSilent.State.LastVisualUpdateTime = currentTime
+
     local localRoot = GunSilent.State.LocalRoot
     if not GunSilent.Settings.Enabled.Value or not hasWeapon or not target or not target.Character or not localRoot then
         if GunSilent.State.TargetVisualPart then GunSilent.State.TargetVisualPart.Transparency = 1 end
@@ -385,12 +353,11 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
         end
         GunSilent.State.LastTargetPos = nil
         GunSilent.State.LastPredictionPos = nil
-        GunSilent.State.SmoothedVisualPositions = {}
         return
     end
 
     local prediction = predictTargetPositionGun(target, true)
-    if not prediction.position or not prediction.direction or not prediction.realDirection then return end
+    if not prediction.position or not prediction.direction then return end
 
     local targetChar = target.Character
     local targetHead = targetChar:FindFirstChild("Head") or targetChar:FindFirstChild("HumanoidRootPart")
@@ -402,11 +369,7 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
         (targetPos - GunSilent.State.LastTargetPos).Magnitude > 0.1 or (predictionPos - GunSilent.State.LastPredictionPos).Magnitude > 0.1
     GunSilent.State.LastTargetPos, GunSilent.State.LastPredictionPos = targetPos, predictionPos
 
-    local localHead = GunSilent.State.LocalCharacter and GunSilent.State.LocalCharacter:FindFirstChild("Head")
-    local startPos = localRoot.Position + Vector3.new(0, 1.5, 0) -- Корректируем startPos (примерно на уровне груди)
-    local smoothingFactor = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.SmoothingVisualFactor.Value or GunSilent.FixedPredictionValues.SmoothingVisualFactor
-    GunSilent.State.SmoothedVisualPositions = GunSilent.State.SmoothedVisualPositions or {}
-
+    local startPos = localRoot.Position + Vector3.new(0, 1.5, 0)
     if GunSilent.Settings.TargetVisual.Value and shouldUpdate then
         local targetVisualPart = GunSilent.State.TargetVisualPart
         if not targetVisualPart then
@@ -419,11 +382,8 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
             targetVisualPart.Parent = Workspace
             GunSilent.State.TargetVisualPart = targetVisualPart
         end
-        local currentPos = GunSilent.State.SmoothedVisualPositions.TargetVisual or targetHead.Position
-        local targetVisualPos = targetHead.Position
-        GunSilent.State.SmoothedVisualPositions.TargetVisual = currentPos:Lerp(targetVisualPos, smoothingFactor)
-        targetVisualPart.Position = GunSilent.State.SmoothedVisualPositions.TargetVisual
-        targetVisualPart.Transparency = 0.4
+        targetVisualPart.Position = targetHead.Position + Vector3.new(0, 3, 0)
+        targetVisualPart.Transparency = 0.5
     elseif GunSilent.State.TargetVisualPart then
         GunSilent.State.TargetVisualPart.Transparency = 1
     end
@@ -438,12 +398,9 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
             hitboxVisualPart.Parent = Workspace
             GunSilent.State.HitboxVisualPart = hitboxVisualPart
         end
-        local currentCFrame = GunSilent.State.SmoothedVisualPositions.HitboxVisual or hitPart.CFrame
-        local targetCFrame = hitPart.CFrame
-        GunSilent.State.SmoothedVisualPositions.HitboxVisual = currentCFrame:Lerp(targetCFrame, smoothingFactor)
         hitboxVisualPart.Size = hitPart.Size + Vector3.new(0.2, 0.2, 0.2)
-        hitboxVisualPart.CFrame = GunSilent.State.SmoothedVisualPositions.HitboxVisual
-        hitboxVisualPart.Transparency = 0.6
+        hitboxVisualPart.CFrame = hitPart.CFrame
+        hitboxVisualPart.Transparency = 0.7
     elseif GunSilent.State.HitboxVisualPart then
         GunSilent.State.HitboxVisualPart.Transparency = 1
     end
@@ -459,11 +416,9 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
             predictVisualPart.Parent = Workspace
             GunSilent.State.PredictVisualPart = predictVisualPart
         end
-        local currentPos = GunSilent.State.SmoothedVisualPositions.PredictVisual or prediction.position
-        GunSilent.State.SmoothedVisualPositions.PredictVisual = currentPos:Lerp(prediction.position, smoothingFactor)
-        predictVisualPart.Position = GunSilent.State.SmoothedVisualPositions.PredictVisual
+        predictVisualPart.Position = prediction.position
         predictVisualPart.Color = GunSilent.State.IsTeleporting and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(0, 255, 255)
-        predictVisualPart.Transparency = 0.2
+        predictVisualPart.Transparency = 0.3
     elseif GunSilent.State.PredictVisualPart then
         GunSilent.State.PredictVisualPart.Transparency = 1
     end
@@ -482,26 +437,19 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
         local realDirectionVisualPart = GunSilent.State.RealDirectionVisualPart
         if not realDirectionVisualPart then
             realDirectionVisualPart = Instance.new("Part")
-            realDirectionVisualPart.Size = Vector3.new(0.3, 0.3, 6)
+            realDirectionVisualPart.Size = Vector3.new(0.2, 0.2, 5)
             realDirectionVisualPart.Anchored = true
             realDirectionVisualPart.CanCollide = false
-            realDirectionVisualPart.Color = Color3.fromRGB(0, 255, 0)
+            realDirectionVisualPart.Color = Color3.fromRGB(255, 255, 255)
             realDirectionVisualPart.Parent = Workspace
             GunSilent.State.RealDirectionVisualPart = realDirectionVisualPart
         end
-        local currentDirectionCFrame = GunSilent.State.SmoothedVisualPositions.DirectionVisual or CFrame.new(startPos, startPos + prediction.direction)
-        local targetDirectionCFrame = CFrame.lookAt(startPos, startPos + (prediction.direction * 5))
-        GunSilent.State.SmoothedVisualPositions.DirectionVisual = currentDirectionCFrame:Lerp(targetDirectionCFrame, smoothingFactor)
-        directionVisualPart.CFrame = GunSilent.State.SmoothedVisualPositions.DirectionVisual
+        directionVisualPart.CFrame = CFrame.lookAt(startPos, startPos + (prediction.direction * 5))
         directionVisualPart.Position = startPos + (prediction.direction * 2.5)
-        directionVisualPart.Transparency = 0.4
-
-        local currentRealDirectionCFrame = GunSilent.State.SmoothedVisualPositions.RealDirectionVisual or CFrame.new(startPos, startPos + prediction.realDirection)
-        local targetRealDirectionCFrame = CFrame.lookAt(startPos, startPos + (prediction.realDirection * 5))
-        GunSilent.State.SmoothedVisualPositions.RealDirectionVisual = currentRealDirectionCFrame:Lerp(targetRealDirectionCFrame, smoothingFactor)
-        realDirectionVisualPart.CFrame = GunSilent.State.SmoothedVisualPositions.RealDirectionVisual
-        realDirectionVisualPart.Position = startPos + (prediction.realDirection * 3)
-        realDirectionVisualPart.Transparency = 0.3
+        directionVisualPart.Transparency = 0.5
+        realDirectionVisualPart.CFrame = CFrame.lookAt(startPos, startPos + (prediction.realDirection * 5))
+        realDirectionVisualPart.Position = startPos + (prediction.realDirection * 2.5)
+        realDirectionVisualPart.Transparency = 0.5
     elseif GunSilent.State.DirectionVisualPart then
         GunSilent.State.DirectionVisualPart.Transparency = 1
         GunSilent.State.RealDirectionVisualPart.Transparency = 1
@@ -512,9 +460,9 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
         if not trajectoryBeam then
             trajectoryBeam = Instance.new("Beam")
             trajectoryBeam.FaceCamera = true
-            trajectoryBeam.Width0 = 0.3
-            trajectoryBeam.Width1 = 0.3
-            trajectoryBeam.Transparency = NumberSequence.new(0.4)
+            trajectoryBeam.Width0 = 0.2
+            trajectoryBeam.Width1 = 0.2
+            trajectoryBeam.Transparency = NumberSequence.new(0.5)
             trajectoryBeam.Color = ColorSequence.new(Color3.fromRGB(147, 112, 219))
             trajectoryBeam.Parent = Workspace
             local attachment0 = Instance.new("Attachment")
@@ -523,28 +471,8 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
             trajectoryBeam.Attachment1 = attachment1
             GunSilent.State.TrajectoryBeam = trajectoryBeam
         end
-        local currentAttachment0Pos = GunSilent.State.SmoothedVisualPositions.TrajectoryBeam0 or startPos
-        local currentAttachment1Pos = GunSilent.State.SmoothedVisualPositions.TrajectoryBeam1 or prediction.position
-        GunSilent.State.SmoothedVisualPositions.TrajectoryBeam0 = currentAttachment0Pos:Lerp(startPos, smoothingFactor)
-        GunSilent.State.SmoothedVisualPositions.TrajectoryBeam1 = currentAttachment1Pos:Lerp(prediction.position, smoothingFactor)
-        trajectoryBeam.Attachment0.WorldPosition = GunSilent.State.SmoothedVisualPositions.TrajectoryBeam0
-        trajectoryBeam.Attachment1.WorldPosition = GunSilent.State.SmoothedVisualPositions.TrajectoryBeam1
-        trajectoryBeam.Attachment0.Parent = localHead or localRoot
-        if GunSilent.State.PredictVisualPart then
-            trajectoryBeam.Attachment1.Parent = GunSilent.State.PredictVisualPart
-        else
-            local tempPart = Instance.new("Part")
-            tempPart.Size = Vector3.new(0.1, 0.1, 0.1)
-            tempPart.Position = prediction.position
-            tempPart.Anchored = true
-            tempPart.CanCollide = false
-            tempPart.Transparency = 1
-            tempPart.Parent = Workspace
-            trajectoryBeam.Attachment1.Parent = tempPart
-            RunService.Heartbeat:Once(function()
-                tempPart:Destroy()
-            end)
-        end
+        trajectoryBeam.Attachment0.Parent = localRoot
+        trajectoryBeam.Attachment1.Parent = GunSilent.State.PredictVisualPart
         trajectoryBeam.Enabled = true
     elseif GunSilent.State.TrajectoryBeam then
         GunSilent.State.TrajectoryBeam.Enabled = false
@@ -566,18 +494,17 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
             end
             GunSilent.State.FullTrajectoryParts = fullTrajectoryParts
         end
-        local bulletSpeed = GunSilent.Settings.PredictBullet.Value
+        local bulletSpeed = 2500
+        local gravity = Vector3.new(0, -Workspace.Gravity, 0)
         local distance = (prediction.position - startPos).Magnitude
         local steps = 5
         local stepTime = prediction.timeToTarget / steps
 
         for i = 0, steps - 1 do
             local t = stepTime * i
-            local pos = startPos + (prediction.realDirection * bulletSpeed * t)
-            local currentPos = GunSilent.State.SmoothedVisualPositions["FullTrajectory" .. i] or pos
-            GunSilent.State.SmoothedVisualPositions["FullTrajectory" .. i] = currentPos:Lerp(pos, smoothingFactor)
-            fullTrajectoryParts[i + 1].Position = GunSilent.State.SmoothedVisualPositions["FullTrajectory" .. i]
-            fullTrajectoryParts[i + 1].Transparency = 0.4
+            local pos = startPos + (prediction.direction * bulletSpeed * t) + (0.5 * gravity * t * t * math.clamp(distance / 100, 0.5, 2))
+            fullTrajectoryParts[i + 1].Position = pos
+            fullTrajectoryParts[i + 1].Transparency = 0.5
         end
     elseif GunSilent.State.FullTrajectoryParts then
         for _, part in pairs(GunSilent.State.FullTrajectoryParts) do
@@ -611,12 +538,6 @@ local function initializeGunSilent()
                         local aimCFrame = getAimCFrameGun(nearestPlayer)
                         local hitData = createHitDataGun(nearestPlayer)
                         if aimCFrame and hitData then
-                            if GunSilent.State.LocalCharacter then
-                                local localHead = GunSilent.State.LocalCharacter:FindFirstChild("Head")
-                                if localHead then
-                                    aimCFrame = CFrame.new(localHead.Position, localHead.Position + (aimCFrame.Position - localHead.Position).Unit)
-                                end
-                            end
                             modifiedArgs = {args[1], args[2], equippedTool, aimCFrame, hitData}
                         end
                     end
@@ -639,7 +560,6 @@ local function initializeGunSilent()
         if not GunSilent.Settings.Enabled.Value then
             if GunSilent.State.FovCircle then GunSilent.State.FovCircle.Visible = false end
             GunSilent.Core.GunSilentTarget.CurrentTarget = nil
-            updateVisualsGun(nil, false, deltaTime)
             return
         end
 
@@ -659,13 +579,13 @@ local function initializeGunSilent()
         updateFovCircle(deltaTime)
         if not currentTool then
             GunSilent.Core.GunSilentTarget.CurrentTarget = nil
-            updateVisualsGun(nil, false, deltaTime)
+            updateVisualsGun(nil, false)
             return
         end
 
         local gunRange = getGunRange(currentTool)
         local nearestPlayer = getNearestPlayerGun(gunRange)
-        updateVisualsGun(nearestPlayer, true, deltaTime)
+        updateVisualsGun(nearestPlayer, true)
         if GunSilent.Settings.Rage.Value and GunSilent.State.V_U_4 and nearestPlayer then
             local aimCFrame = getAimCFrameGun(nearestPlayer)
             local hitData = createHitDataGun(nearestPlayer)
@@ -697,6 +617,7 @@ local function Init(UI, Core, notify)
     if UI.Tabs.Combat then
         UI.Sections.GunSilent = UI.Tabs.Combat:Section({ Side = "Right", Name = "GunSilent" })
         if UI.Sections.GunSilent then
+            -- Таблица для хранения UI-элементов и их коллбэков
             local uiElements = {}
 
             UI.Sections.GunSilent:Header({ Name = "GunSilent" })
@@ -806,23 +727,6 @@ local function Init(UI, Core, notify)
                 callback = function(value)
                     GunSilent.Settings.HitPart.Value = value
                     notify("GunSilent", "Hit Part set to: " .. value, true)
-                end
-            }
-            uiElements.HitPartYOffset = {
-                element = UI.Sections.GunSilent:Slider({
-                    Name = "Hit Part Y Offset",
-                    Minimum = -2,
-                    Maximum = 2,
-                    Default = GunSilent.Settings.HitPartYOffset.Value,
-                    Precision = 1,
-                    Callback = function(value)
-                        GunSilent.Settings.HitPartYOffset.Value = value
-                        notify("GunSilent", "Hit Part Y Offset set to: " .. value, false)
-                    end
-                }, 'HitPartYOffset'),
-                callback = function(value)
-                    GunSilent.Settings.HitPartYOffset.Value = value
-                    notify("GunSilent", "Hit Part Y Offset set to: " .. value, false)
                 end
             }
             uiElements.FakeDistance = {
@@ -1116,23 +1020,6 @@ local function Init(UI, Core, notify)
                     notify("GunSilent", "Latency Compensation set to: " .. value .. "s", false)
                 end
             }
-            uiElements.PingEstimate = {
-                element = UI.Sections.GunSilent:Slider({
-                    Name = "Ping Estimate",
-                    Minimum = 0.0,
-                    Maximum = 0.5,
-                    Default = GunSilent.Settings.PingEstimate.Value,
-                    Precision = 3,
-                    Callback = function(value)
-                        GunSilent.Settings.PingEstimate.Value = value
-                        notify("GunSilent", "Ping Estimate set to: " .. value .. "s", false)
-                    end
-                }, 'PingEstimate'),
-                callback = function(value)
-                    GunSilent.Settings.PingEstimate.Value = value
-                    notify("GunSilent", "Ping Estimate set to: " .. value .. "s", false)
-                end
-            }
             UI.Sections.GunSilent:Header({ Name = "Prediction Settings" })
             uiElements.AdvancedPrediction = {
                 element = UI.Sections.GunSilent:Toggle({
@@ -1148,21 +1035,106 @@ local function Init(UI, Core, notify)
                     notify("GunSilent", "Advanced Prediction " .. (value and "Enabled" or "Disabled"), true)
                 end
             }
-            uiElements.VehicleYCorrection = {
+            uiElements.VehicleFactor = {
                 element = UI.Sections.GunSilent:Slider({
-                    Name = "Vehicle Y Correction",
-                    Minimum = 0,
-                    Maximum = 5,
-                    Default = GunSilent.Settings.AdvancedVehicleYCorrection.Value,
+                    Name = "Vehicle Factor",
+                    Minimum = 0.1,
+                    Maximum = 2.0,
+                    Default = GunSilent.Settings.AdvancedVehicleFactor.Value,
                     Precision = 2,
                     Callback = function(value)
-                        GunSilent.Settings.AdvancedVehicleYCorrection.Value = value
-                        notify("GunSilent", "Vehicle Y Correction set to: " .. value, false)
+                        GunSilent.Settings.AdvancedVehicleFactor.Value = value
+                        notify("GunSilent", "Vehicle Prediction Factor set to: " .. value, false)
                     end
-                }, 'VehicleYCorrection'),
+                }, 'VehicleFactor'),
                 callback = function(value)
-                    GunSilent.Settings.AdvancedVehicleYCorrection.Value = value
-                    notify("GunSilent", "Vehicle Y Correction set to: " .. value, false)
+                    GunSilent.Settings.AdvancedVehicleFactor.Value = value
+                    notify("GunSilent", "Vehicle Prediction Factor set to: " .. value, false)
+                end
+            }
+            uiElements.PlayerFactor = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Player Factor",
+                    Minimum = 0.1,
+                    Maximum = 2.0,
+                    Default = GunSilent.Settings.AdvancedPedestrianFactor.Value,
+                    Precision = 2,
+                    Callback = function(value)
+                        GunSilent.Settings.AdvancedPedestrianFactor.Value = value
+                        notify("GunSilent", "Pedestrian Prediction Factor set to: " .. value, false)
+                    end
+                }, 'PlayerFactor'),
+                callback = function(value)
+                    GunSilent.Settings.AdvancedPedestrianFactor.Value = value
+                    notify("GunSilent", "Pedestrian Prediction Factor set to: " .. value, false)
+                end
+            }
+            uiElements.Agressivness = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Agressivness",
+                    Minimum = 0.4,
+                    Maximum = 2.1,
+                    Default = GunSilent.Settings.AdvancedPredictionAggressiveness.Value,
+                    Precision = 2,
+                    Callback = function(value)
+                        GunSilent.Settings.AdvancedPredictionAggressiveness.Value = value
+                        notify("GunSilent", "Prediction Aggressiveness set to: " .. value, false)
+                    end
+                }, 'Agressivness'),
+                callback = function(value)
+                    GunSilent.Settings.AdvancedPredictionAggressiveness.Value = value
+                    notify("GunSilent", "Prediction Aggressiveness set to: " .. value, false)
+                end
+            }
+            uiElements.LowDistanceMulti = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "LowDistanceMulti",
+                    Minimum = 0.4,
+                    Maximum = 2.1,
+                    Default = GunSilent.Settings.AdvancedSmallDistanceSpeedFactorMultiplier.Value,
+                    Precision = 2,
+                    Callback = function(value)
+                        GunSilent.Settings.AdvancedSmallDistanceSpeedFactorMultiplier.Value = value
+                        notify("GunSilent", "Small Distance Speed Multiplier set to: " .. value, false)
+                    end
+                }, 'LowDistanceMulti'),
+                callback = function(value)
+                    GunSilent.Settings.AdvancedSmallDistanceSpeedFactorMultiplier.Value = value
+                    notify("GunSilent", "Small Distance Speed Multiplier set to: " .. value, false)
+                end
+            }
+            uiElements.SlowVehicleMulti = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "SlowVehicleMulti",
+                    Minimum = 0.5,
+                    Maximum = 3.0,
+                    Default = GunSilent.Settings.AdvancedSlowVehiclePredictionFactor.Value,
+                    Precision = 2,
+                    Callback = function(value)
+                        GunSilent.Settings.AdvancedSlowVehiclePredictionFactor.Value = value
+                        notify("GunSilent", "Slow Vehicle Prediction Factor set to: " .. value, false)
+                    end
+                }, 'SlowVehicleMulti'),
+                callback = function(value)
+                    GunSilent.Settings.AdvancedSlowVehiclePredictionFactor.Value = value
+                    notify("GunSilent", "Slow Vehicle Prediction Factor set to: " .. value, false)
+                end
+            }
+            uiElements.FastPredictionLimit = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "FastPredictionLimit",
+                    Minimum = 1.0,
+                    Maximum = 5.0,
+                    Default = GunSilent.Settings.AdvancedFastVehiclePredictionLimit.Value,
+                    Precision = 1,
+                    Callback = function(value)
+                        GunSilent.Settings.AdvancedFastVehiclePredictionLimit.Value = value
+                        notify("GunSilent", "Fast Vehicle Prediction Limit set to: " .. value, false)
+                    end
+                }, 'FastPredictionLimit'),
+                callback = function(value)
+                    GunSilent.Settings.AdvancedFastVehiclePredictionLimit.Value = value
+                    notify("GunSilent", "Fast Vehicle Prediction Limit set to: " .. value, false)
                 end
             }
             uiElements.PositionHistory = {
@@ -1199,21 +1171,38 @@ local function Init(UI, Core, notify)
                     notify("GunSilent", "Smoothing Factor set to: " .. value, false)
                 end
             }
-            uiElements.SmoothingVisualFactor = {
+            uiElements.VehicleYCorrection = {
                 element = UI.Sections.GunSilent:Slider({
-                    Name = "Visual Smoothing Factor",
-                    Minimum = 0.1,
-                    Maximum = 0.9,
-                    Default = GunSilent.Settings.SmoothingVisualFactor.Value,
-                    Precision = 1,
+                    Name = "Vehicle Y Correction",
+                    Minimum = 0,
+                    Maximum = 5,
+                    Default = GunSilent.Settings.AdvancedVehicleYCorrection.Value,
+                    Precision = 2,
                     Callback = function(value)
-                        GunSilent.Settings.SmoothingVisualFactor.Value = value
-                        notify("GunSilent", "Visual Smoothing Factor set to: " .. value, false)
+                        GunSilent.Settings.AdvancedVehicleYCorrection.Value = value
+                        notify("GunSilent", "Vehicle Y Correction set to: " .. value, false)
                     end
-                }, 'SmoothingVisualFactor'),
+                }, 'VehicleYCorrection'),
                 callback = function(value)
-                    GunSilent.Settings.SmoothingVisualFactor.Value = value
-                    notify("GunSilent", "Visual Smoothing Factor set to: " .. value, false)
+                    GunSilent.Settings.AdvancedVehicleYCorrection.Value = value
+                    notify("GunSilent", "Vehicle Y Correction set to: " .. value, false)
+                end
+            }
+            uiElements.VisualUpdate = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Visual Update Frequency",
+                    Minimum = 0.01,
+                    Maximum = 0.2,
+                    Default = GunSilent.Settings.VisualUpdateFrequency.Value,
+                    Precision = 2,
+                    Callback = function(value)
+                        GunSilent.Settings.VisualUpdateFrequency.Value = value
+                        notify("GunSilent", "Visual Update Frequency set to: " .. value .. " seconds", false)
+                    end
+                }, 'VisualUpdate'),
+                callback = function(value)
+                    GunSilent.Settings.VisualUpdateFrequency.Value = value
+                    notify("GunSilent", "Visual Update Frequency set to: " .. value .. " seconds", false)
                 end
             }
             uiElements.TeleportSpeed = {
@@ -1268,15 +1257,24 @@ local function Init(UI, Core, notify)
                 end
             }
 
+            -- Добавляем кнопку синхронизации
             UI.Sections.GunSilent:Button({
                 Name = "Sync Settings",
                 Callback = function()
+                    -- Синхронизация через вызов коллбэков с текущими значениями UI
                     uiElements.GSEnabled.callback(uiElements.GSEnabled.element:GetState())
                     uiElements.RangePlus.callback(uiElements.RangePlus.element:GetValue())
                     uiElements.Rage.callback(uiElements.Rage.element:GetState())
+                    -- RageKeybind и DoubleTapKeybind пропускаем, так как они не имеют значений для синхронизации
                     uiElements.DoubleTap.callback(uiElements.DoubleTap.element:GetState())
-                    uiElements.HitPart.callback(uiElements.HitPart.element:GetValue())
-                    uiElements.HitPartYOffset.callback(uiElements.HitPartYOffset.element:GetValue())
+                    -- Для Dropdown нужно найти выбранную опцию
+                    local hitPartOptions = uiElements.HitPart.element:GetOptions()
+                    for option, selected in pairs(hitPartOptions) do
+                        if selected then
+                            uiElements.HitPart.callback(option)
+                            break
+                        end
+                    end
                     uiElements.FakeDistance.callback(uiElements.FakeDistance.element:GetValue())
                     uiElements.ShotgunSupport.callback(uiElements.ShotgunSupport.element:GetState())
                     uiElements.GenerateBullets.callback(uiElements.GenerateBullets.element:GetValue())
@@ -1284,10 +1282,22 @@ local function Init(UI, Core, notify)
                     uiElements.GSUSEFOV.callback(uiElements.GSUSEFOV.element:GetState())
                     uiElements.GSFOV.callback(uiElements.GSFOV.element:GetValue())
                     uiElements.GSShowCircle.callback(uiElements.GSShowCircle.element:GetState())
-                    uiElements.GSCircleMethod.callback(uiElements.GSCircleMethod.element:GetValue())
+                    local circleMethodOptions = uiElements.GSCircleMethod.element:GetOptions()
+                    for option, selected in pairs(circleMethodOptions) do
+                        if selected then
+                            uiElements.GSCircleMethod.callback(option)
+                            break
+                        end
+                    end
                     uiElements.GSGradientCircle.callback(uiElements.GSGradientCircle.element:GetState())
                     uiElements.GSGradientSpeed.callback(uiElements.GSGradientSpeed.element:GetValue())
-                    uiElements.SortMethod.callback(uiElements.SortMethod.element:GetValue())
+                    local sortMethodOptions = uiElements.SortMethod.element:GetOptions()
+                    for option, selected in pairs(sortMethodOptions) do
+                        if selected then
+                            uiElements.SortMethod.callback(option)
+                            break
+                        end
+                    end
                     uiElements.TargetVisual.callback(uiElements.TargetVisual.element:GetState())
                     uiElements.HitboxVisual.callback(uiElements.HitboxVisual.element:GetState())
                     uiElements.PredictVisual.callback(uiElements.PredictVisual.element:GetState())
@@ -1296,12 +1306,17 @@ local function Init(UI, Core, notify)
                     uiElements.ShowFullTrajectory.callback(uiElements.ShowFullTrajectory.element:GetState())
                     uiElements.HitChance.callback(uiElements.HitChance.element:GetValue())
                     uiElements.LatencyCompensation.callback(uiElements.LatencyCompensation.element:GetValue())
-                    uiElements.PingEstimate.callback(uiElements.PingEstimate.element:GetValue())
                     uiElements.AdvancedPrediction.callback(uiElements.AdvancedPrediction.element:GetState())
-                    uiElements.VehicleYCorrection.callback(uiElements.VehicleYCorrection.element:GetValue())
+                    uiElements.VehicleFactor.callback(uiElements.VehicleFactor.element:GetValue())
+                    uiElements.PlayerFactor.callback(uiElements.PlayerFactor.element:GetValue())
+                    uiElements.Agressivness.callback(uiElements.Agressivness.element:GetValue())
+                    uiElements.LowDistanceMulti.callback(uiElements.LowDistanceMulti.element:GetValue())
+                    uiElements.SlowVehicleMulti.callback(uiElements.SlowVehicleMulti.element:GetValue())
+                    uiElements.FastPredictionLimit.callback(uiElements.FastPredictionLimit.element:GetValue())
                     uiElements.PositionHistory.callback(uiElements.PositionHistory.element:GetValue())
                     uiElements.SmoothingFactor.callback(uiElements.SmoothingFactor.element:GetValue())
-                    uiElements.SmoothingVisualFactor.callback(uiElements.SmoothingVisualFactor.element:GetValue())
+                    uiElements.VehicleYCorrection.callback(uiElements.VehicleYCorrection.element:GetValue())
+                    uiElements.VisualUpdate.callback(uiElements.VisualUpdate.element:GetValue())
                     uiElements.TeleportSpeed.callback(uiElements.TeleportSpeed.element:GetValue())
                     uiElements.TPLimit.callback(uiElements.TPLimit.element:GetValue())
                     uiElements.BulletSpeed.callback(uiElements.BulletSpeed.element:GetValue())
