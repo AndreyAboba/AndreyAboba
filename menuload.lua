@@ -1,7 +1,6 @@
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
-local Stats = game:GetService("Stats")
 
 local GunSilent = {
     Settings = {
@@ -31,6 +30,7 @@ local GunSilent = {
         SmoothingVisualFactor = { Value = 0.3, Default = 0.3 },
         AdvancedPositionHistorySize = { Value = 20, Default = 20 },
         LatencyCompensation = { Value = 0.2, Default = 0.2 },
+        PingEstimate = { Value = 0.1, Default = 0.1 }, -- Новое поле для оценки пинга
         ShowTrajectoryBeam = { Value = true, Default = true },
         ShowFullTrajectory = { Value = true, Default = true },
         ShotgunSupport = { Value = false, Default = false },
@@ -72,24 +72,9 @@ local GunSilent = {
         LocalRoot = nil,
         LastTargetPos = nil,
         LastPredictionPos = nil,
-        CachedPing = 0.1,
         SmoothedVisualPositions = {}
     }
 }
-
-local function getSmoothedPing()
-    local success, ping = pcall(function()
-        local dataPing = Stats.Network.ServerStatsItem["Data Ping"]
-        return (dataPing and (dataPing.GetValue and dataPing:GetValue() or dataPing.Value) or 100) / 1000
-    end)
-    if not success then
-        warn("Ошибка получения пинга:", ping)
-        return GunSilent.State.CachedPing
-    end
-    local smoothingFactor = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedSmoothingFactor.Value or GunSilent.FixedPredictionValues.SmoothingFactor
-    GunSilent.State.CachedPing = GunSilent.State.CachedPing * (1 - smoothingFactor) + ping * smoothingFactor
-    return GunSilent.State.CachedPing
-end
 
 local function isGunTool(tool)
     local items = game:GetService("ReplicatedStorage"):FindFirstChild("Items")
@@ -250,7 +235,7 @@ local function predictTargetPositionGun(target, applyFakeDistance)
     end
 
     local currentTime = tick()
-    local ping = getSmoothedPing()
+    local ping = GunSilent.Settings.PingEstimate.Value -- Используем фиксированное значение пинга
     local bulletSpeed = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.PredictBullet.Value or GunSilent.FixedPredictionValues.PredictBullet
 
     local positionHistory = GunSilent.State.PositionHistory[target] or {}
@@ -1079,6 +1064,23 @@ local function Init(UI, Core, notify)
                     notify("GunSilent", "Latency Compensation set to: " .. value .. "s", false)
                 end
             }
+            uiElements.PingEstimate = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Ping Estimate",
+                    Minimum = 0.0,
+                    Maximum = 0.5,
+                    Default = GunSilent.Settings.PingEstimate.Value,
+                    Precision = 3,
+                    Callback = function(value)
+                        GunSilent.Settings.PingEstimate.Value = value
+                        notify("GunSilent", "Ping Estimate set to: " .. value .. "s", false)
+                    end
+                }, 'PingEstimate'),
+                callback = function(value)
+                    GunSilent.Settings.PingEstimate.Value = value
+                    notify("GunSilent", "Ping Estimate set to: " .. value .. "s", false)
+                end
+            }
             UI.Sections.GunSilent:Header({ Name = "Prediction Settings" })
             uiElements.AdvancedPrediction = {
                 element = UI.Sections.GunSilent:Toggle({
@@ -1259,6 +1261,7 @@ local function Init(UI, Core, notify)
                     uiElements.ShowFullTrajectory.callback(uiElements.ShowFullTrajectory.element:GetState())
                     uiElements.HitChance.callback(uiElements.HitChance.element:GetValue())
                     uiElements.LatencyCompensation.callback(uiElements.LatencyCompensation.element:GetValue())
+                    uiElements.PingEstimate.callback(uiElements.PingEstimate.element:GetValue())
                     uiElements.AdvancedPrediction.callback(uiElements.AdvancedPrediction.element:GetState())
                     uiElements.VehicleYCorrection.callback(uiElements.VehicleYCorrection.element:GetValue())
                     uiElements.PositionHistory.callback(uiElements.PositionHistory.element:GetValue())
