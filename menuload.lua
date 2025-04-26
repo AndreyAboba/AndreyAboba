@@ -84,7 +84,7 @@ local GunSilent = {
         LocalRoot = nil,
         LastTargetPos = nil,
         LastPredictionPos = nil,
-        TrackTargetHitboxes = nil, -- Для хранения чамсов TrackTarget
+        TrackTargetHitboxes = nil, -- Хранилище для чамсов
     }
 }
 
@@ -232,9 +232,7 @@ local function getNearestPlayerGun(gunRange)
     return nearestPlayer
 end
 
--- Умная функция предикции с учётом серверного рассинхрона
 local function predictTargetPositionGun(target, applyFakeDistance)
-    -- Базовые проверки
     local localRoot = GunSilent.State.LocalRoot
     if not target or not target.Character or not localRoot then
         return { position = nil, direction = nil, realDirection = nil, fakePosition = nil, timeToTarget = 0 }
@@ -248,21 +246,18 @@ local function predictTargetPositionGun(target, applyFakeDistance)
         return { position = nil, direction = nil, realDirection = nil, fakePosition = nil, timeToTarget = 0 }
     end
 
-    -- Текущая позиция цели (реальная модель)
     local targetPos = hitPart.Position
     if not targetPos then
         warn("targetPos is nil in predictTargetPositionGun")
         return { position = nil, direction = nil, realDirection = nil, fakePosition = nil, timeToTarget = 0 }
     end
 
-    -- Проверяем FakeDistance.Value
     local fakeDistanceValue = GunSilent.Settings.FakeDistance.Value
     if fakeDistanceValue == nil then
         warn("FakeDistance.Value is nil, using default value of 3")
         fakeDistanceValue = 3
     end
 
-    -- Вычисляем fakePos (дистанция не важна, но оставим для совместимости)
     local vectorToTarget = targetPos - myPos
     local magnitudeToTarget = vectorToTarget.Magnitude
     local fakePos
@@ -279,7 +274,6 @@ local function predictTargetPositionGun(target, applyFakeDistance)
         fakePos = myPos
     end
 
-    -- Вычисляем расстояния (нужны только для timeToTarget)
     local distance = (targetPos - fakePos).Magnitude
     local realDistance = (targetPos - myPos).Magnitude
     if not distance or not realDistance then
@@ -288,31 +282,26 @@ local function predictTargetPositionGun(target, applyFakeDistance)
         realDistance = realDistance or 1
     end
 
-    -- Проверяем bulletSpeed
     local bulletSpeed = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.PredictBullet.Value or GunSilent.FixedPredictionValues.PredictBullet
     if not bulletSpeed then
         warn("bulletSpeed is nil, using default value of 2500")
         bulletSpeed = 2500
     end
 
-    -- Вычисляем время до цели (хотя дистанция не важна, оставим для расчётов)
     local timeToTarget = distance / bulletSpeed
     local realTimeToTarget = realDistance / bulletSpeed
 
-    -- Учитываем пинг (серверный рассинхрон)
     local latency = GunSilent.Settings.LatencyCompensation.Value or 0.2
-    local ping = latency -- В реальной игре нужно получить пинг, но пока используем latency
+    local ping = latency
     local adjustedTimeToTarget = timeToTarget + ping
     local adjustedRealTimeToTarget = realTimeToTarget + ping
 
-    -- Получаем скорость цели
     local velocity = targetRoot.Velocity
     if not velocity then
         warn("Velocity is nil, assuming zero velocity")
         velocity = Vector3.new(0, 0, 0)
     end
 
-    -- Ограничиваем скорость, чтобы избежать телепортации
     local speed = velocity.Magnitude
     local teleportThreshold = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedTeleportThreshold.Value or GunSilent.FixedPredictionValues.TeleportThreshold
     local maxSpeedLimit = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedMaxSpeed.Value or GunSilent.FixedPredictionValues.MaxSpeed
@@ -323,34 +312,27 @@ local function predictTargetPositionGun(target, applyFakeDistance)
         velocity = velocity.Unit * maxSpeedLimit
     end
 
-    -- Учитываем состояние игрока (прыжки, бег)
     local humanoid = targetChar:FindFirstChild("Humanoid")
     local isJumping = humanoid and humanoid.Jump
-    local isMoving = speed > 5 -- Пороговое значение скорости для движения
+    local isMoving = speed > 5
     local gravity = Vector3.new(0, -Workspace.Gravity, 0)
 
-    -- Базовая предикция: position + velocity * time
     local predictedPos = targetPos + velocity * adjustedTimeToTarget
     local realPredictedPos = targetPos + velocity * adjustedRealTimeToTarget
 
-    -- Корректировка на прыжки (если игрок в воздухе)
     if isJumping then
-        -- Учитываем гравитацию: y(t) = v_y * t + (1/2) * g * t^2
         local jumpTime = adjustedTimeToTarget
         local gravityOffset = 0.5 * gravity * jumpTime * jumpTime
         predictedPos = predictedPos + gravityOffset
         realPredictedPos = realPredictedPos + gravityOffset
     end
 
-    -- Корректировка на движение (ускорение)
     if isMoving then
-        -- Увеличиваем предикцию для движущихся целей
-        local movementFactor = 1.2 -- Умножаем предикцию для компенсации рассинхрона
+        local movementFactor = 1.2
         predictedPos = targetPos + (velocity * adjustedTimeToTarget * movementFactor)
         realPredictedPos = targetPos + (velocity * adjustedRealTimeToTarget * movementFactor)
     end
 
-    -- Возвращаем результат
     return {
         position = predictedPos,
         direction = (predictedPos - (fakePos + Vector3.new(0, 1.5, 0))).Unit,
@@ -400,14 +382,12 @@ local function SetupTrackTargetHitboxes(character, predictedPos, targetRoot)
         return nil
     end
 
-    -- Удаляем старые чамсы
     for _, child in pairs(character:GetChildren()) do
         if child.Name:match("TrackTargetHitbox_") then
             child:Destroy()
         end
     end
 
-    -- Список частей тела (R15 и R6)
     local bodyParts = {
         "Head",
         "UpperTorso",
@@ -432,17 +412,15 @@ local function SetupTrackTargetHitboxes(character, predictedPos, targetRoot)
     for _, partName in ipairs(bodyParts) do
         local bodyPart = character:FindFirstChild(partName)
         if bodyPart and bodyPart:IsA("BasePart") then
-            -- Создаём чамс для части тела
             local hitboxPart = Instance.new("Part")
             hitboxPart.Name = "TrackTargetHitbox_" .. partName
             hitboxPart.Anchored = true
             hitboxPart.CanCollide = false
-            hitboxPart.Size = bodyPart.Size * 1.1 -- Увеличиваем размер для наглядности
+            hitboxPart.Size = bodyPart.Size * 1.1
             hitboxPart.Transparency = 0.5
-            hitboxPart.Color = Color3.fromRGB(255, 0, 255) -- Фиолетовый цвет, как в антиаиме
+            hitboxPart.Color = Color3.fromRGB(255, 0, 255)
             hitboxPart.Parent = character
 
-            -- Сохраняем относительный CFrame для синхронизации с предсказанной позицией
             local relativeCFrame = targetRoot.CFrame:ToObjectSpace(bodyPart.CFrame)
             hitboxes[partName] = {
                 Part = hitboxPart,
@@ -455,7 +433,6 @@ local function SetupTrackTargetHitboxes(character, predictedPos, targetRoot)
     return hitboxes
 end
 
--- Обновлённая функция визуализации с TrackTarget
 local function updateVisualsGun(target, hasWeapon)
     local currentTime = tick()
     if currentTime - GunSilent.State.LastVisualUpdateTime < GunSilent.Settings.VisualUpdateFrequency.Value then return end
@@ -642,16 +619,12 @@ local function updateVisualsGun(target, hasWeapon)
         end
     end
 
-    -- Визуализация TrackTarget (чамсы на предсказанной позиции)
     if GunSilent.Settings.TrackTarget.Value and shouldUpdate then
-        -- Создаём чамсы, если их ещё нет
         if not GunSilent.State.TrackTargetHitboxes then
             GunSilent.State.TrackTargetHitboxes = SetupTrackTargetHitboxes(targetChar, prediction.position, targetRoot)
         end
 
-        -- Обновляем позиции чамсов на основе предсказанной позиции
         if GunSilent.State.TrackTargetHitboxes then
-            -- Вычисляем смещение между текущей позицией targetRoot и предсказанной позицией
             local predictedRootPos = prediction.position
             local currentRootPos = targetRoot.Position
             local offset = predictedRootPos - currentRootPos
@@ -660,10 +633,8 @@ local function updateVisualsGun(target, hasWeapon)
                 local hitboxPart = hitboxData.Part
                 local bodyPart = hitboxData.BodyPart
                 if hitboxPart and bodyPart and hitboxPart:IsA("BasePart") and bodyPart:IsA("BasePart") then
-                    -- Обновляем относительный CFrame с учётом текущей анимации
                     local relativeCFrame = targetRoot.CFrame:ToObjectSpace(bodyPart.CFrame)
                     hitboxData.RelativeCFrame = relativeCFrame
-                    -- Применяем предсказанную позицию с учётом смещения
                     local predictedCFrame = targetRoot.CFrame:ToWorldSpace(relativeCFrame) + offset
                     hitboxPart.CFrame = predictedCFrame
                     hitboxPart.Transparency = 0.5
@@ -673,7 +644,6 @@ local function updateVisualsGun(target, hasWeapon)
             end
         end
     elseif GunSilent.State.TrackTargetHitboxes then
-        -- Скрываем чамсы, если TrackTarget отключён
         for _, hitboxData in pairs(GunSilent.State.TrackTargetHitboxes) do
             if hitboxData.Part then
                 hitboxData.Part.Transparency = 1
@@ -786,7 +756,6 @@ local function Init(UI, Core, notify)
     if UI.Tabs.Combat then
         UI.Sections.GunSilent = UI.Tabs.Combat:Section({ Side = "Right", Name = "GunSilent" })
         if UI.Sections.GunSilent then
-            -- Таблица для хранения UI-элементов и их коллбэков
             local uiElements = {}
 
             UI.Sections.GunSilent:Header({ Name = "GunSilent" })
@@ -1167,7 +1136,7 @@ local function Init(UI, Core, notify)
                     GunSilent.Settings.TrackTarget.Value = value
                     notify("GunSilent", "Track Target " .. (value and "Enabled" or "Disabled"), true)
                 end
-            },
+            }
             uiElements.HitChance = {
                 element = UI.Sections.GunSilent:Slider({
                     Name = "Hit Chance",
@@ -1440,17 +1409,13 @@ local function Init(UI, Core, notify)
                 end
             }
 
-            -- Добавляем кнопку синхронизации
             UI.Sections.GunSilent:Button({
                 Name = "Sync Settings",
                 Callback = function()
-                    -- Синхронизация через вызов коллбэков с текущими значениями UI
                     uiElements.GSEnabled.callback(uiElements.GSEnabled.element:GetState())
                     uiElements.RangePlus.callback(uiElements.RangePlus.element:GetValue())
                     uiElements.Rage.callback(uiElements.Rage.element:GetState())
-                    -- RageKeybind и DoubleTapKeybind пропускаем, так как они не имеют значений для синхронизации
                     uiElements.DoubleTap.callback(uiElements.DoubleTap.element:GetState())
-                    -- Для Dropdown нужно найти выбранную опцию
                     local hitPartOptions = uiElements.HitPart.element:GetOptions()
                     for option, selected in pairs(hitPartOptions) do
                         if selected then
