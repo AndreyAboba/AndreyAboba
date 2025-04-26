@@ -415,6 +415,12 @@ local function predictTargetPositionGun(target, applyFakeDistance)
                 (GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedPredictionAggressiveness.Value or GunSilent.FixedPredictionValues.PredictionAggressiveness)
 
             local bulletSpeed = GunSilent.Settings.PredictBullet.Value
+            -- Проверка на nil и использование значения по умолчанию
+            if not bulletSpeed then
+                warn("BulletSpeed is nil, using default value of 2500")
+                bulletSpeed = 2500
+            end
+
             local distance = (bodyPart.Position - myPos).Magnitude
             local timeToTarget = distance / bulletSpeed
             local adjustedTimeToTarget = timeToTarget + ping
