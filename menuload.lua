@@ -43,7 +43,7 @@ local GunSilent = {
         GenBullet = { Value = 4, Default = 4 },
         TestGenBullet = { Value = false, Default = false },
         DoubleTap = { Value = false, Default = false },
-        TrackTarget = { Value = true, Default = true }, -- Новая настройка для чамсов
+        TrackTarget = { Value = true, Default = true },
     },
     FixedPredictionValues = {
         VehicleFactor = 0.9,
@@ -84,7 +84,7 @@ local GunSilent = {
         LocalRoot = nil,
         LastTargetPos = nil,
         LastPredictionPos = nil,
-        TrackTargetHitboxes = nil, -- Хранилище для чамсов
+        TrackTargetHitboxes = nil,
     }
 }
 
@@ -376,7 +376,6 @@ local function createHitDataGun(target)
     return hitData
 end
 
--- Функция для создания чамсов для таргета на основе предсказанной позиции
 local function SetupTrackTargetHitboxes(character, predictedPos, targetRoot)
     if not character or not predictedPos or not targetRoot then
         return nil
@@ -619,7 +618,7 @@ local function updateVisualsGun(target, hasWeapon)
         end
     end
 
-    if GunSilent.Settings.TrackTarget.Value and shouldUpdate then
+    if GunSilent.Settings.TrackTarget.Value then
         if not GunSilent.State.TrackTargetHitboxes then
             GunSilent.State.TrackTargetHitboxes = SetupTrackTargetHitboxes(targetChar, prediction.position, targetRoot)
         end
@@ -627,7 +626,11 @@ local function updateVisualsGun(target, hasWeapon)
         if GunSilent.State.TrackTargetHitboxes then
             local predictedRootPos = prediction.position
             local currentRootPos = targetRoot.Position
-            local offset = predictedRootPos - currentRootPos
+            local adjustedPredictedPos = Vector3.new(predictedRootPos.X, currentRootPos.Y, predictedRootPos.Z)
+            local targetOffset = adjustedPredictedPos - currentRootPos
+
+            local smoothingFactor = 0.5
+            local deltaTime = RunService.Heartbeat:Wait()
 
             for partName, hitboxData in pairs(GunSilent.State.TrackTargetHitboxes) do
                 local hitboxPart = hitboxData.Part
@@ -635,8 +638,13 @@ local function updateVisualsGun(target, hasWeapon)
                 if hitboxPart and bodyPart and hitboxPart:IsA("BasePart") and bodyPart:IsA("BasePart") then
                     local relativeCFrame = targetRoot.CFrame:ToObjectSpace(bodyPart.CFrame)
                     hitboxData.RelativeCFrame = relativeCFrame
-                    local predictedCFrame = targetRoot.CFrame:ToWorldSpace(relativeCFrame) + offset
-                    hitboxPart.CFrame = predictedCFrame
+
+                    local targetCFrame = targetRoot.CFrame:ToWorldSpace(relativeCFrame) + targetOffset
+
+                    local currentCFrame = hitboxPart.CFrame
+                    local newCFrame = currentCFrame:Lerp(targetCFrame, 1 - math.exp(-smoothingFactor * deltaTime * 60))
+
+                    hitboxPart.CFrame = newCFrame
                     hitboxPart.Transparency = 0.5
                 else
                     warn("Не удалось обновить чамс для", partName)
