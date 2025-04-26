@@ -29,8 +29,8 @@ local GunSilent = {
         AdvancedSmoothingFactor = { Value = 0.1, Default = 0.1 },
         SmoothingVisualFactor = { Value = 0.3, Default = 0.3 },
         AdvancedPositionHistorySize = { Value = 20, Default = 20 },
-        LatencyCompensation = { Value = 0.2, Default = 0.2 },
-        PingEstimate = { Value = 0.1, Default = 0.1 }, -- Новое поле для оценки пинга
+        LatencyCompensation = { Value = 0.05, Default = 0.05 }, -- Уменьшено
+        PingEstimate = { Value = 0.03, Default = 0.03 }, -- Уменьшено
         ShowTrajectoryBeam = { Value = true, Default = true },
         ShowFullTrajectory = { Value = true, Default = true },
         ShotgunSupport = { Value = false, Default = false },
@@ -72,7 +72,8 @@ local GunSilent = {
         LocalRoot = nil,
         LastTargetPos = nil,
         LastPredictionPos = nil,
-        SmoothedVisualPositions = {}
+        SmoothedVisualPositions = {},
+        LastPredictedPos = nil -- Добавлено для сглаживания
     }
 }
 
@@ -112,6 +113,8 @@ local function updateFovCircle(deltaTime)
         return
     end
 
+    -- Обновляем камеру
+    GunSilent.Core.PlayerData.Camera = Workspace.CurrentCamera
     local camera = GunSilent.Core.PlayerData.Camera
     if not camera then return end
 
@@ -235,7 +238,7 @@ local function predictTargetPositionGun(target, applyFakeDistance)
     end
 
     local currentTime = tick()
-    local ping = GunSilent.Settings.PingEstimate.Value -- Используем фиксированное значение пинга
+    local ping = GunSilent.Settings.PingEstimate.Value
     local bulletSpeed = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.PredictBullet.Value or GunSilent.FixedPredictionValues.PredictBullet
 
     local positionHistory = GunSilent.State.PositionHistory[target] or {}
@@ -285,6 +288,12 @@ local function predictTargetPositionGun(target, applyFakeDistance)
     local predictedPos = pastPos + pastVel * (timeToTarget + GunSilent.Settings.LatencyCompensation.Value)
     local realPredictedPos = pastPos + pastVel * (realTimeToTarget + GunSilent.Settings.LatencyCompensation.Value)
 
+    -- Добавляем сглаживание
+    local lastPredictedPos = GunSilent.State.LastPredictedPos or predictedPos
+    predictedPos = lastPredictedPos:Lerp(predictedPos, 0.5)
+    realPredictedPos = lastPredictedPos:Lerp(realPredictedPos, 0.5)
+    GunSilent.State.LastPredictedPos = predictedPos
+
     local humanoid = targetChar:FindFirstChild("Humanoid")
     local isInVehicle = humanoid and humanoid.SeatPart ~= nil
     if isInVehicle then
@@ -319,6 +328,9 @@ local function createHitDataGun(target)
 
     local hitPart = targetChar:FindFirstChild(GunSilent.Settings.HitPart.Value == "Random" and (math.random() > 0.5 and "Head" or "UpperTorso") or GunSilent.Settings.HitPart.Value) or targetChar:FindFirstChild("HumanoidRootPart")
     if not hitPart then return nil end
+
+    -- Отладочный вывод
+    print("Bullet direction:", prediction.realDirection, "Target position:", prediction.position)
 
     local equippedTool = getEquippedGunTool(GunSilent.State.LocalCharacter)
     local isShotgunWeapon = GunSilent.Settings.ShotgunSupport.Value and equippedTool and isShotgun(equippedTool)
@@ -984,6 +996,7 @@ local function Init(UI, Core, notify)
                 }, 'PredictVisual'),
                 callback = function(value)
                     GunSilent.Settings.PredictVisual.Value = value
+                    notify("GunSilent", "Predict Visualconomic
                     notify("GunSilent", "Predict Visual " .. (value and "Enabled" or "Disabled"), true)
                 end
             }
