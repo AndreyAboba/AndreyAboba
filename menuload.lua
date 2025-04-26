@@ -44,6 +44,7 @@ local GunSilent = {
         TestGenBullet = { Value = false, Default = false },
         DoubleTap = { Value = false, Default = false },
         TrackTarget = { Value = true, Default = true },
+        ChamsColor = { Value = Color3.fromRGB(255, 0, 255), Default = Color3.fromRGB(255, 0, 255) },
     },
     FixedPredictionValues = {
         VehicleFactor = 0.9,
@@ -376,6 +377,17 @@ local function createHitDataGun(target)
     return hitData
 end
 
+local function ClearTrackTargetHitboxes()
+    if GunSilent.State.TrackTargetHitboxes then
+        for _, hitboxData in pairs(GunSilent.State.TrackTargetHitboxes.Hitboxes or {}) do
+            if hitboxData.Part then
+                hitboxData.Part:Destroy()
+            end
+        end
+        GunSilent.State.TrackTargetHitboxes = nil
+    end
+end
+
 local function SetupTrackTargetHitboxes(character, predictedPos, targetRoot)
     if not character or not predictedPos or not targetRoot then
         return nil
@@ -417,7 +429,7 @@ local function SetupTrackTargetHitboxes(character, predictedPos, targetRoot)
             hitboxPart.CanCollide = false
             hitboxPart.Size = bodyPart.Size * 1.1
             hitboxPart.Transparency = 0.5
-            hitboxPart.Color = Color3.fromRGB(255, 0, 255)
+            hitboxPart.Color = GunSilent.Settings.ChamsColor.Value
             hitboxPart.Parent = character
 
             local relativeCFrame = targetRoot.CFrame:ToObjectSpace(bodyPart.CFrame)
@@ -448,27 +460,26 @@ local function updateVisualsGun(target, hasWeapon)
         if GunSilent.State.FullTrajectoryParts then
             for _, part in pairs(GunSilent.State.FullTrajectoryParts) do part.Transparency = 1 end
         end
-        if GunSilent.State.TrackTargetHitboxes then
-            for _, hitboxData in pairs(GunSilent.State.TrackTargetHitboxes) do
-                if hitboxData.Part then
-                    hitboxData.Part.Transparency = 1
-                end
-            end
-            GunSilent.State.TrackTargetHitboxes = nil
-        end
+        ClearTrackTargetHitboxes()
         GunSilent.State.LastTargetPos = nil
         GunSilent.State.LastPredictionPos = nil
         return
     end
 
     local prediction = predictTargetPositionGun(target, true)
-    if not prediction.position or not prediction.direction then return end
+    if not prediction.position or not prediction.direction then
+        ClearTrackTargetHitboxes()
+        return
+    end
 
     local targetChar = target.Character
     local targetHead = targetChar:FindFirstChild("Head") or targetChar:FindFirstChild("HumanoidRootPart")
     local hitPart = targetChar:FindFirstChild(GunSilent.Settings.HitPart.Value == "Random" and (math.random() > 0.5 and "Head" or "UpperTorso") or GunSilent.Settings.HitPart.Value) or targetChar:FindFirstChild("HumanoidRootPart")
     local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
-    if not targetHead or not hitPart or not targetRoot then return end
+    if not targetHead or not hitPart or not targetRoot then
+        ClearTrackTargetHitboxes()
+        return
+    end
 
     local targetPos, predictionPos = targetHead.Position, prediction.position
     local shouldUpdate = not GunSilent.State.LastTargetPos or not GunSilent.State.LastPredictionPos or
@@ -619,11 +630,19 @@ local function updateVisualsGun(target, hasWeapon)
     end
 
     if GunSilent.Settings.TrackTarget.Value then
-        if not GunSilent.State.TrackTargetHitboxes then
-            GunSilent.State.TrackTargetHitboxes = SetupTrackTargetHitboxes(targetChar, prediction.position, targetRoot)
+        -- Проверяем, соответствует ли текущий TrackTargetHitboxes текущей цели
+        if not GunSilent.State.TrackTargetHitboxes or GunSilent.State.TrackTargetHitboxes.Target ~= target then
+            ClearTrackTargetHitboxes()
+            local hitboxes = SetupTrackTargetHitboxes(targetChar, prediction.position, targetRoot)
+            if hitboxes then
+                GunSilent.State.TrackTargetHitboxes = {
+                    Target = target,
+                    Hitboxes = hitboxes
+                }
+            end
         end
 
-        if GunSilent.State.TrackTargetHitboxes then
+        if GunSilent.State.TrackTargetHitboxes and GunSilent.State.TrackTargetHitboxes.Hitboxes then
             local predictedRootPos = prediction.position
             local currentRootPos = targetRoot.Position
             local adjustedPredictedPos = Vector3.new(predictedRootPos.X, currentRootPos.Y, predictedRootPos.Z)
@@ -632,7 +651,7 @@ local function updateVisualsGun(target, hasWeapon)
             local smoothingFactor = 0.5
             local deltaTime = RunService.Heartbeat:Wait()
 
-            for partName, hitboxData in pairs(GunSilent.State.TrackTargetHitboxes) do
+            for partName, hitboxData in pairs(GunSilent.State.TrackTargetHitboxes.Hitboxes) do
                 local hitboxPart = hitboxData.Part
                 local bodyPart = hitboxData.BodyPart
                 if hitboxPart and bodyPart and hitboxPart:IsA("BasePart") and bodyPart:IsA("BasePart") then
@@ -646,17 +665,14 @@ local function updateVisualsGun(target, hasWeapon)
 
                     hitboxPart.CFrame = newCFrame
                     hitboxPart.Transparency = 0.5
+                    hitboxPart.Color = GunSilent.Settings.ChamsColor.Value
                 else
                     warn("Не удалось обновить чамс для", partName)
                 end
             end
         end
-    elseif GunSilent.State.TrackTargetHitboxes then
-        for _, hitboxData in pairs(GunSilent.State.TrackTargetHitboxes) do
-            if hitboxData.Part then
-                hitboxData.Part.Transparency = 1
-            end
-        end
+    else
+        ClearTrackTargetHitboxes()
     end
 end
 
@@ -1145,6 +1161,20 @@ local function Init(UI, Core, notify)
                     notify("GunSilent", "Track Target " .. (value and "Enabled" or "Disabled"), true)
                 end
             }
+            uiElements.ChamsColor = {
+                element = UI.Sections.GunSilent:Colorpicker({
+                    Name = "Chams Color",
+                    Default = GunSilent.Settings.ChamsColor.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.ChamsColor.Value = value
+                        notify("GunSilent", "Chams Color updated", true)
+                    end
+                }, 'ChamsColor'),
+                callback = function(value)
+                    GunSilent.Settings.ChamsColor.Value = value
+                    notify("GunSilent", "Chams Color updated", true)
+                end
+            }
             uiElements.HitChance = {
                 element = UI.Sections.GunSilent:Slider({
                     Name = "Hit Chance",
@@ -1461,6 +1491,7 @@ local function Init(UI, Core, notify)
                     uiElements.ShowTrajectory.callback(uiElements.ShowTrajectory.element:GetState())
                     uiElements.ShowFullTrajectory.callback(uiElements.ShowFullTrajectory.element:GetState())
                     uiElements.TrackTarget.callback(uiElements.TrackTarget.element:GetState())
+                    uiElements.ChamsColor.callback(uiElements.ChamsColor.element:GetValue())
                     uiElements.HitChance.callback(uiElements.HitChance.element:GetValue())
                     uiElements.LatencyCompensation.callback(uiElements.LatencyCompensation.element:GetValue())
                     uiElements.AdvancedPrediction.callback(uiElements.AdvancedPrediction.element:GetState())
