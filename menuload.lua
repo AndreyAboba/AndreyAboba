@@ -440,12 +440,24 @@ local function predictTargetPositionGun(target, applyFakeDistance)
     local vectorToTarget = targetPos - myPos
     local magnitudeToTarget = vectorToTarget.Magnitude
     local fakePos
-    if applyFakeDistance and GunSilent.Settings.FakeDistance.Value > 0 and magnitudeToTarget > 0 then
+    -- Исправление: проверяем FakeDistance.Value на nil
+    local fakeDistanceValue = GunSilent.Settings.FakeDistance.Value
+    if fakeDistanceValue == nil then
+        warn("FakeDistance.Value is nil, using default value of 3")
+        fakeDistanceValue = 3
+    end
+    if applyFakeDistance and fakeDistanceValue > 0 and magnitudeToTarget > 0 then
         local unitVector = vectorToTarget.Unit
-        local adjustedDistance = math.max(1, magnitudeToTarget - GunSilent.Settings.FakeDistance.Value)
+        local adjustedDistance = math.max(1, magnitudeToTarget - fakeDistanceValue)
         fakePos = targetPos - unitVector * adjustedDistance
     else
         fakePos = myPos -- Если расстояние 0 или FakeDistance не применяется, используем myPos
+    end
+
+    -- Проверяем, что fakePos корректен
+    if not fakePos then
+        warn("fakePos is nil, falling back to myPos")
+        fakePos = myPos
     end
 
     -- Исправление: добавляем проверки на distance и realDistance
