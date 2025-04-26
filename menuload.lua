@@ -38,7 +38,7 @@ local GunSilent = {
         AdvancedPositionHistorySize = { Value = 20, Default = 20 },
         LatencyCompensation = { Value = 0.2, Default = 0.2 },
         ShowTrajectoryBeam = { Value = true, Default = true },
-        ShowFullTrajectory = { Value = true, Default =  true },
+        ShowFullTrajectory = { Value = true, Default = true },
         ShotgunSupport = { Value = false, Default = false },
         GenBullet = { Value = 4, Default = 4 },
         TestGenBullet = { Value = false, Default = false },
@@ -492,10 +492,10 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
         return
     end
 
-    local targetPos, predictionPos = targetHead.Position, prediction.position
+    local targetPos, predictedPos = targetHead.Position, prediction.position
     local shouldUpdate = not GunSilent.State.LastTargetPos or not GunSilent.State.LastPredictionPos or
-        (targetPos - GunSilent.State.LastTargetPos).Magnitude > 0.1 or (predictionPos - GunSilent.State.LastPredictionPos).Magnitude > 0.1
-    GunSilent.State.LastTargetPos, GunSilent.State.LastPredictionPos = targetPos, predictionPos
+        (targetPos - GunSilent.State.LastTargetPos).Magnitude > 0.1 or (predictedPos - GunSilent.State.LastPredictionPos).Magnitude > 0.1
+    GunSilent.State.LastTargetPos, GunSilent.State.LastPredictionPos = targetPos, predictedPos
 
     local startPos = localRoot.Position + Vector3.new(0, 1.5, 0)
     if GunSilent.Settings.TargetVisual.Value and shouldUpdate then
@@ -544,7 +544,7 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
             predictVisualPart.Parent = Workspace
             GunSilent.State.PredictVisualPart = predictVisualPart
         end
-        predictVisualPart.Position = prediction.position
+        predictVisualPart.Position = predictedPos
         predictVisualPart.Color = GunSilent.State.IsTeleporting and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(0, 255, 255)
         predictVisualPart.Transparency = 0.3
     elseif GunSilent.State.PredictVisualPart then
@@ -624,7 +624,7 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
         end
         local bulletSpeed = 2500
         local gravity = Vector3.new(0, -Workspace.Gravity, 0)
-        local distance = (prediction.position - startPos).Magnitude
+        local distance = (predictedPos - startPos).Magnitude
         local steps = 5
         local stepTime = prediction.timeToTarget / steps
 
@@ -643,7 +643,7 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
     if GunSilent.Settings.TrackTarget.Value then
         if not GunSilent.State.TrackTargetHitboxes or GunSilent.State.TrackTargetHitboxes.Target ~= target then
             ClearTrackTargetHitboxes()
-            local hitboxes = SetupTrackTargetHitboxes(targetChar, prediction.position, targetRoot)
+            local hitboxes = SetupTrackTargetHitboxes(targetChar, predictedPos, targetRoot)
             if hitboxes then
                 GunSilent.State.TrackTargetHitboxes = {
                     Target = target,
@@ -653,11 +653,17 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
         end
 
         if GunSilent.State.TrackTargetHitboxes and GunSilent.State.TrackTargetHitboxes.Hitboxes then
+            local predictedRootPos = predictedPos
+            local targetRootPos = targetRoot.Position
+            local offset = predictedRootPos - targetRootPos
+
             for partName, hitboxData in pairs(GunSilent.State.TrackTargetHitboxes.Hitboxes) do
                 local hitboxPart = hitboxData.Part
                 local bodyPart = hitboxData.BodyPart
                 if hitboxPart and bodyPart and hitboxPart:IsA("BasePart") and bodyPart:IsA("BasePart") then
-                    hitboxPart.CFrame = bodyPart.CFrame
+                    local relativeCFrame = hitboxData.RelativeCFrame
+                    local predictedCFrame = CFrame.new(targetRootPos + offset) * relativeCFrame
+                    hitboxPart.CFrame = predictedCFrame
                     hitboxPart.Transparency = 0.5
                     hitboxPart.Color = GunSilent.Settings.ChamsColor.Value
                 else
@@ -1004,7 +1010,7 @@ local function Init(UI, Core, notify)
                         GunSilent.Settings.CircleMethod.Value = value
                         notify("GunSilent", "Circle Method set to: " .. value, true)
                     end
-                }, 'GsCircleMethod'),
+                }, 'GSCircleMethod'),
                 callback = function(value)
                     GunSilent.Settings.CircleMethod.Value = value
                     notify("GunSilent", "Circle Method set to: " .. value, true)
@@ -1445,24 +1451,24 @@ local function Init(UI, Core, notify)
                 Name = "Sync Settings",
                 Callback = function()
                     uiElements.GSEnabled.callback(uiElements.GSEnabled.element:GetState())
-                    uiElements.RangePlus.callback(uiElements.RangePlus.element:GetValue())
+                    uiElements.RangePlus.callback(uiElements.RangePlus.element:GetState())
                     uiElements.Rage.callback(uiElements.Rage.element:GetState())
                     uiElements.DoubleTap.callback(uiElements.DoubleTap.element:GetState())
-                    local hitPartOptions = uiElements.HitPart.element:GetOptions()
+                    local hitPartOptions = uiElements.HitPart.element:GetState()
                     for option, selected in pairs(hitPartOptions) do
                         if selected then
                             uiElements.HitPart.callback(option)
                             break
                         end
                     end
-                    uiElements.FakeDistance.callback(uiElements.FakeDistance.element:GetValue())
+                    uiElements.FakeDistance.callback(uiElements.FakeDistance.element:GetState())
                     uiElements.ShotgunSupport.callback(uiElements.ShotgunSupport.element:GetState())
-                    uiElements.GenerateBullets.callback(uiElements.GenerateBullets.element:GetValue())
+                    uiElements.GenerateBullets.callback(uiElements.GenerateBullets.element:GetState())
                     uiElements.TestGenerateBullets.callback(uiElements.TestGenerateBullets.element:GetState())
                     uiElements.GSUSEFOV.callback(uiElements.GSUSEFOV.element:GetState())
-                    uiElements.GSFOV.callback(uiElements.GSFOV.element:GetValue())
+                    uiElements.GSFOV.callback(uiElements.GSFOV.element:GetState())
                     uiElements.GSShowCircle.callback(uiElements.GSShowCircle.element:GetState())
-                    local circleMethodOptions = uiElements.GSCircleMethod.element:GetOptions()
+                    local circleMethodOptions = uiElements.GSCircleMethod.element:GetState()
                     for option, selected in pairs(circleMethodOptions) do
                         if selected then
                             uiElements.GSCircleMethod.callback(option)
@@ -1470,8 +1476,8 @@ local function Init(UI, Core, notify)
                         end
                     end
                     uiElements.GSGradientCircle.callback(uiElements.GSGradientCircle.element:GetState())
-                    uiElements.GSGradientSpeed.callback(uiElements.GSGradientSpeed.element:GetValue())
-                    local sortMethodOptions = uiElements.SortMethod.element:GetOptions()
+                    uiElements.GSGradientSpeed.callback(uiElements.GSGradientSpeed.element:GetState())
+                    local sortMethodOptions = uiElements.SortMethod.element:GetState()
                     for option, selected in pairs(sortMethodOptions) do
                         if selected then
                             uiElements.SortMethod.callback(option)
@@ -1485,23 +1491,23 @@ local function Init(UI, Core, notify)
                     uiElements.ShowTrajectory.callback(uiElements.ShowTrajectory.element:GetState())
                     uiElements.ShowFullTrajectory.callback(uiElements.ShowFullTrajectory.element:GetState())
                     uiElements.TrackTarget.callback(uiElements.TrackTarget.element:GetState())
-                    uiElements.ChamsColor.callback(uiElements.ChamsColor.element:GetValue())
-                    uiElements.HitChance.callback(uiElements.HitChance.element:GetValue())
-                    uiElements.LatencyCompensation.callback(uiElements.LatencyCompensation.element:GetValue())
+                    uiElements.ChamsColor.callback(uiElements.ChamsColor.element:GetState())
+                    uiElements.HitChance.callback(uiElements.HitChance.element:GetState())
+                    uiElements.LatencyCompensation.callback(uiElements.LatencyCompensation.element:GetState())
                     uiElements.AdvancedPrediction.callback(uiElements.AdvancedPrediction.element:GetState())
-                    uiElements.VehicleFactor.callback(uiElements.VehicleFactor.element:GetValue())
-                    uiElements.PlayerFactor.callback(uiElements.PlayerFactor.element:GetValue())
-                    uiElements.Agressivness.callback(uiElements.Agressivness.element:GetValue())
-                    uiElements.LowDistanceMulti.callback(uiElements.LowDistanceMulti.element:GetValue())
-                    uiElements.SlowVehicleMulti.callback(uiElements.SlowVehicleMulti.element:GetValue())
-                    uiElements.FastPredictionLimit.callback(uiElements.FastPredictionLimit.element:GetValue())
-                    uiElements.PositionHistory.callback(uiElements.PositionHistory.element:GetValue())
-                    uiElements.SmoothingFactor.callback(uiElements.SmoothingFactor.element:GetValue())
-                    uiElements.VehicleYCorrection.callback(uiElements.VehicleYCorrection.element:GetValue())
-                    uiElements.VisualUpdate.callback(uiElements.VisualUpdate.element:GetValue())
-                    uiElements.TeleportSpeed.callback(uiElements.TeleportSpeed.element:GetValue())
-                    uiElements.TPLimit.callback(uiElements.TPLimit.element:GetValue())
-                    uiElements.BulletSpeed.callback(uiElements.BulletSpeed.element:GetValue())
+                    uiElements.VehicleFactor.callback(uiElements.VehicleFactor.element:GetState())
+                    uiElements.PlayerFactor.callback(uiElements.PlayerFactor.element:GetState())
+                    uiElements.Agressivness.callback(uiElements.Agressivness.element:GetState())
+                    uiElements.LowDistanceMulti.callback(uiElements.LowDistanceMulti.element:GetState())
+                    uiElements.SlowVehicleMulti.callback(uiElements.SlowVehicleMulti.element:GetState())
+                    uiElements.FastPredictionLimit.callback(uiElements.FastPredictionLimit.element:GetState())
+                    uiElements.PositionHistory.callback(uiElements.PositionHistory.element:GetState())
+                    uiElements.SmoothingFactor.callback(uiElements.SmoothingFactor.element:GetState())
+                    uiElements.VehicleYCorrection.callback(uiElements.VehicleYCorrection.element:GetState())
+                    uiElements.VisualUpdate.callback(uiElements.VisualUpdate.element:GetState())
+                    uiElements.TeleportSpeed.callback(uiElements.TeleportSpeed.element:GetState())
+                    uiElements.TPLimit.callback(uiElements.TPLimit.element:GetState())
+                    uiElements.BulletSpeed.callback(uiElements.BulletSpeed.element:GetState())
 
                     notify("GunSilent", "Settings synchronized with UI!", true)
                 end
@@ -1512,4 +1518,4 @@ local function Init(UI, Core, notify)
     initializeGunSilent()
 end
 
-return { Init = Init }
+return { Init =
