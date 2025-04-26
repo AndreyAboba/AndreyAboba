@@ -26,7 +26,7 @@ local GunSilent = {
         AdvancedEnabled = { Value = false, Default = false },
         AdvancedVehicleFactor = { Value = 0.9, Default = 0.9 },
         AdvancedPedestrianFactor = { Value = 0.55, Default = 0.55 },
-        AdvancedTeleportThreshold = { Value = 600, Default = 600 },
+        AdvancedTeleportThreshold = { ёValue = 600, Default = 600 },
         AdvancedMaxSpeed = { Value = 500, Default = 500 },
         AdvancedVehicleYCorrection = { Value = 0, Default = 0 },
         AdvancedPredictionAggressiveness = { Value = 1.2, Default = 1.2 },
@@ -230,7 +230,7 @@ local function getNearestPlayerGun(gunRange)
     return nearestPlayer
 end
 
--- Упрощённая функция предикции для реальной модели игрока
+-- Умная функция предикции с учётом серверного рассинхрона
 local function predictTargetPositionGun(target, applyFakeDistance)
     -- Базовые проверки
     local localRoot = GunSilent.State.LocalRoot
@@ -246,21 +246,21 @@ local function predictTargetPositionGun(target, applyFakeDistance)
         return { position = nil, direction = nil, realDirection = nil, fakePosition = nil, timeToTarget = 0 }
     end
 
-    -- Текущая позиция цели (реальная модель, без антиаима)
+    -- Текущая позиция цели (реальная модель)
     local targetPos = hitPart.Position
     if not targetPos then
         warn("targetPos is nil in predictTargetPositionGun")
         return { position = nil, direction = nil, realDirection = nil, fakePosition = nil, timeToTarget = 0 }
     end
 
-    -- Проверка FakeDistance.Value
+    -- Проверяем FakeDistance.Value
     local fakeDistanceValue = GunSilent.Settings.FakeDistance.Value
     if fakeDistanceValue == nil then
         warn("FakeDistance.Value is nil, using default value of 3")
         fakeDistanceValue = 3
     end
 
-    -- Вычисляем fakePos с проверкой на совпадение позиций
+    -- Вычисляем fakePos (дистанция не важна, но оставим для совместимости)
     local vectorToTarget = targetPos - myPos
     local magnitudeToTarget = vectorToTarget.Magnitude
     local fakePos
@@ -272,13 +272,12 @@ local function predictTargetPositionGun(target, applyFakeDistance)
         fakePos = myPos
     end
 
-    -- Проверяем fakePos
     if not fakePos then
         warn("fakePos is nil, falling back to myPos")
         fakePos = myPos
     end
 
-    -- Вычисляем расстояния с проверками
+    -- Вычисляем расстояния (нужны только для timeToTarget)
     local distance = (targetPos - fakePos).Magnitude
     local realDistance = (targetPos - myPos).Magnitude
     if not distance or not realDistance then
@@ -294,14 +293,15 @@ local function predictTargetPositionGun(target, applyFakeDistance)
         bulletSpeed = 2500
     end
 
-    -- Вычисляем время до цели
+    -- Вычисляем время до цели (хотя дистанция не важна, оставим для расчётов)
     local timeToTarget = distance / bulletSpeed
     local realTimeToTarget = realDistance / bulletSpeed
 
-    -- Учитываем задержку (latency)
+    -- Учитываем пинг (серверный рассинхрон)
     local latency = GunSilent.Settings.LatencyCompensation.Value or 0.2
-    local adjustedTimeToTarget = timeToTarget + latency
-    local adjustedRealTimeToTarget = realTimeToTarget + latency
+    local ping = latency -- В реальной игре нужно получить пинг, но пока используем latency
+    local adjustedTimeToTarget = timeToTarget + ping
+    local adjustedRealTimeToTarget = realTimeToTarget + ping
 
     -- Получаем скорость цели
     local velocity = targetRoot.Velocity
@@ -316,13 +316,37 @@ local function predictTargetPositionGun(target, applyFakeDistance)
     local maxSpeedLimit = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedMaxSpeed.Value or GunSilent.FixedPredictionValues.MaxSpeed
     if speed > teleportThreshold then
         velocity = Vector3.new(0, 0, 0)
+        speed = 0
     elseif speed > maxSpeedLimit then
         velocity = velocity.Unit * maxSpeedLimit
     end
 
-    -- Простая предикция: position + velocity * time
+    -- Учитываем состояние игрока (прыжки, бег)
+    local humanoid = targetChar:FindFirstChild("Humanoid")
+    local isJumping = humanoid and humanoid.Jump
+    local isMoving = speed > 5 -- Пороговое значение скорости для движения
+    local gravity = Vector3.new(0, -Workspace.Gravity, 0)
+
+    -- Базовая предикция: position + velocity * time
     local predictedPos = targetPos + velocity * adjustedTimeToTarget
     local realPredictedPos = targetPos + velocity * adjustedRealTimeToTarget
+
+    -- Корректировка на прыжки (если игрок в воздухе)
+    if isJumping then
+        -- Учитываем гравитацию: y(t) = v_y * t + (1/2) * g * t^2
+        local jumpTime = adjustedTimeToTarget
+        local gravityOffset = 0.5 * gravity * jumpTime * jumpTime
+        predictedPos = predictedPos + gravityOffset
+        realPredictedPos = realPredictedPos + gravityOffset
+    end
+
+    -- Корректировка на движение (ускорение)
+    if isMoving then
+        -- Увеличиваем предикцию для движущихся целей
+        local movementFactor = 1.2 -- Умножаем предикцию для компенсации рассинхрона
+        predictedPos = targetPos + (velocity * adjustedTimeToTarget * movementFactor)
+        realPredictedPos = targetPos + (velocity * adjustedRealTimeToTarget * movementFactor)
+    end
 
     -- Возвращаем результат
     return {
