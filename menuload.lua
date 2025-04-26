@@ -26,7 +26,7 @@ local GunSilent = {
         AdvancedEnabled = { Value = false, Default = false },
         AdvancedVehicleFactor = { Value = 0.9, Default = 0.9 },
         AdvancedPedestrianFactor = { Value = 0.55, Default = 0.55 },
-        AdvancedTeleportThreshold = { ёValue = 600, Default = 600 },
+        AdvancedTeleportThreshold = { Value = 600, Default = 600 },
         AdvancedMaxSpeed = { Value = 500, Default = 500 },
         AdvancedVehicleYCorrection = { Value = 0, Default = 0 },
         AdvancedPredictionAggressiveness = { Value = 1.2, Default = 1.2 },
