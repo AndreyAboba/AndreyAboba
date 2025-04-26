@@ -436,8 +436,27 @@ local function predictTargetPositionGun(target, applyFakeDistance)
 
     -- Предсказываем основную позицию для HitPart
     local targetPos = predictedParts[hitPart.Name] or hitPart.Position
-    local fakePos = applyFakeDistance and GunSilent.Settings.FakeDistance.Value > 0 and (targetPos - (targetPos - myPos).Unit * math.max(1, (targetPos - myPos).Magnitude - GunSilent.Settings.FakeDistance.Value)) or myPos
-    local distance, realDistance = (targetPos - fakePos).Magnitude, (targetPos - myPos).Magnitude
+    -- Исправление: проверка на случай совпадения targetPos и myPos
+    local vectorToTarget = targetPos - myPos
+    local magnitudeToTarget = vectorToTarget.Magnitude
+    local fakePos
+    if applyFakeDistance and GunSilent.Settings.FakeDistance.Value > 0 and magnitudeToTarget > 0 then
+        local unitVector = vectorToTarget.Unit
+        local adjustedDistance = math.max(1, magnitudeToTarget - GunSilent.Settings.FakeDistance.Value)
+        fakePos = targetPos - unitVector * adjustedDistance
+    else
+        fakePos = myPos -- Если расстояние 0 или FakeDistance не применяется, используем myPos
+    end
+
+    -- Исправление: добавляем проверки на distance и realDistance
+    local distance = (targetPos - fakePos).Magnitude
+    local realDistance = magnitudeToTarget -- Уже вычислено выше
+    if not distance or not realDistance then
+        warn("Distance or realDistance is nil, using default values")
+        distance = distance or 1
+        realDistance = realDistance or 1
+    end
+
     -- Исправление: используем уже проверенное значение bulletSpeed
     local timeToTarget, realTimeToTarget = distance / bulletSpeed, realDistance / bulletSpeed
 
