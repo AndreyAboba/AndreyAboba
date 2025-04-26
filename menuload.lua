@@ -10,7 +10,6 @@ local GunSilent = {
         Rage = { Value = false, Default = false },
         HitPart = { Value = "Head", Default = "Head" },
         PredictBullet = { Value = 2500, Default = 2500 },
-        YCorrection = { Value = 0.01, Default = 0.01 },
         FakeDistance = { Value = 3, Default = 3 },
         UseFOV = { Value = true, Default = true },
         FOV = { Value = 120, Default = 120 },
@@ -25,17 +24,11 @@ local GunSilent = {
         GradientCircle = { Value = false, Default = false },
         GradientSpeed = { Value = 2, Default = 2 },
         AdvancedEnabled = { Value = false, Default = false },
-        AdvancedVehicleFactor = { Value = 0.9, Default = 0.9 },
-        AdvancedPedestrianFactor = { Value = 0.55, Default = 0.55 },
+        AdvancedVehicleYCorrection = { Value = 0, Default = 0 },
         AdvancedTeleportThreshold = { Value = 600, Default = 600 },
         AdvancedMaxSpeed = { Value = 500, Default = 500 },
-        AdvancedVehicleYCorrection = { Value = 0, Default = 0 },
-        AdvancedPredictionAggressiveness = { Value = 1.2, Default = 1.2 },
         AdvancedSmoothingFactor = { Value = 0.1, Default = 0.1 },
-        AdvancedSmallDistanceSpeedFactorMultiplier = { Value = 1.7, Default = 1.7 },
-        AdvancedSlowVehiclePredictionFactor = { Value = 1.95, Default = 1.95 },
-        AdvancedFastVehiclePredictionLimit = { Value = 2.2, Default = 2.2 },
-        VisualUpdateFrequency = { Value = 0.1, Default = 0.1 },
+        SmoothingVisualFactor = { Value = 0.3, Default = 0.3 }, -- Новая настройка для сглаживания визуализаций
         AdvancedPositionHistorySize = { Value = 20, Default = 20 },
         LatencyCompensation = { Value = 0.2, Default = 0.2 },
         ShowTrajectoryBeam = { Value = true, Default = true },
@@ -46,14 +39,9 @@ local GunSilent = {
         DoubleTap = { Value = false, Default = false }
     },
     FixedPredictionValues = {
-        VehicleFactor = 0.9,
-        PedestrianFactor = 0.55,
-        PredictionAggressiveness = 1.2,
-        SmallDistanceSpeedFactorMultiplier = 1.7,
-        SlowVehiclePredictionFactor = 1.95,
-        FastVehiclePredictionLimit = 2.2,
         PositionHistorySize = 20,
         SmoothingFactor = 0.1,
+        SmoothingVisualFactor = 0.3,
         TeleportThreshold = 600,
         MaxSpeed = 500,
         PredictBullet = 600
@@ -84,11 +72,11 @@ local GunSilent = {
         LocalRoot = nil,
         LastTargetPos = nil,
         LastPredictionPos = nil,
-        CachedPing = 0.1 -- Кэшированный пинг
+        CachedPing = 0.1,
+        SmoothedVisualPositions = {} -- Для хранения сглаженных позиций визуализаций
     }
 }
 
--- Получение пинга с сглаживанием
 local function getSmoothedPing()
     local success, ping = pcall(function()
         local dataPing = Stats.Network.ServerStatsItem["Data Ping"]
@@ -98,7 +86,6 @@ local function getSmoothedPing()
         warn("Ошибка получения пинга:", ping)
         return GunSilent.State.CachedPing
     end
-    -- Сглаживание пинга
     local smoothingFactor = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedSmoothingFactor.Value or GunSilent.FixedPredictionValues.SmoothingFactor
     GunSilent.State.CachedPing = GunSilent.State.CachedPing * (1 - smoothingFactor) + ping * smoothingFactor
     return GunSilent.State.CachedPing
@@ -248,7 +235,6 @@ local function getNearestPlayerGun(gunRange)
     return nearestPlayer
 end
 
--- Новая функция предикции
 local function predictTargetPositionGun(target, applyFakeDistance)
     local localRoot = GunSilent.State.LocalRoot
     if not target or not target.Character or not localRoot then
@@ -267,7 +253,6 @@ local function predictTargetPositionGun(target, applyFakeDistance)
     local ping = getSmoothedPing()
     local bulletSpeed = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.PredictBullet.Value or GunSilent.FixedPredictionValues.PredictBullet
 
-    -- Обновление истории позиций
     local positionHistory = GunSilent.State.PositionHistory[target] or {}
     GunSilent.State.PositionHistory[target] = positionHistory
     table.insert(positionHistory, { time = currentTime, position = hitPart.Position, velocity = targetRoot.Velocity })
@@ -276,13 +261,11 @@ local function predictTargetPositionGun(target, applyFakeDistance)
         table.remove(positionHistory, 1)
     end
 
-    -- Проверка телепортации
     local targetId = tostring(target.UserId)
     local targetPos = hitPart.Position
     GunSilent.State.IsTeleporting = GunSilent.State.LastTargetPosition[targetId] and (targetPos - GunSilent.State.LastTargetPosition[targetId]).Magnitude > 50
     GunSilent.State.LastTargetPosition[targetId] = targetPos
 
-    -- Находим позицию в прошлом с учетом пинга
     local targetTime = currentTime - ping
     local pastPos, pastVel
     if #positionHistory < 2 or GunSilent.State.IsTeleporting then
@@ -303,31 +286,26 @@ local function predictTargetPositionGun(target, applyFakeDistance)
         end
     end
 
-    -- Ограничиваем скорость
     local maxSpeed = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedMaxSpeed.Value or GunSilent.FixedPredictionValues.MaxSpeed
     if pastVel.Magnitude > maxSpeed then
         pastVel = pastVel.Unit * maxSpeed
     end
 
-    -- Вычисляем время полета пули
     local fakePos = applyFakeDistance and GunSilent.Settings.FakeDistance.Value > 0 and (pastPos - (pastPos - myPos).Unit * math.max(1, (pastPos - myPos).Magnitude - GunSilent.Settings.FakeDistance.Value)) or myPos
     local distance = (pastPos - fakePos).Magnitude
     local realDistance = (pastPos - myPos).Magnitude
     local timeToTarget = distance / bulletSpeed
     local realTimeToTarget = realDistance / bulletSpeed
 
-    -- Предсказываем позицию
     local predictedPos = pastPos + pastVel * (timeToTarget + GunSilent.Settings.LatencyCompensation.Value)
     local realPredictedPos = pastPos + pastVel * (realTimeToTarget + GunSilent.Settings.LatencyCompensation.Value)
 
-    -- Учет гравитации (для дробовиков или дальних выстрелов)
     local gravity = Vector3.new(0, -Workspace.Gravity, 0)
     if GunSilent.Settings.ShotgunSupport.Value or distance > 100 then
         predictedPos = predictedPos + 0.5 * gravity * timeToTarget * timeToTarget
         realPredictedPos = realPredictedPos + 0.5 * gravity * realTimeToTarget * realTimeToTarget
     end
 
-    -- Коррекция по Y для транспорта
     local humanoid = targetChar:FindFirstChild("Humanoid")
     local isInVehicle = humanoid and humanoid.SeatPart ~= nil
     if isInVehicle then
@@ -337,9 +315,9 @@ local function predictTargetPositionGun(target, applyFakeDistance)
     end
 
     return {
-        position = predictedPos,
-        direction = (predictedPos - (fakePos + Vector3.new(0, 1.5, 0))).Unit,
-        realDirection = (realPredictedPos - (myPos + Vector3.new(0, 1.5, 0))).Unit,
+        position = realPredictedPos, -- Используем realPredictedPos для серверной позиции
+        direction = (predictedPos - fakePos).Unit, -- Клиентское направление с FakeDistance
+        realDirection = (realPredictedPos - myPos).Unit, -- Серверное направление
         fakePosition = fakePos,
         timeToTarget = timeToTarget
     }
@@ -349,8 +327,8 @@ local function getAimCFrameGun(target)
     local localRoot = GunSilent.State.LocalRoot
     if not target or not target.Character or not localRoot then return nil end
     local prediction = predictTargetPositionGun(target, true)
-    if not prediction.position or not prediction.direction then return nil end
-    return CFrame.new(localRoot.Position, localRoot.Position + prediction.direction)
+    if not prediction.position or not prediction.realDirection then return nil end
+    return CFrame.new(localRoot.Position, localRoot.Position + prediction.realDirection) -- Используем realDirection
 end
 
 local function createHitDataGun(target)
@@ -358,7 +336,7 @@ local function createHitDataGun(target)
     if not target or not target.Character or not localRoot then return nil end
     local targetChar = target.Character
     local prediction = predictTargetPositionGun(target, true)
-    if not prediction.position or not prediction.direction or not prediction.fakePosition then return nil end
+    if not prediction.position or not prediction.realDirection or not prediction.fakePosition then return nil end
 
     local hitPart = targetChar:FindFirstChild(GunSilent.Settings.HitPart.Value == "Random" and (math.random() > 0.5 and "Head" or "UpperTorso") or GunSilent.Settings.HitPart.Value) or targetChar:FindFirstChild("HumanoidRootPart")
     if not hitPart then return nil end
@@ -371,19 +349,15 @@ local function createHitDataGun(target)
 
     if useMultiBullets then
         for i = 1, numBullets do
-            hitData[i] = {{Normal = prediction.direction, Instance = hitPart, Position = prediction.position}}
+            hitData[i] = {{Normal = prediction.realDirection, Instance = hitPart, Position = prediction.position}}
         end
     else
-        hitData[1] = {{Normal = prediction.direction, Instance = hitPart, Position = prediction.position}}
+        hitData[1] = {{Normal = prediction.realDirection, Instance = hitPart, Position = prediction.position}}
     end
     return hitData
 end
 
-local function updateVisualsGun(target, hasWeapon)
-    local currentTime = tick()
-    if currentTime - GunSilent.State.LastVisualUpdateTime < GunSilent.Settings.VisualUpdateFrequency.Value then return end
-    GunSilent.State.LastVisualUpdateTime = currentTime
-
+local function updateVisualsGun(target, hasWeapon, deltaTime)
     local localRoot = GunSilent.State.LocalRoot
     if not GunSilent.Settings.Enabled.Value or not hasWeapon or not target or not target.Character or not localRoot then
         if GunSilent.State.TargetVisualPart then GunSilent.State.TargetVisualPart.Transparency = 1 end
@@ -397,11 +371,12 @@ local function updateVisualsGun(target, hasWeapon)
         end
         GunSilent.State.LastTargetPos = nil
         GunSilent.State.LastPredictionPos = nil
+        GunSilent.State.SmoothedVisualPositions = {}
         return
     end
 
     local prediction = predictTargetPositionGun(target, true)
-    if not prediction.position or not prediction.direction then return end
+    if not prediction.position or not prediction.direction or not prediction.realDirection then return end
 
     local targetChar = target.Character
     local targetHead = targetChar:FindFirstChild("Head") or targetChar:FindFirstChild("HumanoidRootPart")
@@ -413,7 +388,10 @@ local function updateVisualsGun(target, hasWeapon)
         (targetPos - GunSilent.State.LastTargetPos).Magnitude > 0.1 or (predictionPos - GunSilent.State.LastPredictionPos).Magnitude > 0.1
     GunSilent.State.LastTargetPos, GunSilent.State.LastPredictionPos = targetPos, predictionPos
 
-    local startPos = localRoot.Position + Vector3.new(0, 1.5, 0)
+    local startPos = localRoot.Position
+    local smoothingFactor = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.SmoothingVisualFactor.Value or GunSilent.FixedPredictionValues.SmoothingVisualFactor
+    GunSilent.State.SmoothedVisualPositions = GunSilent.State.SmoothedVisualPositions or {}
+
     if GunSilent.Settings.TargetVisual.Value and shouldUpdate then
         local targetVisualPart = GunSilent.State.TargetVisualPart
         if not targetVisualPart then
@@ -426,8 +404,11 @@ local function updateVisualsGun(target, hasWeapon)
             targetVisualPart.Parent = Workspace
             GunSilent.State.TargetVisualPart = targetVisualPart
         end
-        targetVisualPart.Position = targetHead.Position + Vector3.new(0, 3, 0)
-        targetVisualPart.Transparency = 0.5
+        local currentPos = GunSilent.State.SmoothedVisualPositions.TargetVisual or targetHead.Position
+        local targetVisualPos = targetHead.Position
+        GunSilent.State.SmoothedVisualPositions.TargetVisual = currentPos:Lerp(targetVisualPos, smoothingFactor)
+        targetVisualPart.Position = GunSilent.State.SmoothedVisualPositions.TargetVisual
+        targetVisualPart.Transparency = 0.4
     elseif GunSilent.State.TargetVisualPart then
         GunSilent.State.TargetVisualPart.Transparency = 1
     end
@@ -442,9 +423,12 @@ local function updateVisualsGun(target, hasWeapon)
             hitboxVisualPart.Parent = Workspace
             GunSilent.State.HitboxVisualPart = hitboxVisualPart
         end
+        local currentCFrame = GunSilent.State.SmoothedVisualPositions.HitboxVisual or hitPart.CFrame
+        local targetCFrame = hitPart.CFrame
+        GunSilent.State.SmoothedVisualPositions.HitboxVisual = currentCFrame:Lerp(targetCFrame, smoothingFactor)
         hitboxVisualPart.Size = hitPart.Size + Vector3.new(0.2, 0.2, 0.2)
-        hitboxVisualPart.CFrame = hitPart.CFrame
-        hitboxVisualPart.Transparency = 0.7
+        hitboxVisualPart.CFrame = GunSilent.State.SmoothedVisualPositions.HitboxVisual
+        hitboxVisualPart.Transparency = 0.6
     elseif GunSilent.State.HitboxVisualPart then
         GunSilent.State.HitboxVisualPart.Transparency = 1
     end
@@ -460,9 +444,11 @@ local function updateVisualsGun(target, hasWeapon)
             predictVisualPart.Parent = Workspace
             GunSilent.State.PredictVisualPart = predictVisualPart
         end
-        predictVisualPart.Position = prediction.position
+        local currentPos = GunSilent.State.SmoothedVisualPositions.PredictVisual or prediction.position
+        GunSilent.State.SmoothedVisualPositions.PredictVisual = currentPos:Lerp(prediction.position, smoothingFactor)
+        predictVisualPart.Position = GunSilent.State.SmoothedVisualPositions.PredictVisual
         predictVisualPart.Color = GunSilent.State.IsTeleporting and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(0, 255, 255)
-        predictVisualPart.Transparency = 0.3
+        predictVisualPart.Transparency = 0.2
     elseif GunSilent.State.PredictVisualPart then
         GunSilent.State.PredictVisualPart.Transparency = 1
     end
@@ -481,19 +467,26 @@ local function updateVisualsGun(target, hasWeapon)
         local realDirectionVisualPart = GunSilent.State.RealDirectionVisualPart
         if not realDirectionVisualPart then
             realDirectionVisualPart = Instance.new("Part")
-            realDirectionVisualPart.Size = Vector3.new(0.2, 0.2, 5)
+            realDirectionVisualPart.Size = Vector3.new(0.3, 0.3, 6) -- Увеличиваем размер для заметности
             realDirectionVisualPart.Anchored = true
             realDirectionVisualPart.CanCollide = false
-            realDirectionVisualPart.Color = Color3.fromRGB(255, 255, 255)
+            realDirectionVisualPart.Color = Color3.fromRGB(0, 255, 0) -- Ярко-зеленый для реального направления
             realDirectionVisualPart.Parent = Workspace
             GunSilent.State.RealDirectionVisualPart = realDirectionVisualPart
         end
-        directionVisualPart.CFrame = CFrame.lookAt(startPos, startPos + (prediction.direction * 5))
+        local currentDirectionCFrame = GunSilent.State.SmoothedVisualPositions.DirectionVisual or CFrame.new(startPos, startPos + prediction.direction)
+        local targetDirectionCFrame = CFrame.lookAt(startPos, startPos + (prediction.direction * 5))
+        GunSilent.State.SmoothedVisualPositions.DirectionVisual = currentDirectionCFrame:Lerp(targetDirectionCFrame, smoothingFactor)
+        directionVisualPart.CFrame = GunSilent.State.SmoothedVisualPositions.DirectionVisual
         directionVisualPart.Position = startPos + (prediction.direction * 2.5)
-        directionVisualPart.Transparency = 0.5
-        realDirectionVisualPart.CFrame = CFrame.lookAt(startPos, startPos + (prediction.realDirection * 5))
-        realDirectionVisualPart.Position = startPos + (prediction.realDirection * 2.5)
-        realDirectionVisualPart.Transparency = 0.5
+        directionVisualPart.Transparency = 0.4
+
+        local currentRealDirectionCFrame = GunSilent.State.SmoothedVisualPositions.RealDirectionVisual or CFrame.new(startPos, startPos + prediction.realDirection)
+        local targetRealDirectionCFrame = CFrame.lookAt(startPos, startPos + (prediction.realDirection * 5))
+        GunSilent.State.SmoothedVisualPositions.RealDirectionVisual = currentRealDirectionCFrame:Lerp(targetRealDirectionCFrame, smoothingFactor)
+        realDirectionVisualPart.CFrame = GunSilent.State.SmoothedVisualPositions.RealDirectionVisual
+        realDirectionVisualPart.Position = startPos + (prediction.realDirection * 3)
+        realDirectionVisualPart.Transparency = 0.3
     elseif GunSilent.State.DirectionVisualPart then
         GunSilent.State.DirectionVisualPart.Transparency = 1
         GunSilent.State.RealDirectionVisualPart.Transparency = 1
@@ -504,10 +497,10 @@ local function updateVisualsGun(target, hasWeapon)
         if not trajectoryBeam then
             trajectoryBeam = Instance.new("Beam")
             trajectoryBeam.FaceCamera = true
-            trajectoryBeam.Width0 = 0.2
-            trajectoryBeam.Width1 = 0.2
-            trajectoryBeam.Transparency = NumberSequence.new(0.5)
-            trajectoryBeam.Color = ColorSequence.new(Color3.fromRGB(147, 112, 219))
+            trajectoryBeam.Width0 = 0.3
+            trajectoryBeam.Width1 = 0.3
+            trajectoryBeam.Transparency = NumberSequence.new(0.4)
+            trajectoryBeam.Color = ColorSequence.new(Color3.fromRGB(147, 112, 219)) -- Фиолетовый для клиентской позиции
             trajectoryBeam.Parent = Workspace
             local attachment0 = Instance.new("Attachment")
             local attachment1 = Instance.new("Attachment")
@@ -515,8 +508,14 @@ local function updateVisualsGun(target, hasWeapon)
             trajectoryBeam.Attachment1 = attachment1
             GunSilent.State.TrajectoryBeam = trajectoryBeam
         end
+        local currentAttachment0Pos = GunSilent.State.SmoothedVisualPositions.TrajectoryBeam0 or startPos
+        local currentAttachment1Pos = GunSilent.State.SmoothedVisualPositions.TrajectoryBeam1 or prediction.fakePosition
+        GunSilent.State.SmoothedVisualPositions.TrajectoryBeam0 = currentAttachment0Pos:Lerp(startPos, smoothingFactor)
+        GunSilent.State.SmoothedVisualPositions.TrajectoryBeam1 = currentAttachment1Pos:Lerp(prediction.fakePosition, smoothingFactor)
+        trajectoryBeam.Attachment0.WorldPosition = GunSilent.State.SmoothedVisualPositions.TrajectoryBeam0
+        trajectoryBeam.Attachment1.WorldPosition = GunSilent.State.SmoothedVisualPositions.TrajectoryBeam1
         trajectoryBeam.Attachment0.Parent = localRoot
-        trajectoryBeam.Attachment1.Parent = GunSilent.State.PredictVisualPart
+        trajectoryBeam.Attachment1.Parent = Workspace
         trajectoryBeam.Enabled = true
     elseif GunSilent.State.TrajectoryBeam then
         GunSilent.State.TrajectoryBeam.Enabled = false
@@ -546,9 +545,11 @@ local function updateVisualsGun(target, hasWeapon)
 
         for i = 0, steps - 1 do
             local t = stepTime * i
-            local pos = startPos + (prediction.direction * bulletSpeed * t) + (0.5 * gravity * t * t * math.clamp(distance / 100, 0.5, 2))
-            fullTrajectoryParts[i + 1].Position = pos
-            fullTrajectoryParts[i + 1].Transparency = 0.5
+            local pos = startPos + (prediction.realDirection * bulletSpeed * t) + (0.5 * gravity * t * t * math.clamp(distance / 100, 0.5, 2))
+            local currentPos = GunSilent.State.SmoothedVisualPositions["FullTrajectory" .. i] or pos
+            GunSilent.State.SmoothedVisualPositions["FullTrajectory" .. i] = currentPos:Lerp(pos, smoothingFactor)
+            fullTrajectoryParts[i + 1].Position = GunSilent.State.SmoothedVisualPositions["FullTrajectory" .. i]
+            fullTrajectoryParts[i + 1].Transparency = 0.4
         end
     elseif GunSilent.State.FullTrajectoryParts then
         for _, part in pairs(GunSilent.State.FullTrajectoryParts) do
@@ -604,6 +605,7 @@ local function initializeGunSilent()
         if not GunSilent.Settings.Enabled.Value then
             if GunSilent.State.FovCircle then GunSilent.State.FovCircle.Visible = false end
             GunSilent.Core.GunSilentTarget.CurrentTarget = nil
+            updateVisualsGun(nil, false, deltaTime)
             return
         end
 
@@ -623,13 +625,13 @@ local function initializeGunSilent()
         updateFovCircle(deltaTime)
         if not currentTool then
             GunSilent.Core.GunSilentTarget.CurrentTarget = nil
-            updateVisualsGun(nil, false)
+            updateVisualsGun(nil, false, deltaTime)
             return
         end
 
         local gunRange = getGunRange(currentTool)
         local nearestPlayer = getNearestPlayerGun(gunRange)
-        updateVisualsGun(nearestPlayer, true)
+        updateVisualsGun(nearestPlayer, true, deltaTime)
         if GunSilent.Settings.Rage.Value and GunSilent.State.V_U_4 and nearestPlayer then
             local aimCFrame = getAimCFrameGun(nearestPlayer)
             local hitData = createHitDataGun(nearestPlayer)
@@ -661,7 +663,6 @@ local function Init(UI, Core, notify)
     if UI.Tabs.Combat then
         UI.Sections.GunSilent = UI.Tabs.Combat:Section({ Side = "Right", Name = "GunSilent" })
         if UI.Sections.GunSilent then
-            -- Таблица для хранения UI-элементов и их коллбэков
             local uiElements = {}
 
             UI.Sections.GunSilent:Header({ Name = "GunSilent" })
@@ -1130,6 +1131,23 @@ local function Init(UI, Core, notify)
                     notify("GunSilent", "Smoothing Factor set to: " .. value, false)
                 end
             }
+            uiElements.SmoothingVisualFactor = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Visual Smoothing Factor",
+                    Minimum = 0.1,
+                    Maximum = 0.9,
+                    Default = GunSilent.Settings.SmoothingVisualFactor.Value,
+                    Precision = 1,
+                    Callback = function(value)
+                        GunSilent.Settings.SmoothingVisualFactor.Value = value
+                        notify("GunSilent", "Visual Smoothing Factor set to: " .. value, false)
+                    end
+                }, 'SmoothingVisualFactor'),
+                callback = function(value)
+                    GunSilent.Settings.SmoothingVisualFactor.Value = value
+                    notify("GunSilent", "Visual Smoothing Factor set to: " .. value, false)
+                end
+            }
             uiElements.TeleportSpeed = {
                 element = UI.Sections.GunSilent:Slider({
                     Name = "Teleport Speed",
@@ -1182,11 +1200,9 @@ local function Init(UI, Core, notify)
                 end
             }
 
-            -- Добавляем кнопку синхронизации
             UI.Sections.GunSilent:Button({
                 Name = "Sync Settings",
                 Callback = function()
-                    -- Синхронизация через вызов коллбэков с текущими значениями UI
                     uiElements.GSEnabled.callback(uiElements.GSEnabled.element:GetState())
                     uiElements.RangePlus.callback(uiElements.RangePlus.element:GetValue())
                     uiElements.Rage.callback(uiElements.Rage.element:GetState())
@@ -1233,6 +1249,7 @@ local function Init(UI, Core, notify)
                     uiElements.VehicleYCorrection.callback(uiElements.VehicleYCorrection.element:GetValue())
                     uiElements.PositionHistory.callback(uiElements.PositionHistory.element:GetValue())
                     uiElements.SmoothingFactor.callback(uiElements.SmoothingFactor.element:GetValue())
+                    uiElements.SmoothingVisualFactor.callback(uiElements.SmoothingVisualFactor.element:GetValue())
                     uiElements.TeleportSpeed.callback(uiElements.TeleportSpeed.element:GetValue())
                     uiElements.TPLimit.callback(uiElements.TPLimit.element:GetValue())
                     uiElements.BulletSpeed.callback(uiElements.BulletSpeed.element:GetValue())
