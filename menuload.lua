@@ -29,8 +29,8 @@ local GunSilent = {
         AdvancedSmoothingFactor = { Value = 0.1, Default = 0.1 },
         SmoothingVisualFactor = { Value = 0.3, Default = 0.3 },
         AdvancedPositionHistorySize = { Value = 20, Default = 20 },
-        LatencyCompensation = { Value = 0.05, Default = 0.05 }, -- Уменьшено
-        PingEstimate = { Value = 0.03, Default = 0.03 }, -- Уменьшено
+        LatencyCompensation = { Value = 0.2, Default = 0.2 },
+        PingEstimate = { Value = 0.03, Default = 0.03 }, -- Уменьшено до 30 мс
         ShowTrajectoryBeam = { Value = true, Default = true },
         ShowFullTrajectory = { Value = true, Default = true },
         ShotgunSupport = { Value = false, Default = false },
@@ -49,6 +49,7 @@ local GunSilent = {
     State = {
         LastEventId = 0,
         LastTool = nil,
+        ToolCache = nil, -- Новый кэш для инструмента
         TargetVisualPart = nil,
         HitboxVisualPart = nil,
         PredictVisualPart = nil,
@@ -72,8 +73,7 @@ local GunSilent = {
         LocalRoot = nil,
         LastTargetPos = nil,
         LastPredictionPos = nil,
-        SmoothedVisualPositions = {},
-        LastPredictedPos = nil -- Добавлено для сглаживания
+        SmoothedVisualPositions = {}
     }
 }
 
@@ -85,23 +85,44 @@ local function isGunTool(tool)
     return gunFolder:FindFirstChild(tool.Name) ~= nil
 end
 
+local function updateToolCache(tool)
+    if not tool then
+        GunSilent.State.ToolCache = nil
+        return
+    end
+    if GunSilent.State.ToolCache and GunSilent.State.ToolCache.Tool == tool then
+        return -- Кэш уже актуален
+    end
+    GunSilent.State.ToolCache = {
+        Tool = tool,
+        Range = tool:GetAttribute("Range") or 50,
+        AmmoType = tool:GetAttribute("AmmoType") or ""
+    }
+end
+
 local function getGunRange(tool)
-    return (tool and tool:GetAttribute("Range") or 50) + GunSilent.Settings.RangePlus.Value
+    if not tool or not GunSilent.State.ToolCache or GunSilent.State.ToolCache.Tool ~= tool then
+        updateToolCache(tool)
+    end
+    return (GunSilent.State.ToolCache and GunSilent.State.ToolCache.Range or 50) + GunSilent.Settings.RangePlus.Value
 end
 
 local function isShotgun(tool)
-    if not tool then return false end
-    local ammoType = tool:GetAttribute("AmmoType")
-    return ammoType and ammoType:lower() == "shotgun"
+    if not tool or not GunSilent.State.ToolCache or GunSilent.State.ToolCache.Tool ~= tool then
+        updateToolCache(tool)
+    end
+    return GunSilent.State.ToolCache and GunSilent.State.ToolCache.AmmoType and GunSilent.State.ToolCache.AmmoType:lower() == "shotgun"
 end
 
 local function getEquippedGunTool(character)
     if not character then return nil end
     for _, child in pairs(character:GetChildren()) do
         if child.ClassName == "Tool" and isGunTool(child) then
+            updateToolCache(child) -- Обновляем кэш при обнаружении инструмента
             return child
         end
     end
+    updateToolCache(nil) -- Если инструмент не найден, очищаем кэш
     return nil
 end
 
@@ -113,8 +134,6 @@ local function updateFovCircle(deltaTime)
         return
     end
 
-    -- Обновляем камеру
-    GunSilent.Core.PlayerData.Camera = Workspace.CurrentCamera
     local camera = GunSilent.Core.PlayerData.Camera
     if not camera then return end
 
@@ -282,17 +301,11 @@ local function predictTargetPositionGun(target, applyFakeDistance)
     local fakePos = applyFakeDistance and GunSilent.Settings.FakeDistance.Value > 0 and (pastPos - (pastPos - myPos).Unit * math.max(1, (pastPos - myPos).Magnitude - GunSilent.Settings.FakeDistance.Value)) or myPos
     local distance = (pastPos - fakePos).Magnitude
     local realDistance = (pastPos - myPos).Magnitude
-    local timeToTarget = distance / bulletSpeed
-    local realTimeToTarget = realDistance / bulletSpeed
+    local timeToTarget = math.max(distance / bulletSpeed, 0.01) -- Минимальный порог времени
+    local realTimeToTarget = math.max(realDistance / bulletSpeed, 0.01)
 
-    local predictedPos = pastPos + pastVel * (timeToTarget + GunSilent.Settings.LatencyCompensation.Value)
-    local realPredictedPos = pastPos + pastVel * (realTimeToTarget + GunSilent.Settings.LatencyCompensation.Value)
-
-    -- Добавляем сглаживание
-    local lastPredictedPos = GunSilent.State.LastPredictedPos or predictedPos
-    predictedPos = lastPredictedPos:Lerp(predictedPos, 0.5)
-    realPredictedPos = lastPredictedPos:Lerp(realPredictedPos, 0.5)
-    GunSilent.State.LastPredictedPos = predictedPos
+    local predictedPos = pastPos + pastVel * timeToTarget -- Убрано LatencyCompensation
+    local realPredictedPos = pastPos + pastVel * realTimeToTarget
 
     local humanoid = targetChar:FindFirstChild("Humanoid")
     local isInVehicle = humanoid and humanoid.SeatPart ~= nil
@@ -328,9 +341,6 @@ local function createHitDataGun(target)
 
     local hitPart = targetChar:FindFirstChild(GunSilent.Settings.HitPart.Value == "Random" and (math.random() > 0.5 and "Head" or "UpperTorso") or GunSilent.Settings.HitPart.Value) or targetChar:FindFirstChild("HumanoidRootPart")
     if not hitPart then return nil end
-
-    -- Отладочный вывод
-    print("Bullet direction:", prediction.realDirection, "Target position:", prediction.position)
 
     local equippedTool = getEquippedGunTool(GunSilent.State.LocalCharacter)
     local isShotgunWeapon = GunSilent.Settings.ShotgunSupport.Value and equippedTool and isShotgun(equippedTool)
@@ -996,7 +1006,6 @@ local function Init(UI, Core, notify)
                 }, 'PredictVisual'),
                 callback = function(value)
                     GunSilent.Settings.PredictVisual.Value = value
-                    notify("GunSilent", "Predict Visualconomic
                     notify("GunSilent", "Predict Visual " .. (value and "Enabled" or "Disabled"), true)
                 end
             }
