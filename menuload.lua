@@ -86,6 +86,7 @@ local GunSilent = {
         LastTargetPos = nil,
         LastPredictionPos = nil,
         TrackTargetHitboxes = nil,
+        ChamsFolder = nil,
     }
 }
 
@@ -386,6 +387,10 @@ local function ClearTrackTargetHitboxes()
         end
         GunSilent.State.TrackTargetHitboxes = nil
     end
+    if GunSilent.State.ChamsFolder then
+        GunSilent.State.ChamsFolder:Destroy()
+        GunSilent.State.ChamsFolder = nil
+    end
 end
 
 local function SetupTrackTargetHitboxes(character, predictedPos, targetRoot)
@@ -393,11 +398,12 @@ local function SetupTrackTargetHitboxes(character, predictedPos, targetRoot)
         return nil
     end
 
-    for _, child in pairs(character:GetChildren()) do
-        if child.Name:match("TrackTargetHitbox_") then
-            child:Destroy()
-        end
-    end
+    ClearTrackTargetHitboxes()
+
+    local chamsFolder = Instance.new("Folder")
+    chamsFolder.Name = "ChamsFolder"
+    chamsFolder.Parent = Workspace
+    GunSilent.State.ChamsFolder = chamsFolder
 
     local bodyParts = {
         "Head",
@@ -430,7 +436,7 @@ local function SetupTrackTargetHitboxes(character, predictedPos, targetRoot)
             hitboxPart.Size = bodyPart.Size * 1.1
             hitboxPart.Transparency = 0.5
             hitboxPart.Color = GunSilent.Settings.ChamsColor.Value
-            hitboxPart.Parent = character
+            hitboxPart.Parent = chamsFolder
 
             local relativeCFrame = targetRoot.CFrame:ToObjectSpace(bodyPart.CFrame)
             hitboxes[partName] = {
@@ -444,10 +450,15 @@ local function SetupTrackTargetHitboxes(character, predictedPos, targetRoot)
     return hitboxes
 end
 
-local function updateVisualsGun(target, hasWeapon)
+local function updateVisualsGun(target, hasWeapon, deltaTime)
     local currentTime = tick()
-    if currentTime - GunSilent.State.LastVisualUpdateTime < GunSilent.Settings.VisualUpdateFrequency.Value then return end
-    GunSilent.State.LastVisualUpdateTime = currentTime
+    if currentTime - GunSilent.State.LastVisualUpdateTime < GunSilent.Settings.VisualUpdateFrequency.Value then
+        if not GunSilent.Settings.TrackTarget.Value or not GunSilent.State.TrackTargetHitboxes then
+            return
+        end
+    else
+        GunSilent.State.LastVisualUpdateTime = currentTime
+    end
 
     local localRoot = GunSilent.State.LocalRoot
     if not GunSilent.Settings.Enabled.Value or not hasWeapon or not target or not target.Character or not localRoot then
@@ -630,7 +641,6 @@ local function updateVisualsGun(target, hasWeapon)
     end
 
     if GunSilent.Settings.TrackTarget.Value then
-        -- Проверяем, соответствует ли текущий TrackTargetHitboxes текущей цели
         if not GunSilent.State.TrackTargetHitboxes or GunSilent.State.TrackTargetHitboxes.Target ~= target then
             ClearTrackTargetHitboxes()
             local hitboxes = SetupTrackTargetHitboxes(targetChar, prediction.position, targetRoot)
@@ -644,24 +654,21 @@ local function updateVisualsGun(target, hasWeapon)
 
         if GunSilent.State.TrackTargetHitboxes and GunSilent.State.TrackTargetHitboxes.Hitboxes then
             local predictedRootPos = prediction.position
-            local currentRootPos = targetRoot.Position
-            local adjustedPredictedPos = Vector3.new(predictedRootPos.X, currentRootPos.Y, predictedRootPos.Z)
-            local targetOffset = adjustedPredictedPos - currentRootPos
+            local targetOffset = predictedRootPos - targetRoot.Position
 
-            local smoothingFactor = 0.5
-            local deltaTime = RunService.Heartbeat:Wait()
+            local smoothingFactor = 5
+            local adjustedDeltaTime = math.clamp(deltaTime, 0, 0.1)
 
             for partName, hitboxData in pairs(GunSilent.State.TrackTargetHitboxes.Hitboxes) do
                 local hitboxPart = hitboxData.Part
                 local bodyPart = hitboxData.BodyPart
                 if hitboxPart and bodyPart and hitboxPart:IsA("BasePart") and bodyPart:IsA("BasePart") then
-                    local relativeCFrame = targetRoot.CFrame:ToObjectSpace(bodyPart.CFrame)
-                    hitboxData.RelativeCFrame = relativeCFrame
-
-                    local targetCFrame = targetRoot.CFrame:ToWorldSpace(relativeCFrame) + targetOffset
+                    local relativeCFrame = hitboxData.RelativeCFrame
+                    local targetCFrame = (targetRoot.CFrame + targetOffset) * relativeCFrame
 
                     local currentCFrame = hitboxPart.CFrame
-                    local newCFrame = currentCFrame:Lerp(targetCFrame, 1 - math.exp(-smoothingFactor * deltaTime * 60))
+                    local alpha = 1 - math.exp(-smoothingFactor * adjustedDeltaTime)
+                    local newCFrame = currentCFrame:Lerp(targetCFrame, alpha)
 
                     hitboxPart.CFrame = newCFrame
                     hitboxPart.Transparency = 0.5
@@ -742,13 +749,13 @@ local function initializeGunSilent()
         updateFovCircle(deltaTime)
         if not currentTool then
             GunSilent.Core.GunSilentTarget.CurrentTarget = nil
-            updateVisualsGun(nil, false)
+            updateVisualsGun(nil, false, deltaTime)
             return
         end
 
         local gunRange = getGunRange(currentTool)
         local nearestPlayer = getNearestPlayerGun(gunRange)
-        updateVisualsGun(nearestPlayer, true)
+        updateVisualsGun(nearestPlayer, true, deltaTime)
         if GunSilent.Settings.Rage.Value and GunSilent.State.V_U_4 and nearestPlayer then
             local aimCFrame = getAimCFrameGun(nearestPlayer)
             local hitData = createHitDataGun(nearestPlayer)
@@ -1375,7 +1382,7 @@ local function Init(UI, Core, notify)
                 }, 'VehicleYCorrection'),
                 callback = function(value)
                     GunSilent.Settings.AdvancedVehicleYCorrection.Value = value
-                    notify("GunSilent", "Vehicle Y Correction set to: " .. value, false)
+                    notify("GunSil ent", "Vehicle Y Correction set to: " .. value, false)
                 end
             }
             uiElements.VisualUpdate = {
