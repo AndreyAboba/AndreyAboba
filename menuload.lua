@@ -134,10 +134,7 @@ local function setupHitboxes(character, isPredicted)
     }
     
     local rootPart = character:FindFirstChild("HumanoidRootPart")
-    if not rootPart then
-        print("setupHitboxes: No HumanoidRootPart found")
-        return {}
-    end
+    if not rootPart then return {} end
     
     for _, partName in ipairs(bodyParts) do
         local bodyPart = character:FindFirstChild(partName)
@@ -150,15 +147,13 @@ local function setupHitboxes(character, isPredicted)
             hitboxPart.Transparency = 0.5
             hitboxPart.Color = Color3.fromRGB(0, 255, 255) -- Голубой цвет
             hitboxPart.Parent = Workspace
-            -- Вычисляем RelativeCFrame
-            local relativeCFrame = rootPart.CFrame:ToObjectSpace(bodyPart.CFrame)
+            -- Вычисляем RelativeCFrame без смещения по Y
+            local relativeCFrame = CFrame.new(rootPart.CFrame:PointToObjectSpace(bodyPart.Position)) * (bodyPart.CFrame - bodyPart.Position)
             hitboxes[partName] = {
                 Part = hitboxPart,
                 BodyPart = bodyPart,
                 RelativeCFrame = relativeCFrame
             }
-            -- Дебаг-лог для проверки RelativeCFrame
-            print(string.format("setupHitboxes: %s RelativeCFrame.Position = %s", partName, tostring(relativeCFrame.Position)))
         end
     end
     return hitboxes
@@ -430,18 +425,12 @@ local function updateVisualsGun(target, hasWeapon)
     end
 
     local prediction = predictTargetPositionGun(target, true)
-    if not prediction.position or not prediction.direction then
-        print("updateVisualsGun: No valid prediction data")
-        return
-    end
+    if not prediction.position or not prediction.direction then return end
 
     local targetChar = target.Character
     local targetHead = targetChar:FindFirstChild("Head") or targetChar:FindFirstChild("HumanoidRootPart")
     local hitPart = targetChar:FindFirstChild(GunSilent.Settings.HitPart.Value == "Random" and (math.random() > 0.5 and "Head" or "UpperTorso") or GunSilent.Settings.HitPart.Value) or targetChar:FindFirstChild("HumanoidRootPart")
-    if not targetHead or not hitPart then
-        print("updateVisualsGun: No targetHead or hitPart")
-        return
-    end
+    if not targetHead or not hitPart then return end
 
     local targetPos, predictionPos = prediction.clientPosition, prediction.position
     local shouldUpdate = not GunSilent.State.LastTargetPos or not GunSilent.State.LastPredictionPos or
@@ -460,27 +449,16 @@ local function updateVisualsGun(target, hasWeapon)
     if GunSilent.Settings.HitboxTarget.Value then
         local rootPart = targetChar:FindFirstChild("HumanoidRootPart")
         if rootPart then
-            -- Вычисляем ориентацию на основе движения цели
-            local velocity = rootPart.Velocity
-            local lookDirection = velocity.Magnitude > 0.1 and velocity.Unit or rootPart.CFrame.LookVector
-            local orientationCFrame = CFrame.new(Vector3.new(0, 0, 0), lookDirection)
-            
+            -- Корректировка позиции по Y
+            local adjustedPredictionPos = prediction.position - Vector3.new(0, 0.5, 0) -- Смещаем вниз на 0.5 stud
             -- Обновляем голубые хитбоксы
             for partName, hitbox in pairs(GunSilent.State.TargetPredictedHitboxes) do
                 if hitbox.Part and hitbox.BodyPart then
-                    -- Привязываем хитбокс к предсказанной позиции с учетом ориентации
-                    local relativeCFrame = hitbox.RelativeCFrame
-                    local predictedCFrame = CFrame.new(prediction.position) * orientationCFrame * relativeCFrame
+                    -- Используем ориентацию rootPart напрямую
+                    local predictedCFrame = CFrame.new(adjustedPredictionPos) * rootPart.CFrame * hitbox.RelativeCFrame
                     hitbox.Part.CFrame = predictedCFrame
-                    
-                    -- Дебаг-логи для проверки
-                    local heightDiff = hitbox.Part.Position.Y - prediction.position.Y
-                    print(string.format("PredictedHitbox %s: Position = %s, PredictionPos = %s, HeightDiff = %.2f, LookDirection = %s",
-                        partName, tostring(hitbox.Part.Position), tostring(prediction.position), heightDiff, tostring(lookDirection)))
                 end
             end
-        else
-            print("updateVisualsGun: No HumanoidRootPart")
         end
     else
         for _, hitbox in pairs(GunSilent.State.TargetPredictedHitboxes) do
