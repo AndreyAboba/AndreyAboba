@@ -59,9 +59,9 @@ function UILib:CreateDropdown(parent, name, options, default, callback)
 
     local DropdownLabel = Instance.new("TextLabel", DropdownFrame)
     DropdownLabel.Size = UDim2.new(1, -60, 0, 20)
-    DropdownLabel.Position = UDim2.new(0, 15, 0, 10) -- Сдвигаем правее с 5 до 15
+    DropdownLabel.Position = UDim2.new(0, 15, 0, 10) -- Сдвигаем правее: с 5 до 15 пикселей
     DropdownLabel.BackgroundTransparency = 1
-    DropdownLabel.Text = name .. " :" -- Добавляем двоеточие
+    DropdownLabel.Text = name .. " : " -- Добавляем двоеточие и пробел
     DropdownLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     DropdownLabel.TextSize = 14
     DropdownLabel.Font = Enum.Font.Montserrat
