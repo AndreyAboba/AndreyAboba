@@ -342,8 +342,8 @@ end
 local function ClearTrackTargetHitboxes()
     if GunSilent.State.TrackTargetHitboxes then
         for _, hitboxData in pairs(GunSilent.State.TrackTargetHitboxes.Hitboxes or {}) do
-            if hitboxData.Part then
-                hitboxData.Part:Destroy()
+            if hitboxData.Highlight then
+                hitboxData.Highlight:Destroy()
             end
         end
         GunSilent.State.TrackTargetHitboxes = nil
@@ -540,7 +540,7 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
         GunSilent.State.RealDirectionVisualPart.Transparency = 1
     end
 
-    if GunSilent.Settings.PredictVisual.Value and GunSilent.Settings.ShowTrajectoryBeam and shouldUpdate then
+    if GunSilent.Settings.PredictVisual.Value and GunSilent.Settings.ShowTrajectoryBeam.Value and shouldUpdate then
         local trajectoryBeam = GunSilent.State.TrajectoryBeam
         if not trajectoryBeam then
             trajectoryBeam = Instance.new("Beam")
@@ -563,7 +563,7 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
         GunSilent.State.TrajectoryBeam.Enabled = false
     end
 
-    if GunSilent.Settings.PredictVisual.Value and GunSilent.Settings.ShowFullTrajectory and shouldUpdate then
+    if GunSilent.Settings.PredictVisual.Value and GunSilent.Settings.ShowFullTrajectory.Value and shouldUpdate then
         local fullTrajectoryParts = GunSilent.State.FullTrajectoryParts
         if not fullTrajectoryParts then
             fullTrajectoryParts = {}
@@ -982,7 +982,7 @@ local function Init(UI, Core, notify)
 
             uiElements.ChamsColor = UI.Sections.GunSilent:Colorpicker({
                 Name = "Chams Color",
-                Default = tostring(GunSilent.Settings.ChamsColor.Default),
+                Default = GunSilent.Settings.ChamsColor.Default,
                 Callback = function(value)
                     GunSilent.Settings.ChamsColor.Value = value
                     notify("GunSilent", "Chams Color updated", true)
