@@ -598,7 +598,7 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
     end
 
     if GunSilent.Settings.TrackTarget.Value then
-        if not GunSilent.State.TrackTargetHitboxes or GunSilent.State.TrackTargetHitboxes.Target != target then
+        if not GunSilent.State.TrackTargetHitboxes or GunSilent.State.TrackTargetHitboxes.Target ~= target then
             ClearTrackTargetHitboxes()
             local hitboxes = SetupTrackTargetHitboxes(targetChar, targetRoot)
             if hitboxes then
@@ -1244,6 +1244,7 @@ local function Init(UI, Core, notify)
                     uiElements.TeleportSpeed.callback(uiElements.TeleportSpeed.element:GetValue())
                     uiElements.TPLimit.callback(uiElements.TPLimit.element:GetValue())
                     uiElements.BulletSpeed.callback(uiElements.BulletSpeed.element:GetValue())
+                    uiElevents.LatencyCompensation.callback(uiElements.LatencyCompensation.element:GetValue())
 
                     notify("GunSilent", "Settings synchronized with UI!", true)
                 end
