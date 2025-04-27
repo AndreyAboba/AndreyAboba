@@ -34,7 +34,7 @@ local GunSilent = {
         AdvancedSmallDistanceSpeedFactorMultiplier = { Value = 1.7, Default = 1.7 },
         AdvancedSlowVehiclePredictionFactor = { Value = 1.95, Default = 1.95 },
         AdvancedFastVehiclePredictionLimit = { Value = 2.2, Default = 2.2 },
-        VisualUpdateFrequency = { Value = 0.016, Default = 0.016 },
+        VisualUpdateFrequency = { Value = 0.1, Default = 0.1 },
         AdvancedPositionHistorySize = { Value = 20, Default = 20 },
         LatencyCompensation = { Value = 0.2, Default = 0.2 },
         ShowTrajectoryBeam = { Value = true, Default = true },
@@ -249,62 +249,51 @@ local function predictTargetPositionGun(target, applyFakeDistance)
     end
 
     local targetPos = hitPart.Position
-    if not targetPos then
-        return { position = nil, direction = nil, realDirection = nil, fakePosition = nil, timeToTarget = 0 }
-    end
+    local targetId = tostring(target.UserId)
+    GunSilent.State.IsTeleporting = GunSilent.State.LastTargetPosition[targetId] and (targetPos - GunSilent.State.LastTargetPosition[targetId]).Magnitude > 50
+    GunSilent.State.LastTargetPosition[targetId] = targetPos
 
-    local fakeDistanceValue = GunSilent.Settings.FakeDistance.Value
-    local vectorToTarget = targetPos - myPos
-    local magnitudeToTarget = vectorToTarget.Magnitude
-    local fakePos
-    if applyFakeDistance and fakeDistanceValue > 0 and magnitudeToTarget > 0 then
-        local unitVector = vectorToTarget.Unit
-        local adjustedDistance = math.max(1, magnitudeToTarget - fakeDistanceValue)
-        fakePos = targetPos - unitVector * adjustedDistance
-    else
-        fakePos = myPos
-    end
-
-    local distance = (targetPos - fakePos).Magnitude
-    local realDistance = (targetPos - myPos).Magnitude
+    local fakePos = applyFakeDistance and GunSilent.Settings.FakeDistance.Value > 0 and (targetPos - (targetPos - myPos).Unit * math.max(1, (targetPos - myPos).Magnitude - GunSilent.Settings.FakeDistance.Value)) or myPos
+    local distance, realDistance = (targetPos - fakePos).Magnitude, (targetPos - myPos).Magnitude
     local bulletSpeed = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.PredictBullet.Value or GunSilent.FixedPredictionValues.PredictBullet
-    local timeToTarget = distance / bulletSpeed
-    local realTimeToTarget = realDistance / bulletSpeed
+    local timeToTarget, realTimeToTarget = distance / bulletSpeed, realDistance / bulletSpeed
 
-    local latency = GunSilent.Settings.LatencyCompensation.Value or 0.2
-    local adjustedTimeToTarget = timeToTarget + latency
-    local adjustedRealTimeToTarget = realTimeToTarget + latency
+    local positionHistory = GunSilent.State.PositionHistory[target] or {}
+    GunSilent.State.PositionHistory[target] = positionHistory
+    local currentTime = tick()
+    positionHistory[#positionHistory + 1] = { pos = targetPos, time = currentTime }
+    local historySize = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedPositionHistorySize.Value or GunSilent.FixedPredictionValues.PositionHistorySize
+    while #positionHistory > historySize do
+        table.remove(positionHistory, 1)
+    end
 
-    local velocity = targetRoot.Velocity
-    local speed = velocity.Magnitude
+    local effectiveVelocity = targetRoot.Velocity
+    local effectiveSpeed = effectiveVelocity.Magnitude
     local teleportThreshold = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedTeleportThreshold.Value or GunSilent.FixedPredictionValues.TeleportThreshold
     local maxSpeedLimit = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedMaxSpeed.Value or GunSilent.FixedPredictionValues.MaxSpeed
-    if speed > teleportThreshold then
-        velocity = Vector3.new(0, 0, 0)
-        speed = 0
-    elseif speed > maxSpeedLimit then
-        velocity = velocity.Unit * maxSpeedLimit
+    if effectiveSpeed > teleportThreshold then
+        effectiveVelocity = Vector3.new(0, 0, 0)
+        effectiveSpeed = 0
+        GunSilent.State.IsTeleporting = true
+    elseif effectiveSpeed > maxSpeedLimit then
+        effectiveVelocity = effectiveVelocity.Unit * maxSpeedLimit
     end
 
     local humanoid = targetChar:FindFirstChild("Humanoid")
-    local isJumping = humanoid and humanoid.Jump
-    local isMoving = speed > 5
-    local gravity = Vector3.new(0, -Workspace.Gravity, 0)
+    local isInVehicle = humanoid and humanoid.SeatPart ~= nil
+    local adjustedTimeToTarget = timeToTarget + GunSilent.Settings.LatencyCompensation.Value
+    local adjustedRealTimeToTarget = realTimeToTarget + GunSilent.Settings.LatencyCompensation.Value
 
-    local predictedPos = targetPos + velocity * adjustedTimeToTarget
-    local realPredictedPos = targetPos + velocity * adjustedRealTimeToTarget
+    local predictedPos, realPredictedPos = targetPos, targetPos
+    if not GunSilent.State.IsTeleporting then
+        local speedFactor = math.clamp(effectiveSpeed / (isInVehicle and 50 or 20), 0.5, isInVehicle and 2.5 or 1)
+        local predictionFactor = speedFactor * (isInVehicle and
+            (GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedVehicleFactor.Value or GunSilent.FixedPredictionValues.VehicleFactor) or
+            (GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedPedestrianFactor.Value or GunSilent.FixedPredictionValues.PedestrianFactor)) *
+            (GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedPredictionAggressiveness.Value or GunSilent.FixedPredictionValues.PredictionAggressiveness)
 
-    if isJumping then
-        local jumpTime = adjustedTimeToTarget
-        local gravityOffset = 0.5 * gravity * jumpTime * jumpTime
-        predictedPos = predictedPos + gravityOffset
-        realPredictedPos = realPredictedPos + gravityOffset
-    end
-
-    if isMoving then
-        local movementFactor = 1.2
-        predictedPos = targetPos + (velocity * adjustedTimeToTarget * movementFactor)
-        realPredictedPos = targetPos + (velocity * adjustedRealTimeToTarget * movementFactor)
+        predictedPos = targetPos + effectiveVelocity * adjustedTimeToTarget * predictionFactor
+        realPredictedPos = targetPos + effectiveVelocity * adjustedRealTimeToTarget * predictionFactor
     end
 
     return {
@@ -365,8 +354,8 @@ local function ClearTrackTargetHitboxes()
     end
 end
 
-local function SetupTrackTargetHitboxes(character, targetRoot)
-    if not character or not targetRoot then
+local function SetupTrackTargetHitboxes(character, predictedPos, targetRoot)
+    if not character or not predictedPos or not targetRoot then
         return nil
     end
 
@@ -397,6 +386,9 @@ local function SetupTrackTargetHitboxes(character, targetRoot)
     }
 
     local hitboxes = {}
+    local targetCFrame = targetRoot.CFrame
+    local predictedCFrame = CFrame.new(predictedPos)
+    local offsetCFrame = targetCFrame:ToObjectSpace(predictedCFrame)
 
     for _, partName in ipairs(bodyParts) do
         local bodyPart = character:FindFirstChild(partName)
@@ -410,7 +402,10 @@ local function SetupTrackTargetHitboxes(character, targetRoot)
             hitboxPart.Color = GunSilent.Settings.ChamsColor.Value
             hitboxPart.Parent = chamsFolder
 
-            local relativeCFrame = targetRoot.CFrame:ToObjectSpace(bodyPart.CFrame)
+            local relativeCFrame = bodyPart.CFrame:ToObjectSpace(targetCFrame)
+            local adjustedCFrame = predictedCFrame:ToWorldSpace(relativeCFrame) * CFrame.new(0, -0.5, 0)
+            hitboxPart.CFrame = adjustedCFrame
+
             hitboxes[partName] = {
                 Part = hitboxPart,
                 BodyPart = bodyPart,
@@ -615,7 +610,7 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
     if GunSilent.Settings.TrackTarget.Value then
         if not GunSilent.State.TrackTargetHitboxes or GunSilent.State.TrackTargetHitboxes.Target ~= target then
             ClearTrackTargetHitboxes()
-            local hitboxes = SetupTrackTargetHitboxes(targetChar, targetRoot)
+            local hitboxes = SetupTrackTargetHitboxes(targetChar, predictedPos, targetRoot)
             if hitboxes then
                 GunSilent.State.TrackTargetHitboxes = {
                     Target = target,
@@ -625,12 +620,13 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
         end
 
         if GunSilent.State.TrackTargetHitboxes and GunSilent.State.TrackTargetHitboxes.Hitboxes then
+            local predictedCFrame = CFrame.new(predictedPos)
             for partName, hitboxData in pairs(GunSilent.State.TrackTargetHitboxes.Hitboxes) do
                 local hitboxPart = hitboxData.Part
                 local bodyPart = hitboxData.BodyPart
                 if hitboxPart and bodyPart and hitboxPart:IsA("BasePart") and bodyPart:IsA("BasePart") then
                     local relativeCFrame = hitboxData.RelativeCFrame
-                    local adjustedCFrame = bodyPart.CFrame * relativeCFrame * CFrame.new(0, -0.5, 0)
+                    local adjustedCFrame = predictedCFrame:ToWorldSpace(relativeCFrame) * CFrame.new(0, -0.5, 0)
                     hitboxPart.CFrame = adjustedCFrame
                     hitboxPart.Transparency = 0.5
                     hitboxPart.Color = GunSilent.Settings.ChamsColor.Value
