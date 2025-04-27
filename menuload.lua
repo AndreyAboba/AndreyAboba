@@ -1120,7 +1120,7 @@ local function Init(UI, Core, notify)
                     Name = "LowDistanceMulti",
                     Minimum = 0.4,
                     Maximum = 2.1,
-                    Default = GumSilent.Settings.AdvancedSmallDistanceSpeedFactorMultiplier.Value,
+                    Default = GunSilent.Settings.AdvancedSmallDistanceSpeedFactorMultiplier.Value,
                     Precision = 2,
                     Callback = function(value)
                         GunSilent.Settings.AdvancedSmallDistanceSpeedFactorMultiplier.Value = value
