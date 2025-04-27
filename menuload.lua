@@ -598,7 +598,7 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
     end
 
     if GunSilent.Settings.TrackTarget.Value then
-        if not GunSilent.State.TrackTargetHitboxes or GunSilent.State.TrackTargetHitboxes.Target ~= target then
+        if not GunSilent.State.TrackTargetHitboxes or GunSilent.State.TrackTargetHitboxes.Target != target then
             ClearTrackTargetHitboxes()
             local hitboxes = SetupTrackTargetHitboxes(targetChar, targetRoot)
             if hitboxes then
@@ -1184,64 +1184,64 @@ local function Init(UI, Core, notify)
             UI.Sections.GunSilent:Button({
                 Name = "Sync Settings",
                 Callback = function()
-                    uiElements.GSEnabled.Callback(uiElements.GSEnabled.element:GetState())
-                    uiElements.RangePlus.Callback(uiElements.RangePlus.element:GetValue())
-                    uiElements.Rage.Callback(uiElements.Rage.element:GetState())
-                    uiElements.DoubleTap.Callback(uiElements.DoubleTap.element:GetState())
-                    local hitPartOptions = uiElements.HitPart.element:GetOptions()
+                    uiElements.GSEnabled.Callback(uiElements.GSEnabled:GetState())
+                    uiElements.RangePlus.Callback(uiElements.RangePlus:GetValue())
+                    uiElements.Rage.Callback(uiElements.Rage:GetState())
+                    uiElements.DoubleTap.Callback(uiElements.DoubleTap:GetState())
+                    local hitPartOptions = uiElements.HitPart:GetOptions()
                     for option, selected in pairs(hitPartOptions) do
                         if selected then
                             uiElements.HitPart.Callback(option)
                             break
                         end
                     end
-                    uiElements.FakeDistance.Callback(uiElements.FakeDistance.element:GetValue())
-                    uiElements.ShotgunSupport.Callback(uiElements.ShotgunSupport.element:GetState())
-                    uiElements.GenerateBullets.Callback(uiElements.GenerateBullets.element:GetValue())
-                    uiElements.TestGenerateBullets.Callback(uiElements.TestGenerateBullets.element:GetState())
-                    uiElements.GSUSEFOV.Callback(uiElements.GSUSEFOV.element:GetState())
-                    uiElements.GSFOV.Callback(uiElements.GSFOV.element:GetValue())
-                    uiElements.GSShowCircle.Callback(uiElements.GSShowCircle.element:GetState())
-                    local circleMethodOptions = uiElements.GSCircleMethod.element:GetOptions()
+                    uiElements.FakeDistance.Callback(uiElements.FakeDistance:GetValue())
+                    uiElements.ShotgunSupport.Callback(uiElements.ShotgunSupport:GetState())
+                    uiElements.GenerateBullets.Callback(uiElements.GenerateBullets:GetValue())
+                    uiElements.TestGenerateBullets.Callback(uiElements.TestGenerateBullets:GetState())
+                    uiElements.GSUSEFOV.Callback(uiElements.GSUSEFOV:GetState())
+                    uiElements.GSFOV.Callback(uiElements.GSFOV:GetValue())
+                    uiElements.GSShowCircle.Callback(uiElements.GSShowCircle:GetState())
+                    local circleMethodOptions = uiElements.GSCircleMethod:GetOptions()
                     for option, selected in pairs(circleMethodOptions) do
                         if selected then
                             uiElements.GSCircleMethod.Callback(option)
                             break
                         end
                     end
-                    uiElements.GSGradientCircle.Callback(uiElements.GSGradientCircle.element:GetState())
-                    uiElements.GSGradientSpeed.Callback(uiElements.GSGradientSpeed.element:GetValue())
-                    local sortMethodOptions = uiElements.SortMethod.element:GetOptions()
+                    uiElements.GSGradientCircle.Callback(uiElements.GSGradientCircle:GetState())
+                    uiElements.GSGradientSpeed.Callback(uiElements.GSGradientSpeed:GetValue())
+                    local sortMethodOptions = uiElements.SortMethod:GetOptions()
                     for option, selected in pairs(sortMethodOptions) do
                         if selected then
                             uiElements.SortMethod.Callback(option)
                             break
                         end
                     end
-                    uiElements.TargetVisual.Callback(uiElements.TargetVisual.element:GetState())
-                    uiElements.HitboxVisual.Callback(uiElements.HitboxVisual.element:GetState())
-                    uiElements.PredictVisual.Callback(uiElements.PredictVisual.element:GetState())
-                    uiElements.ShowDirection.Callback(uiElements.ShowDirection.element:GetState())
-                    uiElements.ShowTrajectory.Callback(uiElements.ShowTrajectory.element:GetState())
-                    uiElements.ShowFullTrajectory.Callback(uiElements.ShowFullTrajectory.element:GetState())
-                    uiElements.TrackTarget.Callback(uiElements.TrackTarget.element:GetState())
-                    uiElements.ChamsColor.Callback(uiElements.ChamsColor.element:GetValue())
-                    uiElements.HitChance.Callback(uiElements.HitChance.element:GetValue())
-                    uiElements.LatencyCompensation.Callback(uiElements.LatencyCompensation.element:GetValue())
-                    uiElements.AdvancedPrediction.Callback(uiElements.AdvancedPrediction.element:GetState())
-                    uiElements.VehicleFactor.Callback(uiElements.VehicleFactor.element:GetValue())
-                    uiElements.PlayerFactor.Callback(uiElements.PlayerFactor.element:GetValue())
-                    uiElements.Agressivness.Callback(uiElements.Agressivness.element:GetValue())
-                    uiElements.LowDistanceMulti.Callback(uiElements.LowDistanceMulti.element:GetValue())
-                    uiElements.SlowVehicleMulti.Callback(uiElements.SlowVehicleMulti.element:GetValue())
-                    uiElements.FastPredictionLimit.Callback(uiElements.FastPredictionLimit.element:GetValue())
-                    uiElements.PositionHistory.Callback(uiElements.PositionHistory.element:GetValue())
-                    uiElements.SmoothingFactor.Callback(uiElements.SmoothingFactor.element:GetValue())
-                    uiElements.VehicleYCorrection.Callback(uiElements.VehicleYCorrection.element:GetValue())
-                    uiElements.VisualUpdate.Callback(uiElements.VisualUpdate.element:GetValue())
-                    uiElements.TeleportSpeed.Callback(uiElements.TeleportSpeed.element:GetValue())
-                    uiElements.TPLimit.Callback(uiElements.TPLimit.element:GetValue())
-                    uiElements.BulletSpeed.Callback(uiElements.BulletSpeed.element:GetValue())
+                    uiElements.TargetVisual.Callback(uiElements.TargetVisual:GetState())
+                    uiElements.HitboxVisual.Callback(uiElements.HitboxVisual:GetState())
+                    uiElements.PredictVisual.Callback(uiElements.PredictVisual:GetState())
+                    uiElements.ShowDirection.Callback(uiElements.ShowDirection:GetState())
+                    uiElements.ShowTrajectory.Callback(uiElements.ShowTrajectory:GetState())
+                    uiElements.ShowFullTrajectory.Callback(uiElements.ShowFullTrajectory:GetState())
+                    uiElements.TrackTarget.Callback(uiElements.TrackTarget:GetState())
+                    uiElements.ChamsColor.Callback(uiElements.ChamsColor:GetValue())
+                    uiElements.HitChance.Callback(uiElements.HitChance:GetValue())
+                    uiElements.LatencyCompensation.Callback(uiElements.LatencyCompensation:GetValue())
+                    uiElements.AdvancedPrediction.Callback(uiElements.AdvancedPrediction:GetState())
+                    uiElements.VehicleFactor.Callback(uiElements.VehicleFactor:GetValue())
+                    uiElements.PlayerFactor.Callback(uiElements.PlayerFactor:GetValue())
+                    uiElements.Agressivness.Callback(uiElements.Agressivness:GetValue())
+                    uiElements.LowDistanceMulti.Callback(uiElements.LowDistanceMulti:GetValue())
+                    uiElements.SlowVehicleMulti.Callback(uiElements.SlowVehicleMulti:GetValue())
+                    uiElements.FastPredictionLimit.Callback(uiElements.FastPredictionLimit:GetValue())
+                    uiElements.PositionHistory.Callback(uiElements.PositionHistory:GetValue())
+                    uiElements.SmoothingFactor.Callback(uiElements.SmoothingFactor:GetValue())
+                    uiElements.VehicleYCorrection.Callback(uiElements.VehicleYCorrection:GetValue())
+                    uiElements.VisualUpdate.Callback(uiElements.VisualUpdate:GetValue())
+                    uiElements.TeleportSpeed.Callback(uiElements.TeleportSpeed:GetValue())
+                    uiElements.TPLimit.Callback(uiElements.TPLimit:GetValue())
+                    uiElements.BulletSpeed.Callback(uiElements.BulletSpeed:GetValue())
                     notify("GunSilent", "Settings synchronized with UI!", true)
                 end
             }, 'SyncSettings')
