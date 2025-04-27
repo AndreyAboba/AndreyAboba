@@ -36,14 +36,14 @@ local GunSilent = {
         AdvancedFastVehiclePredictionLimit = { Value = 2.2, Default = 2.2 },
         VisualUpdateFrequency = { Value = 0.1, Default = 0.1 },
         AdvancedPositionHistorySize = { Value = 20, Default = 20 },
-        LatencyCompensation = { Value = 0.1, Default = 0.1 }, -- Пинг в секундах
+        LatencyCompensation = { Value = 0.1, Default = 0.1 },
         ShowTrajectoryBeam = { Value = true, Default = true },
         ShowFullTrajectory = { Value = true, Default = true },
         ShotgunSupport = { Value = false, Default = false },
         GenBullet = { Value = 4, Default = 4 },
         TestGenBullet = { Value = false, Default = false },
         DoubleTap = { Value = false, Default = false },
-        HitboxTarget = { Value = true, Default = true }
+        HitboxTarget = { Value = true, Default = true } -- Оставлено для UI, но не влияет
     },
     FixedPredictionValues = {
         VehicleFactor = 0.9,
@@ -83,8 +83,7 @@ local GunSilent = {
         LocalCharacter = nil,
         LocalRoot = nil,
         LastTargetPos = nil,
-        LastPredictionPos = nil,
-        TargetPredictedHitboxes = {}
+        LastPredictionPos = nil
     }
 }
 
@@ -114,49 +113,6 @@ local function getEquippedGunTool(character)
         end
     end
     return nil
-end
-
-local function setupHitboxes(character, isPredicted)
-    if not character or not isPredicted then return {} end -- Только предсказанные хитбоксы
-    local hitboxes = {}
-    local bodyParts = {
-        "Head",
-        "UpperTorso",
-        "LowerTorso",
-        "LeftUpperLeg",
-        "LeftLowerLeg",
-        "RightUpperLeg",
-        "RightLowerLeg",
-        "LeftUpperArm",
-        "LeftLowerArm",
-        "RightUpperArm",
-        "RightLowerArm"
-    }
-    
-    local rootPart = character:FindFirstChild("HumanoidRootPart")
-    if not rootPart then return {} end
-    
-    for _, partName in ipairs(bodyParts) do
-        local bodyPart = character:FindFirstChild(partName)
-        if bodyPart and bodyPart:IsA("BasePart") then
-            local hitboxPart = Instance.new("Part")
-            hitboxPart.Name = "PredictedHitbox_" .. partName
-            hitboxPart.Anchored = true
-            hitboxPart.CanCollide = false
-            hitboxPart.Size = bodyPart.Size * 1.1
-            hitboxPart.Transparency = 0.5
-            hitboxPart.Color = Color3.fromRGB(0, 255, 255) -- Голубой цвет
-            hitboxPart.Parent = Workspace
-            -- Вычисляем RelativeCFrame без смещения по Y
-            local relativeCFrame = CFrame.new(rootPart.CFrame:PointToObjectSpace(bodyPart.Position)) * (bodyPart.CFrame - bodyPart.Position)
-            hitboxes[partName] = {
-                Part = hitboxPart,
-                BodyPart = bodyPart,
-                RelativeCFrame = relativeCFrame
-            }
-        end
-    end
-    return hitboxes
 end
 
 local function updateFovCircle(deltaTime)
@@ -308,11 +264,9 @@ local function predictTargetPositionGun(target, applyFakeDistance)
         table.remove(positionHistory, 1)
     end
 
-    -- Текущая клиентская позиция и скорость
     local clientPos = targetPos
     local clientVelocity = targetRoot.Velocity
 
-    -- Ограничение скорости
     local teleportThreshold = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedTeleportThreshold.Value or GunSilent.FixedPredictionValues.TeleportThreshold
     local maxSpeedLimit = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedMaxSpeed.Value or GunSilent.FixedPredictionValues.MaxSpeed
     if clientVelocity.Magnitude > teleportThreshold then
@@ -328,18 +282,15 @@ local function predictTargetPositionGun(target, applyFakeDistance)
         (GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedVehicleFactor.Value or GunSilent.FixedPredictionValues.VehicleFactor) or
         (GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedPedestrianFactor.Value or GunSilent.FixedPredictionValues.PedestrianFactor)
 
-    -- Учет пинга для опережения
     local ping = GunSilent.Settings.LatencyCompensation.Value
-    local totalPredictionTime = timeToTarget + ping -- Время полета пули + пинг
+    local totalPredictionTime = timeToTarget + ping
 
-    -- Предикт будущей позиции
     local predictedPos = clientPos
     if not GunSilent.State.IsTeleporting then
         local smoothingFactor = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedSmoothingFactor.Value or GunSilent.FixedPredictionValues.SmoothingFactor
         local velocityFactor = clientVelocity * predictionFactor * (1 - smoothingFactor)
         predictedPos = clientPos + velocityFactor * totalPredictionTime
 
-        -- Учет ускорения
         if #positionHistory >= 2 then
             local prevEntry = positionHistory[#positionHistory - 1]
             local timeDelta = positionHistory[#positionHistory].time - prevEntry.time
@@ -415,10 +366,6 @@ local function updateVisualsGun(target, hasWeapon)
         if GunSilent.State.FullTrajectoryParts then
             for _, part in pairs(GunSilent.State.FullTrajectoryParts) do part.Transparency = 1 end
         end
-        for _, hitbox in pairs(GunSilent.State.TargetPredictedHitboxes) do
-            hitbox.Part:Destroy()
-        end
-        GunSilent.State.TargetPredictedHitboxes = {}
         GunSilent.State.LastTargetPos = nil
         GunSilent.State.LastPredictionPos = nil
         return
@@ -438,34 +385,6 @@ local function updateVisualsGun(target, hasWeapon)
     GunSilent.State.LastTargetPos, GunSilent.State.LastPredictionPos = targetPos, predictionPos
 
     local startPos = localRoot.Position + Vector3.new(0, 1.5, 0)
-    
-    if GunSilent.Settings.HitboxTarget.Value and shouldUpdate then
-        for _, hitbox in pairs(GunSilent.State.TargetPredictedHitboxes) do
-            hitbox.Part:Destroy()
-        end
-        GunSilent.State.TargetPredictedHitboxes = setupHitboxes(targetChar, true)
-    end
-
-    if GunSilent.Settings.HitboxTarget.Value then
-        local rootPart = targetChar:FindFirstChild("HumanoidRootPart")
-        if rootPart then
-            -- Корректировка позиции по Y
-            local adjustedPredictionPos = prediction.position - Vector3.new(0, 0.5, 0) -- Смещаем вниз на 0.5 stud
-            -- Обновляем голубые хитбоксы
-            for partName, hitbox in pairs(GunSilent.State.TargetPredictedHitboxes) do
-                if hitbox.Part and hitbox.BodyPart then
-                    -- Используем ориентацию rootPart напрямую
-                    local predictedCFrame = CFrame.new(adjustedPredictionPos) * rootPart.CFrame * hitbox.RelativeCFrame
-                    hitbox.Part.CFrame = predictedCFrame
-                end
-            end
-        end
-    else
-        for _, hitbox in pairs(GunSilent.State.TargetPredictedHitboxes) do
-            hitbox.Part:Destroy()
-        end
-        GunSilent.State.TargetPredictedHitboxes = {}
-    end
 
     if GunSilent.Settings.TargetVisual.Value and shouldUpdate then
         local targetVisualPart = GunSilent.State.TargetVisualPart
@@ -1201,7 +1120,7 @@ local function Init(UI, Core, notify)
                     Name = "LowDistanceMulti",
                     Minimum = 0.4,
                     Maximum = 2.1,
-                    Default = GunSilent.Settings.AdvancedSmallDistanceSpeedFactorMultiplier.Value,
+                    Default = GumSilent.Settings.AdvancedSmallDistanceSpeedFactorMultiplier.Value,
                     Precision = 2,
                     Callback = function(value)
                         GunSilent.Settings.AdvancedSmallDistanceSpeedFactorMultiplier.Value = value
