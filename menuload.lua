@@ -148,7 +148,7 @@ local function setupHitboxes(character, isPredicted)
             hitboxPart.Transparency = 0.5
             hitboxPart.Color = isPredicted and Color3.fromRGB(0, 255, 255) or Color3.fromRGB(255, 0, 255)
             hitboxPart.Parent = Workspace
-            local relativeCFrame = rootPart.CFrame:ToObjectSpace(bodyPart.CFrame) -- Исправленный расчет RelativeCFrame
+            local relativeCFrame = rootPart.CFrame:ToObjectSpace(bodyPart.CFrame)
             hitboxes[partName] = {
                 Part = hitboxPart,
                 BodyPart = bodyPart,
@@ -308,45 +308,18 @@ local function predictTargetPositionGun(target, applyFakeDistance)
         table.remove(positionHistory, 1)
     end
 
-    local ping = GunSilent.Settings.LatencyCompensation.Value
-    local targetTime = currentTime - ping -- Время, которое видит сервер
-
-    -- Поиск двух ближайших записей для интерполяции серверной позиции
-    local beforeEntry, afterEntry = nil, nil
-    local minTimeDiff = math.huge
-    for _, entry in ipairs(positionHistory) do
-        local timeDiff = entry.time - targetTime
-        if timeDiff <= 0 and math.abs(timeDiff) < minTimeDiff then
-            minTimeDiff = math.abs(timeDiff)
-            beforeEntry = entry
-        elseif timeDiff > 0 and math.abs(timeDiff) < minTimeDiff then
-            minTimeDiff = math.abs(timeDiff)
-            afterEntry = entry
-        end
-    end
-
-    local serverPos, serverVelocity
-    if beforeEntry and afterEntry then
-        -- Интерполяция между двумя записями
-        local t = (targetTime - beforeEntry.time) / (afterEntry.time - beforeEntry.time)
-        serverPos = beforeEntry.pos:Lerp(afterEntry.pos, t)
-        serverVelocity = beforeEntry.velocity:Lerp(afterEntry.velocity, t)
-    elseif beforeEntry then
-        serverPos = beforeEntry.pos
-        serverVelocity = beforeEntry.velocity
-    else
-        serverPos = targetPos
-        serverVelocity = targetRoot.Velocity
-    end
+    -- Текущая клиентская позиция и скорость
+    local clientPos = targetPos
+    local clientVelocity = targetRoot.Velocity
 
     -- Ограничение скорости
     local teleportThreshold = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedTeleportThreshold.Value or GunSilent.FixedPredictionValues.TeleportThreshold
     local maxSpeedLimit = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedMaxSpeed.Value or GunSilent.FixedPredictionValues.MaxSpeed
-    if serverVelocity.Magnitude > teleportThreshold then
-        serverVelocity = Vector3.new(0, 0, 0)
+    if clientVelocity.Magnitude > teleportThreshold then
+        clientVelocity = Vector3.new(0, 0, 0)
         GunSilent.State.IsTeleporting = true
-    elseif serverVelocity.Magnitude > maxSpeedLimit then
-        serverVelocity = serverVelocity.Unit * maxSpeedLimit
+    elseif clientVelocity.Magnitude > maxSpeedLimit then
+        clientVelocity = clientVelocity.Unit * maxSpeedLimit
     end
 
     local humanoid = targetChar:FindFirstChild("Humanoid")
@@ -355,12 +328,16 @@ local function predictTargetPositionGun(target, applyFakeDistance)
         (GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedVehicleFactor.Value or GunSilent.FixedPredictionValues.VehicleFactor) or
         (GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedPedestrianFactor.Value or GunSilent.FixedPredictionValues.PedestrianFactor)
 
-    -- Предикт серверной позиции
-    local predictedPos = serverPos
+    -- Учет пинга для опережения
+    local ping = GunSilent.Settings.LatencyCompensation.Value
+    local totalPredictionTime = timeToTarget + ping -- Время полета пули + пинг
+
+    -- Предикт будущей позиции
+    local predictedPos = clientPos
     if not GunSilent.State.IsTeleporting then
         local smoothingFactor = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedSmoothingFactor.Value or GunSilent.FixedPredictionValues.SmoothingFactor
-        local velocityFactor = serverVelocity * predictionFactor * (1 - smoothingFactor)
-        predictedPos = serverPos + velocityFactor * timeToTarget
+        local velocityFactor = clientVelocity * predictionFactor * (1 - smoothingFactor)
+        predictedPos = clientPos + velocityFactor * totalPredictionTime
 
         -- Учет ускорения
         if #positionHistory >= 2 then
@@ -368,7 +345,7 @@ local function predictTargetPositionGun(target, applyFakeDistance)
             local timeDelta = positionHistory[#positionHistory].time - prevEntry.time
             if timeDelta > 0 then
                 local acceleration = (positionHistory[#positionHistory].velocity - prevEntry.velocity) / timeDelta
-                predictedPos = predictedPos + 0.5 * acceleration * timeToTarget^2
+                predictedPos = predictedPos + 0.5 * acceleration * totalPredictionTime^2
             end
         end
     end
@@ -487,7 +464,9 @@ local function updateVisualsGun(target, hasWeapon)
             end
             for _, hitbox in pairs(GunSilent.State.TargetPredictedHitboxes) do
                 if hitbox.Part and hitbox.BodyPart then
-                    hitbox.Part.CFrame = CFrame.new(prediction.position) * hitbox.RelativeCFrame
+                    -- Привязываем голубые хитбоксы к предсказанной позиции с учетом ориентации
+                    local predictedCFrame = CFrame.new(prediction.position) * rootPart.CFrame:ToObjectSpace(hitbox.BodyPart.CFrame)
+                    hitbox.Part.CFrame = predictedCFrame
                 end
             end
         end
