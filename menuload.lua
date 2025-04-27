@@ -1346,6 +1346,7 @@ local function Init(UI, Core, notify)
                     uiElements.TeleportSpeed.callback(uiElements.TeleportSpeed.element:GetValue())
                     uiElements.TPLimit.callback(uiElements.TPLimit.element:GetValue())
                     uiElements.BulletSpeed.callback(uiElements.BulletSpeed.element:GetValue())
+                    uiElements.LatencyCompensation.callback(uiElements.LatencyCompensation.element:GetValue())
 
                     notify("GunSilent", "Settings synchronized with UI!", true)
                 end
