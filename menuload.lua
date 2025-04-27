@@ -392,7 +392,6 @@ local function createHitDataGun(target)
     if not prediction.position or not prediction.direction or not prediction.fakePosition then return nil end
 
     local hitPart = targetChar:FindFirstChild(GunSilent.Settings.HitPart.Value == "Random" and (math.random() > 0.5 and "Head" or "UpperTorso") or GunSilent.Settings.HitPart.Value) or targetChar:FindFirstChild("HumanoidRootPart")
-    ifт
     if not hitPart then return nil end
 
     local equippedTool = getEquippedGunTool(GunSilent.State.LocalCharacter)
