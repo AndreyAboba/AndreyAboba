@@ -84,7 +84,6 @@ local GunSilent = {
         LocalRoot = nil,
         LastTargetPos = nil,
         LastPredictionPos = nil,
-        TargetHitboxes = {},
         TargetPredictedHitboxes = {}
     }
 }
@@ -118,7 +117,7 @@ local function getEquippedGunTool(character)
 end
 
 local function setupHitboxes(character, isPredicted)
-    if not character then return {} end
+    if not character or not isPredicted then return {} end -- Создаем только предсказанные хитбоксы
     local hitboxes = {}
     local bodyParts = {
         "Head",
@@ -141,13 +140,14 @@ local function setupHitboxes(character, isPredicted)
         local bodyPart = character:FindFirstChild(partName)
         if bodyPart and bodyPart:IsA("BasePart") then
             local hitboxPart = Instance.new("Part")
-            hitboxPart.Name = (isPredicted and "PredictedHitbox_" or "Hitbox_") .. partName
+            hitboxPart.Name = "PredictedHitbox_" .. partName
             hitboxPart.Anchored = true
             hitboxPart.CanCollide = false
             hitboxPart.Size = bodyPart.Size * 1.1
             hitboxPart.Transparency = 0.5
-            hitboxPart.Color = isPredicted and Color3.fromRGB(0, 255, 255) or Color3.fromRGB(255, 0, 255)
+            hitboxPart.Color = Color3.fromRGB(0, 255, 255) -- Голубой цвет
             hitboxPart.Parent = Workspace
+            -- Вычисляем RelativeCFrame относительно rootPart
             local relativeCFrame = rootPart.CFrame:ToObjectSpace(bodyPart.CFrame)
             hitboxes[partName] = {
                 Part = hitboxPart,
@@ -415,13 +415,9 @@ local function updateVisualsGun(target, hasWeapon)
         if GunSilent.State.FullTrajectoryParts then
             for _, part in pairs(GunSilent.State.FullTrajectoryParts) do part.Transparency = 1 end
         end
-        for _, hitbox in pairs(GunSilent.State.TargetHitboxes) do
-            hitbox.Part:Destroy()
-        end
         for _, hitbox in pairs(GunSilent.State.TargetPredictedHitboxes) do
             hitbox.Part:Destroy()
         end
-        GunSilent.State.TargetHitboxes = {}
         GunSilent.State.TargetPredictedHitboxes = {}
         GunSilent.State.LastTargetPos = nil
         GunSilent.State.LastPredictionPos = nil
@@ -444,40 +440,30 @@ local function updateVisualsGun(target, hasWeapon)
     local startPos = localRoot.Position + Vector3.new(0, 1.5, 0)
     
     if GunSilent.Settings.HitboxTarget.Value and shouldUpdate then
-        for _, hitbox in pairs(GunSilent.State.TargetHitboxes) do
-            hitbox.Part:Destroy()
-        end
         for _, hitbox in pairs(GunSilent.State.TargetPredictedHitboxes) do
             hitbox.Part:Destroy()
         end
-        GunSilent.State.TargetHitboxes = setupHitboxes(targetChar, false)
         GunSilent.State.TargetPredictedHitboxes = setupHitboxes(targetChar, true)
     end
 
     if GunSilent.Settings.HitboxTarget.Value then
         local rootPart = targetChar:FindFirstChild("HumanoidRootPart")
         if rootPart then
-            for _, hitbox in pairs(GunSilent.State.TargetHitboxes) do
+            -- Обновляем голубые хитбоксы
+            for partName, hitbox in pairs(GunSilent.State.TargetPredictedHitboxes) do
                 if hitbox.Part and hitbox.BodyPart then
-                    hitbox.Part.CFrame = rootPart.CFrame * hitbox.RelativeCFrame
-                end
-            end
-            for _, hitbox in pairs(GunSilent.State.TargetPredictedHitboxes) do
-                if hitbox.Part and hitbox.BodyPart then
-                    -- Привязываем голубые хитбоксы к предсказанной позиции с учетом ориентации
+                    -- Используем предсказанную позицию и ориентацию rootPart
                     local predictedCFrame = CFrame.new(prediction.position) * rootPart.CFrame:ToObjectSpace(hitbox.BodyPart.CFrame)
                     hitbox.Part.CFrame = predictedCFrame
+                    -- Дебаг-лог для проверки смещений
+                    print(string.format("PredictedHitbox %s: Position = %s, Expected = %s", partName, tostring(hitbox.Part.Position), tostring(prediction.position)))
                 end
             end
         end
     else
-        for _, hitbox in pairs(GunSilent.State.TargetHitboxes) do
-            hitbox.Part:Destroy()
-        end
         for _, hitbox in pairs(GunSilent.State.TargetPredictedHitboxes) do
             hitbox.Part:Destroy()
         end
-        GunSilent.State.TargetHitboxes = {}
         GunSilent.State.TargetPredictedHitboxes = {}
     end
 
