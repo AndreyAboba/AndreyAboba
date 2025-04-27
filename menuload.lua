@@ -36,15 +36,14 @@ local GunSilent = {
         AdvancedFastVehiclePredictionLimit = { Value = 2.2, Default = 2.2 },
         VisualUpdateFrequency = { Value = 0.1, Default = 0.1 },
         AdvancedPositionHistorySize = { Value = 20, Default = 20 },
-        LatencyCompensation = { Value = 0.2, Default = 0.2 },
+        LatencyCompensation = { Value = 0.1, Default = 0.1 }, -- Пинг в секундах
         ShowTrajectoryBeam = { Value = true, Default = true },
-        ShowFullTrajectory = { Value = true, Default =  true },
+        ShowFullTrajectory = { Value = true, Default = true },
         ShotgunSupport = { Value = false, Default = false },
         GenBullet = { Value = 4, Default = 4 },
         TestGenBullet = { Value = false, Default = false },
         DoubleTap = { Value = false, Default = false },
-        TrackTarget = { Value = true, Default = true },
-        ChamsColor = { Value = Color3.fromRGB(255, 0, 255), Default = Color3.fromRGB(255, 0, 255) },
+        HitboxTarget = { Value = true, Default = true }
     },
     FixedPredictionValues = {
         VehicleFactor = 0.9,
@@ -85,8 +84,8 @@ local GunSilent = {
         LocalRoot = nil,
         LastTargetPos = nil,
         LastPredictionPos = nil,
-        TrackTargetHitboxes = nil,
-        ChamsFolder = nil,
+        TargetHitboxes = {},
+        TargetPredictedHitboxes = {}
     }
 }
 
@@ -116,6 +115,48 @@ local function getEquippedGunTool(character)
         end
     end
     return nil
+end
+
+local function setupHitboxes(character, isPredicted)
+    if not character then return {} end
+    local hitboxes = {}
+    local bodyParts = {
+        "Head",
+        "UpperTorso",
+        "LowerTorso",
+        "LeftUpperLeg",
+        "LeftLowerLeg",
+        "RightUpperLeg",
+        "RightLowerLeg",
+        "LeftUpperArm",
+        "LeftLowerArm",
+        "RightUpperArm",
+        "RightLowerArm"
+    }
+    
+    for _, partName in ipairs(bodyParts) do
+        local bodyPart = character:FindFirstChild(partName)
+        if bodyPart and bodyPart:IsA("BasePart") then
+            local hitboxPart = Instance.new("Part")
+            hitboxPart.Name = (isPredicted and "PredictedHitbox_" or "Hitbox_") .. partName
+            hitboxPart.Anchored = true
+            hitboxPart.CanCollide = false
+            hitboxPart.Size = bodyPart.Size * 1.1
+            hitboxPart.Transparency = 0.5
+            hitboxPart.Color = isPredicted and Color3.fromRGB(0, 255, 255) or Color3.fromRGB(255, 0, 255)
+            hitboxPart.Parent = Workspace
+            local rootPart = character:FindFirstChild("HumanoidRootPart")
+            if rootPart then
+                local relativeCFrame = rootPart.CFrame:ToObjectSpace(bodyPart.CFrame)
+                hitboxes[partName] = {
+                    Part = hitboxPart,
+                    BodyPart = bodyPart,
+                    RelativeCFrame = relativeCFrame
+                }
+            end
+        end
+    end
+    return hitboxes
 end
 
 local function updateFovCircle(deltaTime)
@@ -237,7 +278,7 @@ end
 local function predictTargetPositionGun(target, applyFakeDistance)
     local localRoot = GunSilent.State.LocalRoot
     if not target or not target.Character or not localRoot then
-        return { position = nil, direction = nil, realDirection = nil, fakePosition = nil, timeToTarget = 0 }
+        return { position = nil, direction = nil, realDirection = nil, fakePosition = nil, timeToTarget = 0, clientPosition = nil }
     end
 
     local targetChar = target.Character
@@ -245,94 +286,66 @@ local function predictTargetPositionGun(target, applyFakeDistance)
     local hitPart = targetChar:FindFirstChild(GunSilent.Settings.HitPart.Value == "Random" and (math.random() > 0.5 and "Head" or "UpperTorso") or GunSilent.Settings.HitPart.Value) or targetChar:FindFirstChild("HumanoidRootPart")
     local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
     if not hitPart or not targetRoot then
-        return { position = nil, direction = nil, realDirection = nil, fakePosition = nil, timeToTarget = 0 }
+        return { position = nil, direction = nil, realDirection = nil, fakePosition = nil, timeToTarget = 0, clientPosition = nil }
     end
 
     local targetPos = hitPart.Position
-    if not targetPos then
-        warn("targetPos is nil in predictTargetPositionGun")
-        return { position = nil, direction = nil, realDirection = nil, fakePosition = nil, timeToTarget = 0 }
-    end
+    local targetId = tostring(target.UserId)
+    GunSilent.State.IsTeleporting = GunSilent.State.LastTargetPosition[targetId] and (targetPos - GunSilent.State.LastTargetPosition[targetId]).Magnitude > 50
+    GunSilent.State.LastTargetPosition[targetId] = targetPos
 
-    local fakeDistanceValue = GunSilent.Settings.FakeDistance.Value
-    if fakeDistanceValue == nil then
-        warn("FakeDistance.Value is nil, using default value of 3")
-        fakeDistanceValue = 3
-    end
-
-    local vectorToTarget = targetPos - myPos
-    local magnitudeToTarget = vectorToTarget.Magnitude
-    local fakePos
-    if applyFakeDistance and fakeDistanceValue > 0 and magnitudeToTarget > 0 then
-        local unitVector = vectorToTarget.Unit
-        local adjustedDistance = math.max(1, magnitudeToTarget - fakeDistanceValue)
-        fakePos = targetPos - unitVector * adjustedDistance
-    else
-        fakePos = myPos
-    end
-
-    if not fakePos then
-        warn("fakePos is nil, falling back to myPos")
-        fakePos = myPos
-    end
-
-    local distance = (targetPos - fakePos).Magnitude
-    local realDistance = (targetPos - myPos).Magnitude
-    if not distance or not realDistance then
-        warn("Distance or realDistance is nil, using default values")
-        distance = distance or 1
-        realDistance = realDistance or 1
-    end
-
+    local fakePos = applyFakeDistance and GunSilent.Settings.FakeDistance.Value > 0 and (targetPos - (targetPos - myPos).Unit * math.max(1, (targetPos - myPos).Magnitude - GunSilent.Settings.FakeDistance.Value)) or myPos
+    local distance, realDistance = (targetPos - fakePos).Magnitude, (targetPos - myPos).Magnitude
     local bulletSpeed = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.PredictBullet.Value or GunSilent.FixedPredictionValues.PredictBullet
-    if not bulletSpeed then
-        warn("bulletSpeed is nil, using default value of 2500")
-        bulletSpeed = 2500
+    local timeToTarget, realTimeToTarget = distance / bulletSpeed, realDistance / bulletSpeed
+
+    local positionHistory = GunSilent.State.PositionHistory[target] or {}
+    GunSilent.State.PositionHistory[target] = positionHistory
+    local currentTime = tick()
+    positionHistory[#positionHistory + 1] = { pos = targetPos, time = currentTime, velocity = targetRoot.Velocity }
+    local historySize = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedPositionHistorySize.Value or GunSilent.FixedPredictionValues.PositionHistorySize
+    while #positionHistory > historySize do
+        table.remove(positionHistory, 1)
     end
 
-    local timeToTarget = distance / bulletSpeed
-    local realTimeToTarget = realDistance / bulletSpeed
-
-    local latency = GunSilent.Settings.LatencyCompensation.Value or 0.2
-    local ping = latency
-    local adjustedTimeToTarget = timeToTarget + ping
-    local adjustedRealTimeToTarget = realTimeToTarget + ping
-
-    local velocity = targetRoot.Velocity
-    if not velocity then
-        warn("Velocity is nil, assuming zero velocity")
-        velocity = Vector3.new(0, 0, 0)
+    local ping = GunSilent.Settings.LatencyCompensation.Value
+    local targetTime = currentTime - ping
+    local closestEntry = positionHistory[1]
+    for _, entry in ipairs(positionHistory) do
+        if not closestEntry or math.abs(entry.time - targetTime) < math.abs(closestEntry.time - targetTime) then
+            closestEntry = entry
+        end
     end
+    if not closestEntry then
+        closestEntry = { pos = targetPos, time = currentTime, velocity = targetRoot.Velocity }
+    end
+    local clientPos = closestEntry.pos
+    local effectiveVelocity = closestEntry.velocity
 
-    local speed = velocity.Magnitude
     local teleportThreshold = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedTeleportThreshold.Value or GunSilent.FixedPredictionValues.TeleportThreshold
     local maxSpeedLimit = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedMaxSpeed.Value or GunSilent.FixedPredictionValues.MaxSpeed
-    if speed > teleportThreshold then
-        velocity = Vector3.new(0, 0, 0)
-        speed = 0
-    elseif speed > maxSpeedLimit then
-        velocity = velocity.Unit * maxSpeedLimit
+    if effectiveVelocity.Magnitude > teleportThreshold then
+        effectiveVelocity = Vector3.new(0, 0, 0)
+        GunSilent.State.IsTeleporting = true
+    elseif effectiveVelocity.Magnitude > maxSpeedLimit then
+        effectiveVelocity = effectiveVelocity.Unit * maxSpeedLimit
     end
 
     local humanoid = targetChar:FindFirstChild("Humanoid")
-    local isJumping = humanoid and humanoid.Jump
-    local isMoving = speed > 5
-    local gravity = Vector3.new(0, -Workspace.Gravity, 0)
+    local isInVehicle = humanoid and humanoid.SeatPart ~= nil
+    local adjustedTimeToTarget = timeToTarget + ping
+    local adjustedRealTimeToTarget = realTimeToTarget + ping
 
-    local predictedPos = targetPos + velocity * adjustedTimeToTarget
-    local realPredictedPos = targetPos + velocity * adjustedRealTimeToTarget
+    local predictedPos, realPredictedPos = targetPos, targetPos
+    if not GunSilent.State.IsTeleporting then
+        local speedFactor = math.clamp(effectiveVelocity.Magnitude / (isInVehicle and 50 or 20), 0.5, isInVehicle and 2.5 or 1)
+        local predictionFactor = speedFactor * (isInVehicle and
+            (GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedVehicleFactor.Value or GunSilent.FixedPredictionValues.VehicleFactor) or
+            (GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedPedestrianFactor.Value or GunSilent.FixedPredictionValues.PedestrianFactor)) *
+            (GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedPredictionAggressiveness.Value or GunSilent.FixedPredictionValues.PredictionAggressiveness)
 
-    if isJumping then
-        local jumpTime = adjustedTimeToTarget
-        local gravityOffset = 0.5 * gravity * jumpTime * jumpTime
-        predictedPos = predictedPos + gravityOffset
-        realPredictedPos = realPredictedPos + gravityOffset
-    end
-
-    if isMoving then
-        local movementFactor = 1.2
-        predictedPos = targetPos + (velocity * adjustedTimeToTarget * movementFactor)
-        realPredictedPos = targetPos + (velocity * adjustedRealTimeToTarget * movementFactor)
+        predictedPos = clientPos + effectiveVelocity * adjustedTimeToTarget * predictionFactor
+        realPredictedPos = clientPos + effectiveVelocity * adjustedRealTimeToTarget * predictionFactor
     end
 
     return {
@@ -340,7 +353,8 @@ local function predictTargetPositionGun(target, applyFakeDistance)
         direction = (predictedPos - (fakePos + Vector3.new(0, 1.5, 0))).Unit,
         realDirection = (realPredictedPos - (myPos + Vector3.new(0, 1.5, 0))).Unit,
         fakePosition = fakePos,
-        timeToTarget = timeToTarget
+        timeToTarget = timeToTarget,
+        clientPosition = clientPos
     }
 end
 
@@ -378,87 +392,10 @@ local function createHitDataGun(target)
     return hitData
 end
 
-local function ClearTrackTargetHitboxes()
-    if GunSilent.State.TrackTargetHitboxes then
-        for _, hitboxData in pairs(GunSilent.State.TrackTargetHitboxes.Hitboxes or {}) do
-            if hitboxData.Part then
-                hitboxData.Part:Destroy()
-            end
-        end
-        GunSilent.State.TrackTargetHitboxes = nil
-    end
-    if GunSilent.State.ChamsFolder then
-        GunSilent.State.ChamsFolder:Destroy()
-        GunSilent.State.ChamsFolder = nil
-    end
-end
-
-local function SetupTrackTargetHitboxes(character, predictedPos, targetRoot)
-    if not character or not predictedPos or not targetRoot then
-        return nil
-    end
-
-    ClearTrackTargetHitboxes()
-
-    local chamsFolder = Instance.new("Folder")
-    chamsFolder.Name = "ChamsFolder"
-    chamsFolder.Parent = Workspace
-    GunSilent.State.ChamsFolder = chamsFolder
-
-    local bodyParts = {
-        "Head",
-        "UpperTorso",
-        "LowerTorso",
-        "Torso",
-        "LeftUpperLeg",
-        "LeftLowerLeg",
-        "RightUpperLeg",
-        "RightLowerLeg",
-        "LeftLeg",
-        "RightLeg",
-        "LeftUpperArm",
-        "LeftLowerArm",
-        "RightUpperArm",
-        "RightLowerArm",
-        "LeftArm",
-        "RightArm"
-    }
-
-    local hitboxes = {}
-
-    for _, partName in ipairs(bodyParts) do
-        local bodyPart = character:FindFirstChild(partName)
-        if bodyPart and bodyPart:IsA("BasePart") then
-            local hitboxPart = Instance.new("Part")
-            hitboxPart.Name = "TrackTargetHitbox_" .. partName
-            hitboxPart.Anchored = true
-            hitboxPart.CanCollide = false
-            hitboxPart.Size = bodyPart.Size * 1.1
-            hitboxPart.Transparency = 0.5
-            hitboxPart.Color = GunSilent.Settings.ChamsColor.Value
-            hitboxPart.Parent = chamsFolder
-
-            local relativeCFrame = targetRoot.CFrame:ToObjectSpace(bodyPart.CFrame)
-            hitboxes[partName] = {
-                Part = hitboxPart,
-                BodyPart = bodyPart,
-                RelativeCFrame = relativeCFrame
-            }
-        end
-    end
-
-    return hitboxes
-end
-
-local function updateVisualsGun(target, hasWeapon, deltaTime)
+local function updateVisualsGun(target, hasWeapon)
     local currentTime = tick()
-    if currentTime - GunSilent.State.LastVisualUpdateTime < GunSilent.Settings.VisualUpdateFrequency.Value then
-        if not GunSilent.Settings.TrackTarget.Value or not GunSilent.State.TrackTargetHitboxes then
-            return
-        end
-    else
-        GunSilent.State.LastVisualUpdateTime = currentTime
-    end
+    if currentTime - GunSilent.State.LastVisualUpdateTime < GunSilent.Settings.VisualUpdateFrequency.Value then return end
+    GunSilent.State.LastVisualUpdateTime = currentTime
 
     local localRoot = GunSilent.State.LocalRoot
     if not GunSilent.Settings.Enabled.Value or not hasWeapon or not target or not target.Character or not localRoot then
@@ -471,33 +408,71 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
         if GunSilent.State.FullTrajectoryParts then
             for _, part in pairs(GunSilent.State.FullTrajectoryParts) do part.Transparency = 1 end
         end
-        ClearTrackTargetHitboxes()
+        for _, hitbox in pairs(GunSilent.State.TargetHitboxes) do
+            hitbox.Part:Destroy()
+        end
+        for _, hitbox in pairs(GunSilent.State.TargetPredictedHitboxes) do
+            hitbox.Part:Destroy()
+        end
+        GunSilent.State.TargetHitboxes = {}
+        GunSilent.State.TargetPredictedHitboxes = {}
         GunSilent.State.LastTargetPos = nil
         GunSilent.State.LastPredictionPos = nil
         return
     end
 
     local prediction = predictTargetPositionGun(target, true)
-    if not prediction.position or not prediction.direction then
-        ClearTrackTargetHitboxes()
-        return
-    end
+    if not prediction.position or not prediction.direction then return end
 
     local targetChar = target.Character
     local targetHead = targetChar:FindFirstChild("Head") or targetChar:FindFirstChild("HumanoidRootPart")
     local hitPart = targetChar:FindFirstChild(GunSilent.Settings.HitPart.Value == "Random" and (math.random() > 0.5 and "Head" or "UpperTorso") or GunSilent.Settings.HitPart.Value) or targetChar:FindFirstChild("HumanoidRootPart")
-    local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
-    if not targetHead or not hitPart or not targetRoot then
-        ClearTrackTargetHitboxes()
-        return
-    end
+    if not targetHead or not hitPart then return end
 
-    local targetPos, predictionPos = targetHead.Position, prediction.position
+    local targetPos, predictionPos = prediction.clientPosition, prediction.position
     local shouldUpdate = not GunSilent.State.LastTargetPos or not GunSilent.State.LastPredictionPos or
         (targetPos - GunSilent.State.LastTargetPos).Magnitude > 0.1 or (predictionPos - GunSilent.State.LastPredictionPos).Magnitude > 0.1
     GunSilent.State.LastTargetPos, GunSilent.State.LastPredictionPos = targetPos, predictionPos
 
     local startPos = localRoot.Position + Vector3.new(0, 1.5, 0)
+    
+    if GunSilent.Settings.HitboxTarget.Value and shouldUpdate then
+        for _, hitbox in pairs(GunSilent.State.TargetHitboxes) do
+            hitbox.Part:Destroy()
+        end
+        for _, hitbox in pairs(GunSilent.State.TargetPredictedHitboxes) do
+            hitbox.Part:Destroy()
+        end
+        GunSilent.State.TargetHitboxes = setupHitboxes(targetChar, false)
+        GunSilent.State.TargetPredictedHitboxes = setupHitboxes(targetChar, true)
+    end
+
+    if GunSilent.Settings.HitboxTarget.Value then
+        local rootPart = targetChar:FindFirstChild("HumanoidRootPart")
+        if rootPart then
+            for _, hitbox in pairs(GunSilent.State.TargetHitboxes) do
+                if hitbox.Part and hitbox.BodyPart then
+                    hitbox.Part.CFrame = rootPart.CFrame:ToWorldSpace(hitbox.RelativeCFrame)
+                end
+            end
+            for _, hitbox in pairs(GunSilent.State.TargetPredictedHitboxes) do
+                if hitbox.Part and hitbox.BodyPart then
+                    local predictedRootCFrame = CFrame.new(prediction.position - rootPart.Position + rootPart.Position)
+                    hitbox.Part.CFrame = predictedRootCFrame:ToWorldSpace(hitbox.RelativeCFrame)
+                end
+            end
+        end
+    else
+        for _, hitbox in pairs(GunSilent.State.TargetHitboxes) do
+            hitbox.Part:Destroy()
+        end
+        for _, hitbox in pairs(GunSilent.State.TargetPredictedHitboxes) do
+            hitbox.Part:Destroy()
+        end
+        GunSilent.State.TargetHitboxes = {}
+        GunSilent.State.TargetPredictedHitboxes = {}
+    end
+
     if GunSilent.Settings.TargetVisual.Value and shouldUpdate then
         local targetVisualPart = GunSilent.State.TargetVisualPart
         if not targetVisualPart then
@@ -639,35 +614,6 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
             part.Transparency = 1
         end
     end
-
-    if GunSilent.Settings.TrackTarget.Value then
-        if not GunSilent.State.TrackTargetHitboxes or GunSilent.State.TrackTargetHitboxes.Target ~= target then
-            ClearTrackTargetHitboxes()
-            local hitboxes = SetupTrackTargetHitboxes(targetChar, prediction.position, targetRoot)
-            if hitboxes then
-                GunSilent.State.TrackTargetHitboxes = {
-                    Target = target,
-                    Hitboxes = hitboxes
-                }
-            end
-        end
-
-        if GunSilent.State.TrackTargetHitboxes and GunSilent.State.TrackTargetHitboxes.Hitboxes then
-            for partName, hitboxData in pairs(GunSilent.State.TrackTargetHitboxes.Hitboxes) do
-                local hitboxPart = hitboxData.Part
-                local bodyPart = hitboxData.BodyPart
-                if hitboxPart and bodyPart and hitboxPart:IsA("BasePart") and bodyPart:IsA("BasePart") then
-                    hitboxPart.CFrame = bodyPart.CFrame
-                    hitboxPart.Transparency = 0.5
-                    hitboxPart.Color = GunSilent.Settings.ChamsColor.Value
-                else
-                    warn("Не удалось обновить чамс для", partName)
-                end
-            end
-        end
-    else
-        ClearTrackTargetHitboxes()
-    end
 end
 
 local function initializeGunSilent()
@@ -736,13 +682,13 @@ local function initializeGunSilent()
         updateFovCircle(deltaTime)
         if not currentTool then
             GunSilent.Core.GunSilentTarget.CurrentTarget = nil
-            updateVisualsGun(nil, false, deltaTime)
+            updateVisualsGun(nil, false)
             return
         end
 
         local gunRange = getGunRange(currentTool)
         local nearestPlayer = getNearestPlayerGun(gunRange)
-        updateVisualsGun(nearestPlayer, true, deltaTime)
+        updateVisualsGun(nearestPlayer, true)
         if GunSilent.Settings.Rage.Value and GunSilent.State.V_U_4 and nearestPlayer then
             local aimCFrame = getAimCFrameGun(nearestPlayer)
             local hitData = createHitDataGun(nearestPlayer)
@@ -1004,7 +950,7 @@ local function Init(UI, Core, notify)
                         GunSilent.Settings.CircleMethod.Value = value
                         notify("GunSilent", "Circle Method set to: " .. value, true)
                     end
-                }, 'GsCircleMethod'),
+                }, 'GSCircleMethod'),
                 callback = function(value)
                     GunSilent.Settings.CircleMethod.Value = value
                     notify("GunSilent", "Circle Method set to: " .. value, true)
@@ -1085,6 +1031,20 @@ local function Init(UI, Core, notify)
                     notify("GunSilent", "Hitbox Visual " .. (value and "Enabled" or "Disabled"), true)
                 end
             }
+            uiElements.HitboxTarget = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Hitbox Target",
+                    Default = GunSilent.Settings.HitboxTarget.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.HitboxTarget.Value = value
+                        notify("GunSilent", "Hitbox Target " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'HitboxTarget'),
+                callback = function(value)
+                    GunSilent.Settings.HitboxTarget.Value = value
+                    notify("GunSilent", "Hitbox Target " .. (value and "Enabled" or "Disabled"), true)
+                end
+            }
             uiElements.PredictVisual = {
                 element = UI.Sections.GunSilent:Toggle({
                     Name = "Predict Visual",
@@ -1118,12 +1078,12 @@ local function Init(UI, Core, notify)
                     Name = "Show Trajectory",
                     Default = GunSilent.Settings.ShowTrajectoryBeam.Value,
                     Callback = function(value)
-                        GunSilent.Settings.ShowTrajectoryBeam = value
+                        GunSilent.Settings.ShowTrajectoryBeam.Value = value
                         notify("GunSilent", "Trajectory Beam " .. (value and "enabled" or "disabled"), true)
                     end
                 }, 'ShowTrajectory'),
                 callback = function(value)
-                    GunSilent.Settings.ShowTrajectoryBeam = value
+                    GunSilent.Settings.ShowTrajectoryBeam.Value = value
                     notify("GunSilent", "Trajectory Beam " .. (value and "enabled" or "disabled"), true)
                 end
             }
@@ -1132,41 +1092,13 @@ local function Init(UI, Core, notify)
                     Name = "Show Full Trajectory",
                     Default = GunSilent.Settings.ShowFullTrajectory.Value,
                     Callback = function(value)
-                        GunSilent.Settings.ShowFullTrajectory = value
+                        GunSilent.Settings.ShowFullTrajectory.Value = value
                         notify("GunSilent", "Full Trajectory " .. (value and "enabled" or "disabled"), true)
                     end
                 }, 'ShowFullTrajectory'),
                 callback = function(value)
-                    GunSilent.Settings.ShowFullTrajectory = value
+                    GunSilent.Settings.ShowFullTrajectory.Value = value
                     notify("GunSilent", "Full Trajectory " .. (value and "enabled" or "disabled"), true)
-                end
-            }
-            uiElements.TrackTarget = {
-                element = UI.Sections.GunSilent:Toggle({
-                    Name = "Track Target",
-                    Default = GunSilent.Settings.TrackTarget.Value,
-                    Callback = function(value)
-                        GunSilent.Settings.TrackTarget.Value = value
-                        notify("GunSilent", "Track Target " .. (value and "Enabled" or "Disabled"), true)
-                    end
-                }, 'TrackTarget'),
-                callback = function(value)
-                    GunSilent.Settings.TrackTarget.Value = value
-                    notify("GunSilent", "Track Target " .. (value and "Enabled" or "Disabled"), true)
-                end
-            }
-            uiElements.ChamsColor = {
-                element = UI.Sections.GunSilent:Colorpicker({
-                    Name = "Chams Color",
-                    Default = GunSilent.Settings.ChamsColor.Value,
-                    Callback = function(value)
-                        GunSilent.Settings.ChamsColor.Value = value
-                        notify("GunSilent", "Chams Color updated", true)
-                    end
-                }, 'ChamsColor'),
-                callback = function(value)
-                    GunSilent.Settings.ChamsColor.Value = value
-                    notify("GunSilent", "Chams Color updated", true)
                 end
             }
             uiElements.HitChance = {
@@ -1480,12 +1412,11 @@ local function Init(UI, Core, notify)
                     end
                     uiElements.TargetVisual.callback(uiElements.TargetVisual.element:GetState())
                     uiElements.HitboxVisual.callback(uiElements.HitboxVisual.element:GetState())
+                    uiElements.HitboxTarget.callback(uiElements.HitboxTarget.element:GetState())
                     uiElements.PredictVisual.callback(uiElements.PredictVisual.element:GetState())
                     uiElements.ShowDirection.callback(uiElements.ShowDirection.element:GetState())
                     uiElements.ShowTrajectory.callback(uiElements.ShowTrajectory.element:GetState())
                     uiElements.ShowFullTrajectory.callback(uiElements.ShowFullTrajectory.element:GetState())
-                    uiElements.TrackTarget.callback(uiElements.TrackTarget.element:GetState())
-                    uiElements.ChamsColor.callback(uiElements.ChamsColor.element:GetValue())
                     uiElements.HitChance.callback(uiElements.HitChance.element:GetValue())
                     uiElements.LatencyCompensation.callback(uiElements.LatencyCompensation.element:GetValue())
                     uiElements.AdvancedPrediction.callback(uiElements.AdvancedPrediction.element:GetState())
