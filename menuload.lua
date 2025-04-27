@@ -42,9 +42,7 @@ local GunSilent = {
         ShotgunSupport = { Value = false, Default = false },
         GenBullet = { Value = 4, Default = 4 },
         TestGenBullet = { Value = false, Default = false },
-        DoubleTap = { Value = false, Default = false },
-        TrackTarget = { Value = true, Default = true },
-        ChamsColor = { Value = Color3.fromRGB(255, 0, 255), Default = Color3.fromRGB(255, 0, 255) },
+        DoubleTap = { Value = false, Default = false }
     },
     FixedPredictionValues = {
         VehicleFactor = 0.9,
@@ -84,9 +82,7 @@ local GunSilent = {
         LocalCharacter = nil,
         LocalRoot = nil,
         LastTargetPos = nil,
-        LastPredictionPos = nil,
-        TrackTargetHitboxes = nil,
-        ChamsFolder = nil,
+        LastPredictionPos = nil
     }
 }
 
@@ -339,83 +335,10 @@ local function createHitDataGun(target)
     return hitData
 end
 
-local function ClearTrackTargetHitboxes()
-    if GunSilent.State.TrackTargetHitboxes then
-        for _, hitboxData in pairs(GunSilent.State.TrackTargetHitboxes.Hitboxes or {}) do
-            if hitboxData.Highlight then
-                hitboxData.Highlight:Destroy()
-            end
-        end
-        GunSilent.State.TrackTargetHitboxes = nil
-    end
-    if GunSilent.State.ChamsFolder then
-        GunSilent.State.ChamsFolder:Destroy()
-        GunSilent.State.ChamsFolder = nil
-    end
-end
-
-local function SetupTrackTargetHitboxes(character, targetRoot)
-    if not character or not targetRoot then
-        return nil
-    end
-
-    ClearTrackTargetHitboxes()
-
-    local chamsFolder = Instance.new("Folder")
-    chamsFolder.Name = "ChamsFolder"
-    chamsFolder.Parent = Workspace
-    GunSilent.State.ChamsFolder = chamsFolder
-
-    local bodyParts = {
-        "Head",
-        "UpperTorso",
-        "LowerTorso",
-        "Torso",
-        "LeftUpperLeg",
-        "LeftLowerLeg",
-        "RightUpperLeg",
-        "RightLowerLeg",
-        "LeftLeg",
-        "RightLeg",
-        "LeftUpperArm",
-        "LeftLowerArm",
-        "RightUpperArm",
-        "RightLowerArm",
-        "LeftArm",
-        "RightArm"
-    }
-
-    local hitboxes = {}
-    for _, partName in ipairs(bodyParts) do
-        local bodyPart = character:FindFirstChild(partName)
-        if bodyPart and bodyPart:IsA("BasePart") then
-            local highlight = Instance.new("Highlight")
-            highlight.FillColor = GunSilent.Settings.ChamsColor.Value
-            highlight.OutlineColor = GunSilent.Settings.ChamsColor.Value
-            highlight.FillTransparency = 0.5
-            highlight.OutlineTransparency = 0
-            highlight.Adornee = bodyPart
-            highlight.Parent = chamsFolder
-
-            hitboxes[partName] = {
-                Highlight = highlight,
-                BodyPart = bodyPart
-            }
-        end
-    end
-
-    return hitboxes
-end
-
-local function updateVisualsGun(target, hasWeapon, deltaTime)
+local function updateVisualsGun(target, hasWeapon)
     local currentTime = tick()
-    if currentTime - GunSilent.State.LastVisualUpdateTime < GunSilent.Settings.VisualUpdateFrequency.Value then
-        if not GunSilent.Settings.TrackTarget.Value or not GunSilent.State.TrackTargetHitboxes then
-            return
-        end
-    else
-        GunSilent.State.LastVisualUpdateTime = currentTime
-    end
+    if currentTime - GunSilent.State.LastVisualUpdateTime < GunSilent.Settings.VisualUpdateFrequency.Value then return end
+    GunSilent.State.LastVisualUpdateTime = currentTime
 
     local localRoot = GunSilent.State.LocalRoot
     if not GunSilent.Settings.Enabled.Value or not hasWeapon or not target or not target.Character or not localRoot then
@@ -428,31 +351,23 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
         if GunSilent.State.FullTrajectoryParts then
             for _, part in pairs(GunSilent.State.FullTrajectoryParts) do part.Transparency = 1 end
         end
-        ClearTrackTargetHitboxes()
         GunSilent.State.LastTargetPos = nil
         GunSilent.State.LastPredictionPos = nil
         return
     end
 
     local prediction = predictTargetPositionGun(target, true)
-    if not prediction.position or not prediction.direction then
-        ClearTrackTargetHitboxes()
-        return
-    end
+    if not prediction.position or not prediction.direction then return end
 
     local targetChar = target.Character
     local targetHead = targetChar:FindFirstChild("Head") or targetChar:FindFirstChild("HumanoidRootPart")
     local hitPart = targetChar:FindFirstChild(GunSilent.Settings.HitPart.Value == "Random" and (math.random() > 0.5 and "Head" or "UpperTorso") or GunSilent.Settings.HitPart.Value) or targetChar:FindFirstChild("HumanoidRootPart")
-    local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
-    if not targetHead or not hitPart or not targetRoot then
-        ClearTrackTargetHitboxes()
-        return
-    end
+    if not targetHead or not hitPart then return end
 
-    local targetPos, predictedPos = targetHead.Position, prediction.position
+    local targetPos, predictionPos = targetHead.Position, prediction.position
     local shouldUpdate = not GunSilent.State.LastTargetPos or not GunSilent.State.LastPredictionPos or
-        (targetPos - GunSilent.State.LastTargetPos).Magnitude > 0.1 or (predictedPos - GunSilent.State.LastPredictionPos).Magnitude > 0.1
-    GunSilent.State.LastTargetPos, GunSilent.State.LastPredictionPos = targetPos, predictedPos
+        (targetPos - GunSilent.State.LastTargetPos).Magnitude > 0.1 or (predictionPos - GunSilent.State.LastPredictionPos).Magnitude > 0.1
+    GunSilent.State.LastTargetPos, GunSilent.State.LastPredictionPos = targetPos, predictionPos
 
     local startPos = localRoot.Position + Vector3.new(0, 1.5, 0)
     if GunSilent.Settings.TargetVisual.Value and shouldUpdate then
@@ -501,7 +416,7 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
             predictVisualPart.Parent = Workspace
             GunSilent.State.PredictVisualPart = predictVisualPart
         end
-        predictVisualPart.Position = predictedPos
+        predictVisualPart.Position = prediction.position
         predictVisualPart.Color = GunSilent.State.IsTeleporting and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(0, 255, 255)
         predictVisualPart.Transparency = 0.3
     elseif GunSilent.State.PredictVisualPart then
@@ -540,7 +455,7 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
         GunSilent.State.RealDirectionVisualPart.Transparency = 1
     end
 
-    if GunSilent.Settings.PredictVisual.Value and GunSilent.Settings.ShowTrajectoryBeam.Value and shouldUpdate then
+    if GunSilent.Settings.PredictVisual.Value and GunSilent.Settings.ShowTrajectoryBeam and shouldUpdate then
         local trajectoryBeam = GunSilent.State.TrajectoryBeam
         if not trajectoryBeam then
             trajectoryBeam = Instance.new("Beam")
@@ -563,7 +478,7 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
         GunSilent.State.TrajectoryBeam.Enabled = false
     end
 
-    if GunSilent.Settings.PredictVisual.Value and GunSilent.Settings.ShowFullTrajectory.Value and shouldUpdate then
+    if GunSilent.Settings.PredictVisual.Value and GunSilent.Settings.ShowFullTrajectory and shouldUpdate then
         local fullTrajectoryParts = GunSilent.State.FullTrajectoryParts
         if not fullTrajectoryParts then
             fullTrajectoryParts = {}
@@ -581,7 +496,7 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
         end
         local bulletSpeed = 2500
         local gravity = Vector3.new(0, -Workspace.Gravity, 0)
-        local distance = (predictedPos - startPos).Magnitude
+        local distance = (prediction.position - startPos).Magnitude
         local steps = 5
         local stepTime = prediction.timeToTarget / steps
 
@@ -595,31 +510,6 @@ local function updateVisualsGun(target, hasWeapon, deltaTime)
         for _, part in pairs(GunSilent.State.FullTrajectoryParts) do
             part.Transparency = 1
         end
-    end
-
-    if GunSilent.Settings.TrackTarget.Value then
-        if not GunSilent.State.TrackTargetHitboxes or GunSilent.State.TrackTargetHitboxes.Target ~= target then
-            ClearTrackTargetHitboxes()
-            local hitboxes = SetupTrackTargetHitboxes(targetChar, targetRoot)
-            if hitboxes then
-                GunSilent.State.TrackTargetHitboxes = {
-                    Target = target,
-                    Hitboxes = hitboxes
-                }
-            end
-        end
-
-        if GunSilent.State.TrackTargetHitboxes and GunSilent.State.TrackTargetHitboxes.Hitboxes then
-            for _, hitboxData in pairs(GunSilent.State.TrackTargetHitboxes.Hitboxes) do
-                local highlight = hitboxData.Highlight
-                if highlight then
-                    highlight.FillColor = GunSilent.Settings.ChamsColor.Value
-                    highlight.OutlineColor = GunSilent.Settings.ChamsColor.Value
-                end
-            end
-        end
-    else
-        ClearTrackTargetHitboxes()
     end
 end
 
@@ -677,11 +567,11 @@ local function initializeGunSilent()
         local currentTool = getEquippedGunTool(character)
         if currentTool ~= GunSilent.State.LastTool then
             if currentTool and not GunSilent.State.LastTool then
-                GunSilent.notify("GunSilent", "Equipped: " .. (currentTool.Name or "Unknown") .. " (Total Range: " .. getGunRange(currentTool) .. ")", true)
+                GunSilent.notify("GunSilent", "Equipped: " .. currentTool.Name .. " (Total Range: " .. getGunRange(currentTool) .. ")", true)
             elseif GunSilent.State.LastTool and not currentTool then
-                GunSilent.notify("GunSilent", "Unequipped: " .. (GunSilent.State.LastTool.Name or "Unknown"), true)
+                GunSilent.notify("GunSilent", "Unequipped: " .. GunSilent.State.LastTool.Name, true)
             elseif currentTool and GunSilent.State.LastTool then
-                GunSilent.notify("GunSilent", "Switched to " .. (currentTool.Name or "Unknown") .. " (Range: " .. getGunRange(currentTool) .. ")", true)
+                GunSilent.notify("GunSilent", "Switched to " .. currentTool.Name .. " (Range: " .. getGunRange(currentTool) .. ")", true)
             end
             GunSilent.State.LastTool = currentTool
         end
@@ -689,13 +579,13 @@ local function initializeGunSilent()
         updateFovCircle(deltaTime)
         if not currentTool then
             GunSilent.Core.GunSilentTarget.CurrentTarget = nil
-            updateVisualsGun(nil, false, deltaTime)
+            updateVisualsGun(nil, false)
             return
         end
 
         local gunRange = getGunRange(currentTool)
         local nearestPlayer = getNearestPlayerGun(gunRange)
-        updateVisualsGun(nearestPlayer, true, deltaTime)
+        updateVisualsGun(nearestPlayer, true)
         if GunSilent.Settings.Rage.Value and GunSilent.State.V_U_4 and nearestPlayer then
             local aimCFrame = getAimCFrameGun(nearestPlayer)
             local hitData = createHitDataGun(nearestPlayer)
@@ -727,459 +617,645 @@ local function Init(UI, Core, notify)
     if UI.Tabs.Combat then
         UI.Sections.GunSilent = UI.Tabs.Combat:Section({ Side = "Right", Name = "GunSilent" })
         if UI.Sections.GunSilent then
+            -- Таблица для хранения UI-элементов и их коллбэков
             local uiElements = {}
 
             UI.Sections.GunSilent:Header({ Name = "GunSilent" })
-            uiElements.GSEnabled = UI.Sections.GunSilent:Toggle({
-                Name = "Enabled",
-                Default = GunSilent.Settings.Enabled.Default,
-                Callback = function(value)
+            uiElements.GSEnabled = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Enabled",
+                    Default = GunSilent.Settings.Enabled.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.Enabled.Value = value
+                        initializeGunSilent()
+                        notify("GunSilent", "GunSilent " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'GSEnabled'),
+                callback = function(value)
                     GunSilent.Settings.Enabled.Value = value
                     initializeGunSilent()
                     notify("GunSilent", "GunSilent " .. (value and "Enabled" or "Disabled"), true)
                 end
-            }, 'GSEnabled')
-
-            uiElements.RangePlus = UI.Sections.GunSilent:Slider({
-                Name = "Range Plus",
-                Minimum = 0,
-                Maximum = 200,
-                Default = GunSilent.Settings.RangePlus.Default,
-                Precision = 0,
-                Callback = function(value)
+            }
+            uiElements.RangePlus = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Range Plus",
+                    Minimum = 0,
+                    Maximum = 200,
+                    Default = GunSilent.Settings.RangePlus.Value,
+                    Precision = 0,
+                    Callback = function(value)
+                        GunSilent.Settings.RangePlus.Value = value
+                        notify("GunSilent", "Range Plus set to: " .. value, false)
+                    end
+                }, 'RangePlus'),
+                callback = function(value)
                     GunSilent.Settings.RangePlus.Value = value
                     notify("GunSilent", "Range Plus set to: " .. value, false)
                 end
-            }, 'RangePlus')
-
-            uiElements.Rage = UI.Sections.GunSilent:Toggle({
-                Name = "Rage",
-                Default = GunSilent.Settings.Rage.Default,
-                Callback = function(value)
+            }
+            uiElements.Rage = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Rage",
+                    Default = GunSilent.Settings.Rage.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.Rage.Value = value
+                        initializeGunSilent()
+                        notify("GunSilent", "Rage " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'Rage'),
+                callback = function(value)
                     GunSilent.Settings.Rage.Value = value
                     initializeGunSilent()
                     notify("GunSilent", "Rage " .. (value and "Enabled" or "Disabled"), true)
                 end
-            }, 'Rage')
-
-            uiElements.RageKeybind = UI.Sections.GunSilent:Keybind({
-                Name = "Rage Keybind",
-                Default = nil,
-                Callback = function()
+            }
+            uiElements.RageKeybind = {
+                element = UI.Sections.GunSilent:Keybind({
+                    Name = "Rage Keybind",
+                    Default = nil,
+                    Callback = function()
+                        GunSilent.Settings.Rage.Value = not GunSilent.Settings.Rage.Value
+                        initializeGunSilent()
+                        notify("GunSilent", "Rage " .. (GunSilent.Settings.Rage.Value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'RageKeybind'),
+                callback = function()
                     GunSilent.Settings.Rage.Value = not GunSilent.Settings.Rage.Value
                     initializeGunSilent()
                     notify("GunSilent", "Rage " .. (GunSilent.Settings.Rage.Value and "Enabled" or "Disabled"), true)
                 end
-            }, 'RageKeybind')
-
-            uiElements.DoubleTap = UI.Sections.GunSilent:Toggle({
-                Name = "DoubleTap",
-                Default = GunSilent.Settings.DoubleTap.Default,
-                Callback = function(value)
+            }
+            uiElements.DoubleTap = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "DoubleTap",
+                    Default = GunSilent.Settings.DoubleTap.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.DoubleTap.Value = value
+                        notify("GunSilent", "DoubleTap " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'DoubleTap'),
+                callback = function(value)
                     GunSilent.Settings.DoubleTap.Value = value
                     notify("GunSilent", "DoubleTap " .. (value and "Enabled" or "Disabled"), true)
                 end
-            }, 'DoubleTap')
-
-            uiElements.DoubleTapKeybind = UI.Sections.GunSilent:Keybind({
-                Name = "DoubleTap Keybind",
-                Default = nil,
-                Callback = function()
+            }
+            uiElements.DoubleTapKeybind = {
+                element = UI.Sections.GunSilent:Keybind({
+                    Name = "DoubleTap Keybind",
+                    Default = nil,
+                    Callback = function()
+                        GunSilent.Settings.DoubleTap.Value = not GunSilent.Settings.DoubleTap.Value
+                        notify("GunSilent", "DoubleTap " .. (GunSilent.Settings.DoubleTap.Value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'DoubleTapKeybind'),
+                callback = function()
                     GunSilent.Settings.DoubleTap.Value = not GunSilent.Settings.DoubleTap.Value
                     notify("GunSilent", "DoubleTap " .. (GunSilent.Settings.DoubleTap.Value and "Enabled" or "Disabled"), true)
                 end
-            }, 'DoubleTapKeybind')
-
-            uiElements.HitPart = UI.Sections.GunSilent:Dropdown({
-                Name = "Hit Part",
-                Default = GunSilent.Settings.HitPart.Default,
-                Options = {"Head", "UpperTorso", "HumanoidRootPart", "Random"},
-                Callback = function(value)
+            }
+            uiElements.HitPart = {
+                element = UI.Sections.GunSilent:Dropdown({
+                    Name = "Hit Part",
+                    Default = GunSilent.Settings.HitPart.Value,
+                    Options = {"Head", "UpperTorso", "HumanoidRootPart", "Random"},
+                    Callback = function(value)
+                        GunSilent.Settings.HitPart.Value = value
+                        notify("GunSilent", "Hit Part set to: " .. value, true)
+                    end
+                }, 'HitPart'),
+                callback = function(value)
                     GunSilent.Settings.HitPart.Value = value
                     notify("GunSilent", "Hit Part set to: " .. value, true)
                 end
-            }, 'HitPart')
-
-            uiElements.FakeDistance = UI.Sections.GunSilent:Slider({
-                Name = "Fake Distance",
-                Default = GunSilent.Settings.FakeDistance.Default,
-                Minimum = 0,
-                Maximum = 15,
-                DisplayMethod = "Value",
-                Precision = 0,
-                Callback = function(value)
+            }
+            uiElements.FakeDistance = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Fake Distance",
+                    Default = GunSilent.Settings.FakeDistance.Value,
+                    Minimum = 0,
+                    Maximum = 15,
+                    DisplayMethod = "Value",
+                    Precision = 0,
+                    Callback = function(value)
+                        GunSilent.Settings.FakeDistance.Value = value
+                        notify("GunSilent", "Fake Distance set to: " .. value)
+                    end
+                }, 'FakeDistance'),
+                callback = function(value)
                     GunSilent.Settings.FakeDistance.Value = value
                     notify("GunSilent", "Fake Distance set to: " .. value)
                 end
-            }, 'FakeDistance')
-
-            uiElements.ShotgunSupport = UI.Sections.GunSilent:Toggle({
-                Name = "Shotgun Support",
-                Default = GunSilent.Settings.ShotgunSupport.Default,
-                Callback = function(value)
+            }
+            uiElements.ShotgunSupport = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Shotgun Support",
+                    Default = GunSilent.Settings.ShotgunSupport.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.ShotgunSupport.Value = value
+                        notify("GunSilent", "Shotgun Support " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'ShotgunSupport'),
+                callback = function(value)
                     GunSilent.Settings.ShotgunSupport.Value = value
                     notify("GunSilent", "Shotgun Support " .. (value and "Enabled" or "Disabled"), true)
                 end
-            }, 'ShotgunSupport')
-
-            uiElements.GenerateBullets = UI.Sections.GunSilent:Slider({
-                Name = "Generate Bullets",
-                Default = GunSilent.Settings.GenBullet.Default,
-                Minimum = 1,
-                Maximum = 10,
-                DisplayMethod = "Value",
-                Precision = 0,
-                Callback = function(value)
+            }
+            uiElements.GenerateBullets = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Generate Bullets",
+                    Default = GunSilent.Settings.GenBullet.Value,
+                    Minimum = 1,
+                    Maximum = 10,
+                    DisplayMethod = "Value",
+                    Precision = 0,
+                    Callback = function(value)
+                        GunSilent.Settings.GenBullet.Value = value
+                        notify("GunSilent", "Number of Bullets set to: " .. value)
+                    end
+                }, 'GenerateBullets'),
+                callback = function(value)
                     GunSilent.Settings.GenBullet.Value = value
                     notify("GunSilent", "Number of Bullets set to: " .. value)
                 end
-            }, 'GenerateBullets')
-
-            uiElements.TestGenerateBullets = UI.Sections.GunSilent:Toggle({
-                Name = "Test Generate Bullets",
-                Default = GunSilent.Settings.TestGenBullet.Default,
-                Callback = function(value)
+            }
+            uiElements.TestGenerateBullets = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Test Generate Bullets",
+                    Default = GunSilent.Settings.TestGenBullet.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.TestGenBullet.Value = value
+                        notify("GunSilent", "Test Generate Bullets " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'TestGenerateBullets'),
+                callback = function(value)
                     GunSilent.Settings.TestGenBullet.Value = value
                     notify("GunSilent", "Test Generate Bullets " .. (value and "Enabled" or "Disabled"), true)
                 end
-            }, 'TestGenerateBullets')
-
-            uiElements.GSUSEFOV = UI.Sections.GunSilent:Toggle({
-                Name = "Use FOV",
-                Default = GunSilent.Settings.UseFOV.Default,
-                Callback = function(value)
+            }
+            uiElements.GSUSEFOV = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Use FOV",
+                    Default = GunSilent.Settings.UseFOV.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.UseFOV.Value = value
+                        notify("GunSilent", "Use FOV " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'GSUSEFOV'),
+                callback = function(value)
                     GunSilent.Settings.UseFOV.Value = value
                     notify("GunSilent", "Use FOV " .. (value and "Enabled" or "Disabled"), true)
                 end
-            }, 'GSUSEFOV')
-
-            uiElements.GSFOV = UI.Sections.GunSilent:Slider({
-                Name = "FOV",
-                Default = GunSilent.Settings.FOV.Default,
-                Minimum = 0,
-                Maximum = 120,
-                DisplayMethod = "Value",
-                Precision = 0,
-                Callback = function(value)
+            }
+            uiElements.GSFOV = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "FOV",
+                    Default = GunSilent.Settings.FOV.Value,
+                    Minimum = 0,
+                    Maximum = 120,
+                    DisplayMethod = "Value",
+                    Precision = 0,
+                    Callback = function(value)
+                        GunSilent.Settings.FOV.Value = value
+                        notify("GunSilent", "FOV set to: " .. value)
+                    end
+                }, 'GSFOV'),
+                callback = function(value)
                     GunSilent.Settings.FOV.Value = value
                     notify("GunSilent", "FOV set to: " .. value)
                 end
-            }, 'GSFOV')
-
-            uiElements.GSShowCircle = UI.Sections.GunSilent:Toggle({
-                Name = "Show Circle",
-                Default = GunSilent.Settings.ShowCircle.Default,
-                Callback = function(value)
+            }
+            uiElements.GSShowCircle = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Show Circle",
+                    Default = GunSilent.Settings.ShowCircle.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.ShowCircle.Value = value
+                        notify("GunSilent", "Show Circle " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'GSShowCircle'),
+                callback = function(value)
                     GunSilent.Settings.ShowCircle.Value = value
                     notify("GunSilent", "Show Circle " .. (value and "Enabled" or "Disabled"), true)
                 end
-            }, 'GSShowCircle')
-
-            uiElements.GSCircleMethod = UI.Sections.GunSilent:Dropdown({
-                Name = "Circle Method",
-                Default = GunSilent.Settings.CircleMethod.Default,
-                Options = {"Cursor", "Middle"},
-                Callback = function(value)
+            }
+            uiElements.GSCircleMethod = {
+                element = UI.Sections.GunSilent:Dropdown({
+                    Name = "Circle Method",
+                    Default = GunSilent.Settings.CircleMethod.Value,
+                    Options = {"Cursor", "Middle"},
+                    Callback = function(value)
+                        GunSilent.Settings.CircleMethod.Value = value
+                        notify("GunSilent", "Circle Method set to: " .. value, true)
+                    end
+                }, 'GSCircleMethod'),
+                callback = function(value)
                     GunSilent.Settings.CircleMethod.Value = value
                     notify("GunSilent", "Circle Method set to: " .. value, true)
                 end
-            }, 'GSCircleMethod')
-
-            uiElements.GSGradientCircle = UI.Sections.GunSilent:Toggle({
-                Name = "Gradient Circle",
-                Default = GunSilent.Settings.GradientCircle.Default,
-                Callback = function(value)
+            }
+            uiElements.GSGradientCircle = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Gradient Circle",
+                    Default = GunSilent.Settings.GradientCircle.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.GradientCircle.Value = value
+                        notify("GunSilent", "Gradient Circle " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'GSGradientCircle'),
+                callback = function(value)
                     GunSilent.Settings.GradientCircle.Value = value
                     notify("GunSilent", "Gradient Circle " .. (value and "Enabled" or "Disabled"), true)
                 end
-            }, 'GSGradientCircle')
-
-            uiElements.GSGradientSpeed = UI.Sections.GunSilent:Slider({
-                Name = "Gradient Speed",
-                Default = GunSilent.Settings.GradientSpeed.Default,
-                Minimum = 0.1,
-                Maximum = 3.5,
-                DisplayMethod = "Value",
-                Precision = 1,
-                Callback = function(value)
+            }
+            uiElements.GSGradientSpeed = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Gradient Speed",
+                    Default = GunSilent.Settings.GradientSpeed.Value,
+                    Minimum = 0.1,
+                    Maximum = 3.5,
+                    DisplayMethod = "Value",
+                    Precision = 1,
+                    Callback = function(value)
+                        GunSilent.Settings.GradientSpeed.Value = value
+                        notify("GunSilent", "Gradient Speed set to: " .. value)
+                    end
+                }, 'GSGradientSpeed'),
+                callback = function(value)
                     GunSilent.Settings.GradientSpeed.Value = value
                     notify("GunSilent", "Gradient Speed set to: " .. value)
                 end
-            }, 'GSGradientSpeed')
-
-            uiElements.SortMethod = UI.Sections.GunSilent:Dropdown({
-                Name = "Sort Method",
-                Default = GunSilent.Settings.SortMethod.Default,
-                Options = {"Mouse", "Distance", "Mouse&Distance"},
-                Callback = function(value)
+            }
+            uiElements.SortMethod = {
+                element = UI.Sections.GunSilent:Dropdown({
+                    Name = "Sort Method",
+                    Default = GunSilent.Settings.SortMethod.Value,
+                    Options = {"Mouse", "Distance", "Mouse&Distance"},
+                    Callback = function(value)
+                        GunSilent.Settings.SortMethod.Value = value
+                        notify("GunSilent", "Sort Method set to: " .. value, true)
+                    end
+                }, 'SortMethod'),
+                callback = function(value)
                     GunSilent.Settings.SortMethod.Value = value
                     notify("GunSilent", "Sort Method set to: " .. value, true)
                 end
-            }, 'SortMethod')
-
-            uiElements.TargetVisual = UI.Sections.GunSilent:Toggle({
-                Name = "Target Visual",
-                Default = GunSilent.Settings.TargetVisual.Default,
-                Callback = function(value)
+            }
+            uiElements.TargetVisual = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Target Visual",
+                    Default = GunSilent.Settings.TargetVisual.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.TargetVisual.Value = value
+                        notify("GunSilent", "Target Visual " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'TargetVisual'),
+                callback = function(value)
                     GunSilent.Settings.TargetVisual.Value = value
                     notify("GunSilent", "Target Visual " .. (value and "Enabled" or "Disabled"), true)
                 end
-            }, 'TargetVisual')
-
-            uiElements.HitboxVisual = UI.Sections.GunSilent:Toggle({
-                Name = "Hitbox Visual",
-                Default = GunSilent.Settings.HitboxVisual.Default,
-                Callback = function(value)
+            }
+            uiElements.HitboxVisual = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Hitbox Visual",
+                    Default = GunSilent.Settings.HitboxVisual.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.HitboxVisual.Value = value
+                        notify("GunSilent", "Hitbox Visual " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'HitboxVisual'),
+                callback = function(value)
                     GunSilent.Settings.HitboxVisual.Value = value
                     notify("GunSilent", "Hitbox Visual " .. (value and "Enabled" or "Disabled"), true)
                 end
-            }, 'HitboxVisual')
-
-            uiElements.PredictVisual = UI.Sections.GunSilent:Toggle({
-                Name = "Predict Visual",
-                Default = GunSilent.Settings.PredictVisual.Default,
-                Callback = function(value)
+            }
+            uiElements.PredictVisual = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Predict Visual",
+                    Default = GunSilent.Settings.PredictVisual.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.PredictVisual.Value = value
+                        notify("GunSilent", "Predict Visual " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'PredictVisual'),
+                callback = function(value)
                     GunSilent.Settings.PredictVisual.Value = value
                     notify("GunSilent", "Predict Visual " .. (value and "Enabled" or "Disabled"), true)
                 end
-            }, 'PredictVisual')
-
-            uiElements.ShowDirection = UI.Sections.GunSilent:Toggle({
-                Name = "Show Direction",
-                Default = GunSilent.Settings.ShowDirection.Default,
-                Callback = function(value)
+            }
+            uiElements.ShowDirection = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Show Direction",
+                    Default = GunSilent.Settings.ShowDirection.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.ShowDirection.Value = value
+                        notify("GunSilent", "Show Direction " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'ShowDirection'),
+                callback = function(value)
                     GunSilent.Settings.ShowDirection.Value = value
                     notify("GunSilent", "Show Direction " .. (value and "Enabled" or "Disabled"), true)
                 end
-            }, 'ShowDirection')
-
-            uiElements.ShowTrajectory = UI.Sections.GunSilent:Toggle({
-                Name = "Show Trajectory",
-                Default = GunSilent.Settings.ShowTrajectoryBeam.Default,
-                Callback = function(value)
-                    GunSilent.Settings.ShowTrajectoryBeam.Value = value
+            }
+            uiElements.ShowTrajectory = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Show Trajectory",
+                    Default = GunSilent.Settings.ShowTrajectoryBeam.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.ShowTrajectoryBeam = value
+                        notify("GunSilent", "Trajectory Beam " .. (value and "enabled" or "disabled"), true)
+                    end
+                }, 'ShowTrajectory'),
+                callback = function(value)
+                    GunSilent.Settings.ShowTrajectoryBeam = value
                     notify("GunSilent", "Trajectory Beam " .. (value and "enabled" or "disabled"), true)
                 end
-            }, 'ShowTrajectory')
-
-            uiElements.ShowFullTrajectory = UI.Sections.GunSilent:Toggle({
-                Name = "Show Full Trajectory",
-                Default = GunSilent.Settings.ShowFullTrajectory.Default,
-                Callback = function(value)
-                    GunSilent.Settings.ShowFullTrajectory.Value = value
+            }
+            uiElements.ShowFullTrajectory = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Show Full Trajectory",
+                    Default = GunSilent.Settings.ShowFullTrajectory.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.ShowFullTrajectory = value
+                        notify("GunSilent", "Full Trajectory " .. (value and "enabled" or "disabled"), true)
+                    end
+                }, 'ShowFullTrajectory'),
+                callback = function(value)
+                    GunSilent.Settings.ShowFullTrajectory = value
                     notify("GunSilent", "Full Trajectory " .. (value and "enabled" or "disabled"), true)
                 end
-            }, 'ShowFullTrajectory')
-
-            uiElements.TrackTarget = UI.Sections.GunSilent:Toggle({
-                Name = "Track Target",
-                Default = GunSilent.Settings.TrackTarget.Default,
-                Callback = function(value)
-                    GunSilent.Settings.TrackTarget.Value = value
-                    notify("GunSilent", "Track Target " .. (value and "Enabled" or "Disabled"), true)
-                end
-            }, 'TrackTarget')
-
-            uiElements.ChamsColor = UI.Sections.GunSilent:Colorpicker({
-                Name = "Chams Color",
-                Default = GunSilent.Settings.ChamsColor.Default,
-                Callback = function(value)
-                    GunSilent.Settings.ChamsColor.Value = value
-                    notify("GunSilent", "Chams Color updated", true)
-                end
-            }, 'ChamsColor')
-
-            uiElements.HitChance = UI.Sections.GunSilent:Slider({
-                Name = "Hit Chance",
-                Default = GunSilent.Settings.HitChance.Default,
-                Minimum = 0,
-                Maximum = 100,
-                DisplayMethod = "Percent",
-                Precision = 0,
-                Callback = function(value)
+            }
+            uiElements.HitChance = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Hit Chance",
+                    Default = GunSilent.Settings.HitChance.Value,
+                    Minimum = 0,
+                    Maximum = 100,
+                    DisplayMethod = "Percent",
+                    Precision = 0,
+                    Callback = function(value)
+                        GunSilent.Settings.HitChance.Value = value
+                        notify("GunSilent", "Hit Chance set to: " .. value .. "%")
+                    end
+                }, 'HitChance'),
+                callback = function(value)
                     GunSilent.Settings.HitChance.Value = value
                     notify("GunSilent", "Hit Chance set to: " .. value .. "%")
                 end
-            }, 'HitChance')
-
-            uiElements.LatencyCompensation = UI.Sections.GunSilent:Slider({
-                Name = "Latency Compensation",
-                Minimum = 0.0,
-                Maximum = 0.5,
-                Default = GunSilent.Settings.LatencyCompensation.Default,
-                Precision = 3,
-                Callback = function(value)
+            }
+            uiElements.LatencyCompensation = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Latency Compensation",
+                    Minimum = 0.0,
+                    Maximum = 0.5,
+                    Default = GunSilent.Settings.LatencyCompensation.Value,
+                    Precision = 3,
+                    Callback = function(value)
+                        GunSilent.Settings.LatencyCompensation.Value = value
+                        notify("GunSilent", "Latency Compensation set to: " .. value .. "s", false)
+                    end
+                }, 'LatencyCompensation'),
+                callback = function(value)
                     GunSilent.Settings.LatencyCompensation.Value = value
                     notify("GunSilent", "Latency Compensation set to: " .. value .. "s", false)
                 end
-            }, 'LatencyCompensation')
-
+            }
             UI.Sections.GunSilent:Header({ Name = "Prediction Settings" })
-
-            uiElements.AdvancedPrediction = UI.Sections.GunSilent:Toggle({
-                Name = "Advanced Prediction",
-                Default = GunSilent.Settings.AdvancedEnabled.Default,
-                Callback = function(value)
+            uiElements.AdvancedPrediction = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Advanced Prediction",
+                    Default = GunSilent.Settings.AdvancedEnabled.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.AdvancedEnabled.Value = value
+                        notify("GunSilent", "Advanced Prediction " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'AdvancedPrediction'),
+                callback = function(value)
                     GunSilent.Settings.AdvancedEnabled.Value = value
                     notify("GunSilent", "Advanced Prediction " .. (value and "Enabled" or "Disabled"), true)
                 end
-            }, 'AdvancedPrediction')
-
-            uiElements.VehicleFactor = UI.Sections.GunSilent:Slider({
-                Name = "Vehicle Factor",
-                Minimum = 0.1,
-                Maximum = 2.0,
-                Default = GunSilent.Settings.AdvancedVehicleFactor.Default,
-                Precision = 2,
-                Callback = function(value)
+            }
+            uiElements.VehicleFactor = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Vehicle Factor",
+                    Minimum = 0.1,
+                    Maximum = 2.0,
+                    Default = GunSilent.Settings.AdvancedVehicleFactor.Value,
+                    Precision = 2,
+                    Callback = function(value)
+                        GunSilent.Settings.AdvancedVehicleFactor.Value = value
+                        notify("GunSilent", "Vehicle Prediction Factor set to: " .. value, false)
+                    end
+                }, 'VehicleFactor'),
+                callback = function(value)
                     GunSilent.Settings.AdvancedVehicleFactor.Value = value
                     notify("GunSilent", "Vehicle Prediction Factor set to: " .. value, false)
                 end
-            }, 'VehicleFactor')
-
-            uiElements.PlayerFactor = UI.Sections.GunSilent:Slider({
-                Name = "Player Factor",
-                Minimum = 0.1,
-                Maximum = 2.0,
-                Default = GunSilent.Settings.AdvancedPedestrianFactor.Default,
-                Precision = 2,
-                Callback = function(value)
+            }
+            uiElements.PlayerFactor = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Player Factor",
+                    Minimum = 0.1,
+                    Maximum = 2.0,
+                    Default = GunSilent.Settings.AdvancedPedestrianFactor.Value,
+                    Precision = 2,
+                    Callback = function(value)
+                        GunSilent.Settings.AdvancedPedestrianFactor.Value = value
+                        notify("GunSilent", "Pedestrian Prediction Factor set to: " .. value, false)
+                    end
+                }, 'PlayerFactor'),
+                callback = function(value)
                     GunSilent.Settings.AdvancedPedestrianFactor.Value = value
                     notify("GunSilent", "Pedestrian Prediction Factor set to: " .. value, false)
                 end
-            }, 'PlayerFactor')
-
-            uiElements.Agressivness = UI.Sections.GunSilent:Slider({
-                Name = "Agressivness",
-                Minimum = 0.4,
-                Maximum = 2.1,
-                Default = GunSilent.Settings.AdvancedPredictionAggressiveness.Default,
-                Precision = 2,
-                Callback = function(value)
+            }
+            uiElements.Agressivness = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Agressivness",
+                    Minimum = 0.4,
+                    Maximum = 2.1,
+                    Default = GunSilent.Settings.AdvancedPredictionAggressiveness.Value,
+                    Precision = 2,
+                    Callback = function(value)
+                        GunSilent.Settings.AdvancedPredictionAggressiveness.Value = value
+                        notify("GunSilent", "Prediction Aggressiveness set to: " .. value, false)
+                    end
+                }, 'Agressivness'),
+                callback = function(value)
                     GunSilent.Settings.AdvancedPredictionAggressiveness.Value = value
                     notify("GunSilent", "Prediction Aggressiveness set to: " .. value, false)
                 end
-            }, 'Agressivness')
-
-            uiElements.LowDistanceMulti = UI.Sections.GunSilent:Slider({
-                Name = "LowDistanceMulti",
-                Minimum = 0.4,
-                Maximum = 2.1,
-                Default = GunSilent.Settings.AdvancedSmallDistanceSpeedFactorMultiplier.Default,
-                Precision = 2,
-                Callback = function(value)
+            }
+            uiElements.LowDistanceMulti = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "LowDistanceMulti",
+                    Minimum = 0.4,
+                    Maximum = 2.1,
+                    Default = GunSilent.Settings.AdvancedSmallDistanceSpeedFactorMultiplier.Value,
+                    Precision = 2,
+                    Callback = function(value)
+                        GunSilent.Settings.AdvancedSmallDistanceSpeedFactorMultiplier.Value = value
+                        notify("GunSilent", "Small Distance Speed Multiplier set to: " .. value, false)
+                    end
+                }, 'LowDistanceMulti'),
+                callback = function(value)
                     GunSilent.Settings.AdvancedSmallDistanceSpeedFactorMultiplier.Value = value
                     notify("GunSilent", "Small Distance Speed Multiplier set to: " .. value, false)
                 end
-            }, 'LowDistanceMulti')
-
-            uiElements.SlowVehicleMulti = UI.Sections.GunSilent:Slider({
-                Name = "SlowVehicleMulti",
-                Minimum = 0.5,
-                Maximum = 3.0,
-                Default = GunSilent.Settings.AdvancedSlowVehiclePredictionFactor.Default,
-                Precision = 2,
-                Callback = function(value)
+            }
+            uiElements.SlowVehicleMulti = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "SlowVehicleMulti",
+                    Minimum = 0.5,
+                    Maximum = 3.0,
+                    Default = GunSilent.Settings.AdvancedSlowVehiclePredictionFactor.Value,
+                    Precision = 2,
+                    Callback = function(value)
+                        GunSilent.Settings.AdvancedSlowVehiclePredictionFactor.Value = value
+                        notify("GunSilent", "Slow Vehicle Prediction Factor set to: " .. value, false)
+                    end
+                }, 'SlowVehicleMulti'),
+                callback = function(value)
                     GunSilent.Settings.AdvancedSlowVehiclePredictionFactor.Value = value
                     notify("GunSilent", "Slow Vehicle Prediction Factor set to: " .. value, false)
                 end
-            }, 'SlowVehicleMulti')
-
-            uiElements.FastPredictionLimit = UI.Sections.GunSilent:Slider({
-                Name = "FastPredictionLimit",
-                Minimum = 1.0,
-                Maximum = 5.0,
-                Default = GunSilent.Settings.AdvancedFastVehiclePredictionLimit.Default,
-                Precision = 1,
-                Callback = function(value)
+            }
+            uiElements.FastPredictionLimit = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "FastPredictionLimit",
+                    Minimum = 1.0,
+                    Maximum = 5.0,
+                    Default = GunSilent.Settings.AdvancedFastVehiclePredictionLimit.Value,
+                    Precision = 1,
+                    Callback = function(value)
+                        GunSilent.Settings.AdvancedFastVehiclePredictionLimit.Value = value
+                        notify("GunSilent", "Fast Vehicle Prediction Limit set to: " .. value, false)
+                    end
+                }, 'FastPredictionLimit'),
+                callback = function(value)
                     GunSilent.Settings.AdvancedFastVehiclePredictionLimit.Value = value
                     notify("GunSilent", "Fast Vehicle Prediction Limit set to: " .. value, false)
                 end
-            }, 'FastPredictionLimit')
-
-            uiElements.PositionHistory = UI.Sections.GunSilent:Slider({
-                Name = "Position History",
-                Minimum = 2,
-                Maximum = 20,
-                Default = GunSilent.Settings.AdvancedPositionHistorySize.Default,
-                Precision = 0,
-                Callback = function(value)
+            }
+            uiElements.PositionHistory = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Position History",
+                    Minimum = 2,
+                    Maximum = 20,
+                    Default = GunSilent.Settings.AdvancedPositionHistorySize.Value,
+                    Precision = 0,
+                    Callback = function(value)
+                        GunSilent.Settings.AdvancedPositionHistorySize.Value = value
+                        notify("GunSilent", "Position History Size set to: " .. value, false)
+                    end
+                }, 'PositionHistory'),
+                callback = function(value)
                     GunSilent.Settings.AdvancedPositionHistorySize.Value = value
                     notify("GunSilent", "Position History Size set to: " .. value, false)
                 end
-            }, 'PositionHistory')
-
-            uiElements.SmoothingFactor = UI.Sections.GunSilent:Slider({
-                Name = "Smoothing Factor",
-                Minimum = 0.1,
-                Maximum = 0.9,
-                Default = GunSilent.Settings.AdvancedSmoothingFactor.Default,
-                Precision = 1,
-                Callback = function(value)
+            }
+            uiElements.SmoothingFactor = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Smoothing Factor",
+                    Minimum = 0.1,
+                    Maximum = 0.9,
+                    Default = GunSilent.Settings.AdvancedSmoothingFactor.Value,
+                    Precision = 1,
+                    Callback = function(value)
+                        GunSilent.Settings.AdvancedSmoothingFactor.Value = value
+                        notify("GunSilent", "Smoothing Factor set to: " .. value, false)
+                    end
+                }, 'SmoothingFactor'),
+                callback = function(value)
                     GunSilent.Settings.AdvancedSmoothingFactor.Value = value
                     notify("GunSilent", "Smoothing Factor set to: " .. value, false)
                 end
-            }, 'SmoothingFactor')
-
-            uiElements.VehicleYCorrection = UI.Sections.GunSilent:Slider({
-                Name = "Vehicle Y Correction",
-                Minimum = 0,
-                Maximum = 5,
-                Default = GunSilent.Settings.AdvancedVehicleYCorrection.Default,
-                Precision = 2,
-                Callback = function(value)
+            }
+            uiElements.VehicleYCorrection = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Vehicle Y Correction",
+                    Minimum = 0,
+                    Maximum = 5,
+                    Default = GunSilent.Settings.AdvancedVehicleYCorrection.Value,
+                    Precision = 2,
+                    Callback = function(value)
+                        GunSilent.Settings.AdvancedVehicleYCorrection.Value = value
+                        notify("GunSilent", "Vehicle Y Correction set to: " .. value, false)
+                    end
+                }, 'VehicleYCorrection'),
+                callback = function(value)
                     GunSilent.Settings.AdvancedVehicleYCorrection.Value = value
                     notify("GunSilent", "Vehicle Y Correction set to: " .. value, false)
                 end
-            }, 'VehicleYCorrection')
-
-            uiElements.VisualUpdate = UI.Sections.GunSilent:Slider({
-                Name = "Visual Update Frequency",
-                Minimum = 0.01,
-                Maximum = 0.2,
-                Default = GunSilent.Settings.VisualUpdateFrequency.Default,
-                Precision = 2,
-                Callback = function(value)
+            }
+            uiElements.VisualUpdate = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Visual Update Frequency",
+                    Minimum = 0.01,
+                    Maximum = 0.2,
+                    Default = GunSilent.Settings.VisualUpdateFrequency.Value,
+                    Precision = 2,
+                    Callback = function(value)
+                        GunSilent.Settings.VisualUpdateFrequency.Value = value
+                        notify("GunSilent", "Visual Update Frequency set to: " .. value .. " seconds", false)
+                    end
+                }, 'VisualUpdate'),
+                callback = function(value)
                     GunSilent.Settings.VisualUpdateFrequency.Value = value
                     notify("GunSilent", "Visual Update Frequency set to: " .. value .. " seconds", false)
                 end
-            }, 'VisualUpdate')
-
-            uiElements.TeleportSpeed = UI.Sections.GunSilent:Slider({
-                Name = "Teleport Speed",
-                Minimum = 300,
-                Maximum = 1000,
-                Default = GunSilent.Settings.AdvancedTeleportThreshold.Default,
-                Precision = 0,
-                Callback = function(value)
+            }
+            uiElements.TeleportSpeed = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Teleport Speed",
+                    Minimum = 300,
+                    Maximum = 1000,
+                    Default = GunSilent.Settings.AdvancedTeleportThreshold.Value,
+                    Precision = 0,
+                    Callback = function(value)
+                        GunSilent.Settings.AdvancedTeleportThreshold.Value = value
+                        notify("GunSilent", "Teleport Threshold set to: " .. value, false)
+                    end
+                }, 'TeleportSpeed'),
+                callback = function(value)
                     GunSilent.Settings.AdvancedTeleportThreshold.Value = value
                     notify("GunSilent", "Teleport Threshold set to: " .. value, false)
                 end
-            }, 'TeleportSpeed')
-
-            uiElements.TPLimit = UI.Sections.GunSilent:Slider({
-                Name = "TP Limit",
-                Minimum = 100,
-                Maximum = 500,
-                Default = GunSilent.Settings.AdvancedMaxSpeed.Default,
-                Precision = 0,
-                Callback = function(value)
+            }
+            uiElements.TPLimit = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "TP Limit",
+                    Minimum = 100,
+                    Maximum = 500,
+                    Default = GunSilent.Settings.AdvancedMaxSpeed.Value,
+                    Precision = 0,
+                    Callback = function(value)
+                        GunSilent.Settings.AdvancedMaxSpeed.Value = value
+                        notify("GunSilent", "Max Speed Limit set to: " .. value, false)
+                    end
+                }, 'TPLimit'),
+                callback = function(value)
                     GunSilent.Settings.AdvancedMaxSpeed.Value = value
                     notify("GunSilent", "Max Speed Limit set to: " .. value, false)
                 end
-            }, 'TPLimit')
-
-            uiElements.BulletSpeed = UI.Sections.GunSilent:Slider({
-                Name = "Bullet Speed",
-                Minimum = 500,
-                Maximum = 5000,
-                Default = GunSilent.Settings.PredictBullet.Default,
-                Precision = 0,
-                Callback = function(value)
+            }
+            uiElements.BulletSpeed = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Bullet Speed",
+                    Minimum = 500,
+                    Maximum = 5000,
+                    Default = GunSilent.Settings.PredictBullet.Value,
+                    Precision = 0,
+                    Callback = function(value)
+                        GunSilent.Settings.PredictBullet.Value = value
+                        notify("GunSilent", "Bullet Speed set to: " .. value, false)
+                    end
+                }, 'BulletSpeed'),
+                callback = function(value)
                     GunSilent.Settings.PredictBullet.Value = value
                     notify("GunSilent", "Bullet Speed set to: " .. value, false)
                 end
-            }, 'BulletSpeed')
+            }
 
             -- Добавляем кнопку синхронизации
             UI.Sections.GunSilent:Button({
@@ -1244,7 +1320,6 @@ local function Init(UI, Core, notify)
                     uiElements.TeleportSpeed.callback(uiElements.TeleportSpeed.element:GetValue())
                     uiElements.TPLimit.callback(uiElements.TPLimit.element:GetValue())
                     uiElements.BulletSpeed.callback(uiElements.BulletSpeed.element:GetValue())
-                    uiElevents.LatencyCompensation.callback(uiElements.LatencyCompensation.element:GetValue())
 
                     notify("GunSilent", "Settings synchronized with UI!", true)
                 end
