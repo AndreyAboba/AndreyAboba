@@ -134,6 +134,9 @@ local function setupHitboxes(character, isPredicted)
         "RightLowerArm"
     }
     
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return {} end
+    
     for _, partName in ipairs(bodyParts) do
         local bodyPart = character:FindFirstChild(partName)
         if bodyPart and bodyPart:IsA("BasePart") then
@@ -145,15 +148,12 @@ local function setupHitboxes(character, isPredicted)
             hitboxPart.Transparency = 0.5
             hitboxPart.Color = isPredicted and Color3.fromRGB(0, 255, 255) or Color3.fromRGB(255, 0, 255)
             hitboxPart.Parent = Workspace
-            local rootPart = character:FindFirstChild("HumanoidRootPart")
-            if rootPart then
-                local relativeCFrame = rootPart.CFrame:ToObjectSpace(bodyPart.CFrame)
-                hitboxes[partName] = {
-                    Part = hitboxPart,
-                    BodyPart = bodyPart,
-                    RelativeCFrame = relativeCFrame
-                }
-            end
+            local relativeCFrame = rootPart.CFrame:Inverse() * bodyPart.CFrame -- Точный расчет относительного CFrame
+            hitboxes[partName] = {
+                Part = hitboxPart,
+                BodyPart = bodyPart,
+                RelativeCFrame = relativeCFrame
+            }
         end
     end
     return hitboxes
@@ -295,9 +295,9 @@ local function predictTargetPositionGun(target, applyFakeDistance)
     GunSilent.State.LastTargetPosition[targetId] = targetPos
 
     local fakePos = applyFakeDistance and GunSilent.Settings.FakeDistance.Value > 0 and (targetPos - (targetPos - myPos).Unit * math.max(1, (targetPos - myPos).Magnitude - GunSilent.Settings.FakeDistance.Value)) or myPos
-    local distance, realDistance = (targetPos - fakePos).Magnitude, (targetPos - myPos).Magnitude
+    local distance = (targetPos - fakePos).Magnitude
     local bulletSpeed = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.PredictBullet.Value or GunSilent.FixedPredictionValues.PredictBullet
-    local timeToTarget, realTimeToTarget = distance / bulletSpeed, realDistance / bulletSpeed
+    local timeToTarget = distance / bulletSpeed
 
     local positionHistory = GunSilent.State.PositionHistory[target] or {}
     GunSilent.State.PositionHistory[target] = positionHistory
@@ -309,19 +309,24 @@ local function predictTargetPositionGun(target, applyFakeDistance)
     end
 
     local ping = GunSilent.Settings.LatencyCompensation.Value
-    local targetTime = currentTime - ping
-    local closestEntry = positionHistory[1]
+    local targetTime = currentTime - ping -- Время, которое видит сервер
+
+    -- Интерполяция позиции на основе истории
+    local closestEntry = nil
+    local minTimeDiff = math.huge
     for _, entry in ipairs(positionHistory) do
-        if not closestEntry or math.abs(entry.time - targetTime) < math.abs(closestEntry.time - targetTime) then
+        local timeDiff = math.abs(entry.time - targetTime)
+        if timeDiff < minTimeDiff then
+            minTimeDiff = timeDiff
             closestEntry = entry
         end
     end
     if not closestEntry then
         closestEntry = { pos = targetPos, time = currentTime, velocity = targetRoot.Velocity }
     end
+
     local clientPos = closestEntry.pos
     local effectiveVelocity = closestEntry.velocity
-
     local teleportThreshold = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedTeleportThreshold.Value or GunSilent.FixedPredictionValues.TeleportThreshold
     local maxSpeedLimit = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedMaxSpeed.Value or GunSilent.FixedPredictionValues.MaxSpeed
     if effectiveVelocity.Magnitude > teleportThreshold then
@@ -333,19 +338,32 @@ local function predictTargetPositionGun(target, applyFakeDistance)
 
     local humanoid = targetChar:FindFirstChild("Humanoid")
     local isInVehicle = humanoid and humanoid.SeatPart ~= nil
-    local adjustedTimeToTarget = timeToTarget + ping
-    local adjustedRealTimeToTarget = realTimeToTarget + ping
+    local predictionFactor = isInVehicle and
+        (GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedVehicleFactor.Value or GunSilent.FixedPredictionValues.VehicleFactor) or
+        (GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedPedestrianFactor.Value or GunSilent.FixedPredictionValues.PedestrianFactor)
 
-    local predictedPos, realPredictedPos = targetPos, targetPos
+    -- Новый предикт: основное внимание на скорость и пинг
+    local predictedPos = clientPos
     if not GunSilent.State.IsTeleporting then
-        local speedFactor = math.clamp(effectiveVelocity.Magnitude / (isInVehicle and 50 or 20), 0.5, isInVehicle and 2.5 or 1)
-        local predictionFactor = speedFactor * (isInVehicle and
-            (GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedVehicleFactor.Value or GunSilent.FixedPredictionValues.VehicleFactor) or
-            (GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedPedestrianFactor.Value or GunSilent.FixedPredictionValues.PedestrianFactor)) *
-            (GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedPredictionAggressiveness.Value or GunSilent.FixedPredictionValues.PredictionAggressiveness)
+        local timeSincePing = currentTime - closestEntry.time
+        local smoothingFactor = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedSmoothingFactor.Value or GunSilent.FixedPredictionValues.SmoothingFactor
+        local velocityFactor = effectiveVelocity * predictionFactor * (1 - smoothingFactor)
+        predictedPos = clientPos + velocityFactor * (timeSincePing + timeToTarget)
+        
+        -- Учет ускорения (если доступно)
+        if #positionHistory >= 2 then
+            local prevEntry = positionHistory[#positionHistory - 1]
+            local timeDelta = closestEntry.time - prevEntry.time
+            if timeDelta > 0 then
+                local acceleration = (closestEntry.velocity - prevEntry.velocity) / timeDelta
+                predictedPos = predictedPos + 0.5 * acceleration * (timeSincePing + timeToTarget)^2
+            end
+        end
+    end
 
-        predictedPos = clientPos + effectiveVelocity * adjustedTimeToTarget * predictionFactor
-        realPredictedPos = clientPos + effectiveVelocity * adjustedRealTimeToTarget * predictionFactor
+    local realPredictedPos = predictedPos -- Реальная позиция без фейковой дистанции
+    if applyFakeDistance then
+        predictedPos = fakePos + (predictedPos - fakePos).Unit * math.min((predictedPos - fakePos).Magnitude, distance)
     end
 
     return {
@@ -374,6 +392,7 @@ local function createHitDataGun(target)
     if not prediction.position or not prediction.direction or not prediction.fakePosition then return nil end
 
     local hitPart = targetChar:FindFirstChild(GunSilent.Settings.HitPart.Value == "Random" and (math.random() > 0.5 and "Head" or "UpperTorso") or GunSilent.Settings.HitPart.Value) or targetChar:FindFirstChild("HumanoidRootPart")
+    ifт
     if not hitPart then return nil end
 
     local equippedTool = getEquippedGunTool(GunSilent.State.LocalCharacter)
@@ -452,13 +471,13 @@ local function updateVisualsGun(target, hasWeapon)
         if rootPart then
             for _, hitbox in pairs(GunSilent.State.TargetHitboxes) do
                 if hitbox.Part and hitbox.BodyPart then
-                    hitbox.Part.CFrame = rootPart.CFrame:ToWorldSpace(hitbox.RelativeCFrame)
+                    hitbox.Part.CFrame = rootPart.CFrame * hitbox.RelativeCFrame
                 end
             end
             for _, hitbox in pairs(GunSilent.State.TargetPredictedHitboxes) do
                 if hitbox.Part and hitbox.BodyPart then
-                    local predictedRootCFrame = CFrame.new(prediction.position - rootPart.Position + rootPart.Position)
-                    hitbox.Part.CFrame = predictedRootCFrame:ToWorldSpace(hitbox.RelativeCFrame)
+                    local predictedRootCFrame = CFrame.new(prediction.position) * CFrame.new(rootPart.CFrame:Inverse() * rootPart.CFrame.Position)
+                    hitbox.Part.CFrame = predictedRootCFrame * hitbox.RelativeCFrame
                 end
             end
         end
@@ -485,7 +504,7 @@ local function updateVisualsGun(target, hasWeapon)
             targetVisualPart.Parent = Workspace
             GunSilent.State.TargetVisualPart = targetVisualPart
         end
-        targetVisualPart.Position = targetHead.Position + Vector3.new(0, 3, 0)
+        targetVisualPart.Position = targetHead.Position
         targetVisualPart.Transparency = 0.5
     elseif GunSilent.State.TargetVisualPart then
         GunSilent.State.TargetVisualPart.Transparency = 1
