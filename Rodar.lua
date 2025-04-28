@@ -21,6 +21,7 @@ function module.Init(UI, Core, notify)
             DragStart = nil,
             StartPos = nil,
             Scale = 0.1,
+            ShowDebugLabels = true, -- Отображение меток N, S, E, W
         },
         Config = {
             Size = 150,
@@ -44,6 +45,7 @@ function module.Init(UI, Core, notify)
             CrosshairVertical = nil,
             CrosshairHorizontal = nil,
             Border = nil,
+            Gradient = nil, -- Для динамического обновления градиента
             NorthLabel = nil,
             SouthLabel = nil,
             EastLabel = nil,
@@ -57,6 +59,11 @@ function module.Init(UI, Core, notify)
         dot.Size = UDim2.new(0, Radar.Config.DotSize, 0, Radar.Config.DotSize)
         -- Проверяем, является ли игрок другом
         local isFriend = table.find(Core.Services.FriendsList, player.Name) ~= nil
+        if isFriend then
+            print("Player " .. player.Name .. " is a friend")
+        else
+            print("Player " .. player.Name .. " is not a friend")
+        end
         dot.BackgroundColor3 = isFriend and Radar.Config.FriendColor or Radar.Config.DotColor
         dot.BackgroundTransparency = 0
         dot.BorderSizePixel = 0
@@ -109,17 +116,22 @@ function module.Init(UI, Core, notify)
         borderCorner.Parent = border
 
         local gradient = Instance.new("UIGradient")
-        -- Используем GradientColor1 и GradientColor2 из Core
         gradient.Color = ColorSequence.new({
             ColorSequenceKeypoint.new(0, Core.GlobalConfigs.GradientColors["Gradient Color 1"]),
             ColorSequenceKeypoint.new(1, Core.GlobalConfigs.GradientColors["Gradient Color 2"])
         })
         gradient.Rotation = 45
         gradient.Parent = border
+        Radar.Elements.Gradient = gradient
 
         -- Анимация градиента
         RunService.Heartbeat:Connect(function(deltaTime)
             if Radar.Elements.Border then
+                -- Динамическое обновление цветов градиента
+                gradient.Color = ColorSequence.new({
+                    ColorSequenceKeypoint.new(0, Core.GlobalConfigs.GradientColors["Gradient Color 1"]),
+                    ColorSequenceKeypoint.new(1, Core.GlobalConfigs.GradientColors["Gradient Color 2"])
+                })
                 gradient.Rotation = (gradient.Rotation + deltaTime * 30) % 360
             end
         end)
@@ -145,45 +157,55 @@ function module.Init(UI, Core, notify)
         Radar.Elements.CrosshairHorizontal = crosshairHorizontal
 
         -- Отладочные метки (N, S, E, W)
-        local northLabel = Instance.new("TextLabel")
-        northLabel.Size = UDim2.new(0, 20, 0, 20)
-        northLabel.Position = UDim2.new(0.5, -10, 0, -10)
-        northLabel.BackgroundTransparency = 1
-        northLabel.Text = "N"
-        northLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        northLabel.TextSize = 14
-        northLabel.Parent = container
-        Radar.Elements.NorthLabel = northLabel
+        local function createDebugLabels()
+            if Radar.Elements.NorthLabel then Radar.Elements.NorthLabel:Destroy() end
+            if Radar.Elements.SouthLabel then Radar.Elements.SouthLabel:Destroy() end
+            if Radar.Elements.EastLabel then Radar.Elements.EastLabel:Destroy() end
+            if Radar.Elements.WestLabel then Radar.Elements.WestLabel:Destroy() end
 
-        local southLabel = Instance.new("TextLabel")
-        southLabel.Size = UDim2.new(0, 20, 0, 20)
-        southLabel.Position = UDim2.new(0.5, -10, 1, -10)
-        southLabel.BackgroundTransparency = 1
-        southLabel.Text = "S"
-        southLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        southLabel.TextSize = 14
-        southLabel.Parent = container
-        Radar.Elements.SouthLabel = southLabel
+            if not Radar.State.ShowDebugLabels then return end
 
-        local eastLabel = Instance.new("TextLabel")
-        eastLabel.Size = UDim2.new(0, 20, 0, 20)
-        eastLabel.Position = UDim2.new(1, -10, 0.5, -10)
-        eastLabel.BackgroundTransparency = 1
-        eastLabel.Text = "E"
-        eastLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        eastLabel.TextSize = 14
-        eastLabel.Parent = container
-        Radar.Elements.EastLabel = eastLabel
+            local northLabel = Instance.new("TextLabel")
+            northLabel.Size = UDim2.new(0, 20, 0, 20)
+            northLabel.Position = UDim2.new(0.5, -10, 0, -10)
+            northLabel.BackgroundTransparency = 1
+            northLabel.Text = "N"
+            northLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+            northLabel.TextSize = 14
+            northLabel.Parent = container
+            Radar.Elements.NorthLabel = northLabel
 
-        local westLabel = Instance.new("TextLabel")
-        westLabel.Size = UDim2.new(0, 20, 0, 20)
-        westLabel.Position = UDim2.new(0, -10, 0.5, -10)
-        westLabel.BackgroundTransparency = 1
-        westLabel.Text = "W"
-        westLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        westLabel.TextSize = 14
-        westLabel.Parent = container
-        Radar.Elements.WestLabel = westLabel
+            local southLabel = Instance.new("TextLabel")
+            southLabel.Size = UDim2.new(0, 20, 0, 20)
+            southLabel.Position = UDim2.new(0.5, -10, 1, -10)
+            southLabel.BackgroundTransparency = 1
+            southLabel.Text = "S"
+            southLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+            southLabel.TextSize = 14
+            southLabel.Parent = container
+            Radar.Elements.SouthLabel = southLabel
+
+            local eastLabel = Instance.new("TextLabel")
+            eastLabel.Size = UDim2.new(0, 20, 0, 20)
+            eastLabel.Position = UDim2.new(1, -10, 0.5, -10)
+            eastLabel.BackgroundTransparency = 1
+            eastLabel.Text = "E"
+            eastLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+            eastLabel.TextSize = 14
+            eastLabel.Parent = container
+            Radar.Elements.EastLabel = eastLabel
+
+            local westLabel = Instance.new("TextLabel")
+            westLabel.Size = UDim2.new(0, 20, 0, 20)
+            westLabel.Position = UDim2.new(0, -10, 0.5, -10)
+            westLabel.BackgroundTransparency = 1
+            westLabel.Text = "W"
+            westLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+            westLabel.TextSize = 14
+            westLabel.Parent = container
+            Radar.Elements.WestLabel = westLabel
+        end
+        createDebugLabels()
 
         -- Треугольник локального игрока
         local localPlayerIndicator = Instance.new("ImageLabel")
@@ -305,10 +327,14 @@ function module.Init(UI, Core, notify)
 
     LocalPlayer.CharacterAdded:Connect(createRadarGui)
 
-    -- Добавление переключателя в UI (вкладка Visuals, секция Radar)
+    -- Добавление UI элементов
     if UI.Sections.Radar then
+        -- Заголовок секции
+        UI.Sections.Radar:Header({ Name = "Radar" })
+
+        -- Переключатель Enabled
         UI.Sections.Radar:Toggle({
-            Name = "Radar",
+            Name = "Enabled",
             Default = false,
             Callback = function(value)
                 Radar.State.Enabled = value
@@ -324,21 +350,153 @@ function module.Init(UI, Core, notify)
                 notify("Radar", "Radar " .. (value and "Enabled" or "Disabled"), true)
             end
         })
-    end
 
-    -- Добавление регулировки масштаба через UI
-    if UI.Sections.Radar then
+        -- Регулировка масштаба
         UI.Sections.Radar:Slider({
-            Name = "Radar Scale",
+            Name = "Scale",
             Minimum = 0.05,
             Maximum = 0.5,
             Precision = 3,
             Default = 0.1,
             Callback = function(value)
                 Radar.State.Scale = value
-                notify("Radar Scale", "Set to: " .. tostring(value))
+                notify("Radar Scale", "Set to: " .. tostring(value), true)
             end
         })
+
+        -- Регулировка размера радара
+        UI.Sections.Radar:Slider({
+            Name = "Radar Size",
+            Minimum = 100,
+            Maximum = 300,
+            Precision = 0,
+            Default = 150,
+            Callback = function(value)
+                Radar.Config.Size = value
+                if Radar.Elements.Container then
+                    Radar.Elements.Container.Size = UDim2.new(0, value, 0, value)
+                    -- Обновляем позицию локального игрока
+                    Radar.Elements.LocalPlayerIndicator.Position = UDim2.new(0.5, -Radar.Config.LocalPlayerSize / 2, 0.5, -Radar.Config.LocalPlayerSize / 2)
+                    -- Обновляем точки игроков
+                    updateRadar()
+                end
+                notify("Radar Size", "Set to: " .. tostring(value), true)
+            end
+        })
+
+        -- Регулировка размера точек
+        UI.Sections.Radar:Slider({
+            Name = "Dot Size",
+            Minimum = 3,
+            Maximum = 10,
+            Precision = 0,
+            Default = 5,
+            Callback = function(value)
+                Radar.Config.DotSize = value
+                for _, dot in pairs(Radar.Elements.Dots) do
+                    dot.Size = UDim2.new(0, value, 0, value)
+                end
+                updateRadar()
+                notify("Dot Size", "Set to: " .. tostring(value), true)
+            end
+        })
+
+        -- Регулировка прозрачности фона
+        UI.Sections.Radar:Slider({
+            Name = "Background Transparency",
+            Minimum = 0,
+            Maximum = 1,
+            Precision = 2,
+            Default = 0.3,
+            Callback = function(value)
+                Radar.Config.BackgroundTransparency = value
+                if Radar.Elements.Container then
+                    Radar.Elements.Container.BackgroundTransparency = value
+                end
+                notify("Background Transparency", "Set to: " .. tostring(value), true)
+            end
+        })
+
+        -- Переключатель для отладочных меток
+        UI.Sections.Radar:Toggle({
+            Name = "Show Debug Labels",
+            Default = true,
+            Callback = function(value)
+                Radar.State.ShowDebugLabels = value
+                if Radar.Elements.Container then
+                    if value then
+                        createRadarGui()
+                    else
+                        if Radar.Elements.NorthLabel then Radar.Elements.NorthLabel:Destroy() end
+                        if Radar.Elements.SouthLabel then Radar.Elements.SouthLabel:Destroy() end
+                        if Radar.Elements.EastLabel then Radar.Elements.EastLabel:Destroy() end
+                        if Radar.Elements.WestLabel then Radar.Elements.WestLabel:Destroy() end
+                    end
+                end
+                notify("Debug Labels", value and "Enabled" or "Disabled", true)
+            end
+        })
+
+        -- Цвет врагов
+        UI.Sections.Radar:Colorpicker({
+            Name = "Enemy Color",
+            Default = Radar.Config.DotColor,
+            Callback = function(value)
+                Radar.Config.DotColor = value
+                for player, dot in pairs(Radar.Elements.Dots) do
+                    local isFriend = table.find(Core.Services.FriendsList, player.Name) ~= nil
+                    if not isFriend then
+                        dot.BackgroundColor3 = value
+                    end
+                end
+                notify("Enemy Color", "Updated", true)
+            end
+        }, "EnemyColor")
+
+        -- Цвет друзей
+        UI.Sections.Radar:Colorpicker({
+            Name = "Friend Color",
+            Default = Radar.Config.FriendColor,
+            Callback = function(value)
+                Radar.Config.FriendColor = value
+                for player, dot in pairs(Radar.Elements.Dots) do
+                    local isFriend = table.find(Core.Services.FriendsList, player.Name) ~= nil
+                    if isFriend then
+                        dot.BackgroundColor3 = value
+                    end
+                end
+                notify("Friend Color", "Updated", true)
+            end
+        }, "FriendColor")
+
+        -- Цвет локального игрока
+        UI.Sections.Radar:Colorpicker({
+            Name = "Local Player Color",
+            Default = Radar.Config.LocalPlayerColor,
+            Callback = function(value)
+                Radar.Config.LocalPlayerColor = value
+                if Radar.Elements.LocalPlayerIndicator then
+                    Radar.Elements.LocalPlayerIndicator.ImageColor3 = value
+                end
+                notify("Local Player Color", "Updated", true)
+            end
+        }, "LocalPlayerColor")
+
+        -- Цвет перекрестия
+        UI.Sections.Radar:Colorpicker({
+            Name = "Crosshair Color",
+            Default = Radar.Config.CrosshairColor,
+            Callback = function(value)
+                Radar.Config.CrosshairColor = value
+                if Radar.Elements.CrosshairVertical then
+                    Radar.Elements.CrosshairVertical.BackgroundColor3 = value
+                end
+                if Radar.Elements.CrosshairHorizontal then
+                    Radar.Elements.CrosshairHorizontal.BackgroundColor3 = value
+                end
+                notify("Crosshair Color", "Updated", true)
+            end
+        }, "CrosshairColor")
     end
 end
 
