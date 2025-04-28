@@ -321,7 +321,7 @@ function module.Init(UI, Core, notify)
                         tween:Play()
                     end
                 end
-                notify("Radar", "Radar " .. (value and "Enabled" or "Disabled"))
+                notify("Radar", "Radar " .. (value and "Enabled" or "Disabled"), true)
             end
         })
     end
