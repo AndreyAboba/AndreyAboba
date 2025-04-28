@@ -330,10 +330,10 @@ function module.Init(UI, Core, notify)
     if UI.Sections.Radar then
         UI.Sections.Radar:Slider({
             Name = "Radar Scale",
-            Min = 0.05,
-            Max = 0.5,
+            Minimum = 0.05,
+            Maximum = 0.5,
+            Precision = 0.5,
             Default = 0.1,
-            Increment = 0.05,
             Callback = function(value)
                 Radar.State.Scale = value
                 notify("Radar Scale", "Set to: " .. tostring(value))
