@@ -332,7 +332,7 @@ function module.Init(UI, Core, notify)
             Name = "Radar Scale",
             Minimum = 0.05,
             Maximum = 0.5,
-            Precision = 0.5,
+            Precision = 3,
             Default = 0.1,
             Callback = function(value)
                 Radar.State.Scale = value
