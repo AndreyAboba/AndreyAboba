@@ -51,6 +51,10 @@ function module.Init(UI, Core, notify)
             SouthLabel = nil,
             EastLabel = nil,
             WestLabel = nil,
+        },
+        FriendCache = { -- Кэш для статусов друзей
+            LastFriendsList = nil,
+            IsFriend = {},
         }
     }
 
@@ -59,10 +63,16 @@ function module.Init(UI, Core, notify)
         local dot = Instance.new("Frame")
         dot.Size = UDim2.new(0, Radar.Config.DotSize, 0, Radar.Config.DotSize)
         -- Проверяем, является ли игрок другом
-        local isFriend = table.find(Core.Services.FriendsList, player.Name) ~= nil
-        print("Checking friend status for " .. player.Name .. ":")
-        print("FriendsList contents:", Core.Services.FriendsList)
-        print("Is friend:", isFriend)
+        local playerNameLower = player.Name:lower()
+        local isFriend = Radar.FriendCache.IsFriend[player]
+        if Radar.FriendCache.LastFriendsList ~= Core.Services.FriendsList or isFriend == nil then
+            isFriend = Core.Services.FriendsList and Core.Services.FriendsList[playerNameLower] or false
+            Radar.FriendCache.IsFriend[player] = isFriend
+            Radar.FriendCache.LastFriendsList = Core.Services.FriendsList
+            print("Checking friend status for " .. player.Name .. ":")
+            print("FriendsList contents:", Core.Services.FriendsList)
+            print("Is friend:", isFriend)
+        end
         dot.BackgroundColor3 = isFriend and Radar.Config.FriendColor or Radar.Config.DotColor
         dot.BackgroundTransparency = 0
         dot.BorderSizePixel = 0
@@ -241,6 +251,7 @@ function module.Init(UI, Core, notify)
         if Radar.Elements.Dots[player] then
             Radar.Elements.Dots[player]:Destroy()
             Radar.Elements.Dots[player] = nil
+            Radar.FriendCache.IsFriend[player] = nil -- Очищаем кэш для этого игрока
         end
     end
 
@@ -270,7 +281,13 @@ function module.Init(UI, Core, notify)
                 dot.Visible = true
 
                 -- Обновляем цвет точки, если статус друга изменился
-                local isFriend = table.find(Core.Services.FriendsList, player.Name) ~= nil
+                local playerNameLower = player.Name:lower()
+                local isFriend = Radar.FriendCache.IsFriend[player]
+                if Radar.FriendCache.LastFriendsList ~= Core.Services.FriendsList or isFriend == nil then
+                    isFriend = Core.Services.FriendsList and Core.Services.FriendsList[playerNameLower] or false
+                    Radar.FriendCache.IsFriend[player] = isFriend
+                    Radar.FriendCache.LastFriendsList = Core.Services.FriendsList
+                end
                 dot.BackgroundColor3 = isFriend and Radar.Config.FriendColor or Radar.Config.DotColor
             else
                 dot.Visible = false
@@ -451,7 +468,13 @@ function module.Init(UI, Core, notify)
             Callback = function(value)
                 Radar.Config.DotColor = value
                 for player, dot in pairs(Radar.Elements.Dots) do
-                    local isFriend = table.find(Core.Services.FriendsList, player.Name) ~= nil
+                    local playerNameLower = player.Name:lower()
+                    local isFriend = Radar.FriendCache.IsFriend[player]
+                    if Radar.FriendCache.LastFriendsList ~= Core.Services.FriendsList or isFriend == nil then
+                        isFriend = Core.Services.FriendsList and Core.Services.FriendsList[playerNameLower] or false
+                        Radar.FriendCache.IsFriend[player] = isFriend
+                        Radar.FriendCache.LastFriendsList = Core.Services.FriendsList
+                    end
                     if not isFriend then
                         dot.BackgroundColor3 = value
                     end
@@ -467,7 +490,13 @@ function module.Init(UI, Core, notify)
             Callback = function(value)
                 Radar.Config.FriendColor = value
                 for player, dot in pairs(Radar.Elements.Dots) do
-                    local isFriend = table.find(Core.Services.FriendsList, player.Name) ~= nil
+                    local playerNameLower = player.Name:lower()
+                    local isFriend = Radar.FriendCache.IsFriend[player]
+                    if Radar.FriendCache.LastFriendsList ~= Core.Services.FriendsList or isFriend == nil then
+                        isFriend = Core.Services.FriendsList and Core.Services.FriendsList[playerNameLower] or false
+                        Radar.FriendCache.IsFriend[player] = isFriend
+                        Radar.FriendCache.LastFriendsList = Core.Services.FriendsList
+                    end
                     if isFriend then
                         dot.BackgroundColor3 = value
                     end
