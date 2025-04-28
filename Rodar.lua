@@ -22,6 +22,7 @@ function module.Init(UI, Core, notify)
             StartPos = nil,
             Scale = 0.1,
             ShowDebugLabels = true, -- Отображение меток N, S, E, W
+            Position = UDim2.new(0, 10, 0, 10), -- Сохранение позиции
         },
         Config = {
             Size = 150,
@@ -59,11 +60,9 @@ function module.Init(UI, Core, notify)
         dot.Size = UDim2.new(0, Radar.Config.DotSize, 0, Radar.Config.DotSize)
         -- Проверяем, является ли игрок другом
         local isFriend = table.find(Core.Services.FriendsList, player.Name) ~= nil
-        if isFriend then
-            print("Player " .. player.Name .. " is a friend")
-        else
-            print("Player " .. player.Name .. " is not a friend")
-        end
+        print("Checking friend status for " .. player.Name .. ":")
+        print("FriendsList contents:", Core.Services.FriendsList)
+        print("Is friend:", isFriend)
         dot.BackgroundColor3 = isFriend and Radar.Config.FriendColor or Radar.Config.DotColor
         dot.BackgroundTransparency = 0
         dot.BorderSizePixel = 0
@@ -91,7 +90,7 @@ function module.Init(UI, Core, notify)
 
         local container = Instance.new("Frame")
         container.Size = UDim2.new(0, Radar.Config.Size, 0, Radar.Config.Size)
-        container.Position = UDim2.new(0, 10, 0, 10)
+        container.Position = Radar.State.Position -- Восстанавливаем сохранённую позицию
         container.BackgroundColor3 = Radar.Config.BackgroundColor
         container.BackgroundTransparency = Radar.Config.BackgroundTransparency
         container.BorderSizePixel = 0
@@ -298,6 +297,10 @@ function module.Init(UI, Core, notify)
                 end
             elseif input.UserInputState == Enum.UserInputState.End then
                 Radar.State.Dragging = false
+                -- Сохраняем позицию после перетаскивания
+                if Radar.Elements.Container then
+                    Radar.State.Position = Radar.Elements.Container.Position
+                end
             end
         elseif input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
             if Radar.State.Dragging then
@@ -343,6 +346,10 @@ function module.Init(UI, Core, notify)
                     if Radar.Elements.Container then
                         local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut)
                         local targetScale = value and 1 or 0
+                        -- Устанавливаем начальный масштаб для анимации появления
+                        if value then
+                            Radar.Elements.Container.Size = UDim2.new(0, Radar.Config.Size * 0, 0, Radar.Config.Size * 0)
+                        end
                         local tween = TweenService:Create(Radar.Elements.Container, tweenInfo, {Size = UDim2.new(0, Radar.Config.Size * targetScale, 0, Radar.Config.Size * targetScale)})
                         tween:Play()
                     end
