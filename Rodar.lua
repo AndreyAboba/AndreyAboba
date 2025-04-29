@@ -37,6 +37,9 @@ function module.Init(UI, Core, notify)
             CrosshairColor = Color3.fromRGB(255, 255, 255),
             CrosshairTransparency = 0.5,
             BorderTransparency = 0.5,
+            GradientSpeed = 30, -- Скорость вращения градиента
+            GradientEnabled = true, -- Включён ли градиент
+            RadarColor = Color3.fromRGB(255, 255, 255), -- Статичный цвет бордера
         },
         Elements = {
             Gui = nil,
@@ -65,9 +68,6 @@ function module.Init(UI, Core, notify)
         local playerNameLower = player.Name:lower()
         local isFriend = Core.Services.FriendsList and Core.Services.FriendsList[playerNameLower] or false
         Radar.FriendCache.IsFriend[playerNameLower] = isFriend
-        print("Checking friend status for " .. player.Name .. ":")
-        print("FriendsList contents:", Core.Services.FriendsList)
-        print("Is friend:", isFriend)
         dot.BackgroundColor3 = isFriend and Radar.Config.FriendColor or Radar.Config.DotColor
         dot.BackgroundTransparency = 0
         dot.BorderSizePixel = 0
@@ -111,6 +111,7 @@ function module.Init(UI, Core, notify)
         border.Size = UDim2.new(1, 4, 1, 4)
         border.Position = UDim2.new(0, -2, 0, -2)
         border.BackgroundTransparency = Radar.Config.BorderTransparency
+        border.BackgroundColor3 = Radar.Config.RadarColor
         border.BorderSizePixel = 0
         border.Parent = container
         Radar.Elements.Border = border
@@ -125,18 +126,26 @@ function module.Init(UI, Core, notify)
             ColorSequenceKeypoint.new(1, Core.GlobalConfigs.GradientColors["Gradient Color 2"])
         })
         gradient.Rotation = 45
+        gradient.Enabled = Radar.Config.GradientEnabled
         gradient.Parent = border
         Radar.Elements.Gradient = gradient
 
         -- Анимация градиента
         RunService.Heartbeat:Connect(function(deltaTime)
             if Radar.Elements.Border then
-                -- Динамическое обновление цветов градиента
-                gradient.Color = ColorSequence.new({
-                    ColorSequenceKeypoint.new(0, Core.GlobalConfigs.GradientColors["Gradient Color 1"]),
-                    ColorSequenceKeypoint.new(1, Core.GlobalConfigs.GradientColors["Gradient Color 2"])
-                })
-                gradient.Rotation = (gradient.Rotation + deltaTime * 30) % 360
+                if Radar.Config.GradientEnabled then
+                    -- Динамическое обновление цветов градиента
+                    gradient.Color = ColorSequence.new({
+                        ColorSequenceKeypoint.new(0, Core.GlobalConfigs.GradientColors["Gradient Color 1"]),
+                        ColorSequenceKeypoint.new(1, Core.GlobalConfigs.GradientColors["Gradient Color 2"])
+                    })
+                    gradient.Rotation = (gradient.Rotation + deltaTime * Radar.Config.GradientSpeed) % 360
+                    gradient.Enabled = true
+                    Radar.Elements.Border.BackgroundColor3 = Color3.fromRGB(255, 255, 255) -- Белый фон для градиента
+                else
+                    gradient.Enabled = false
+                    Radar.Elements.Border.BackgroundColor3 = Radar.Config.RadarColor
+                end
             end
         end)
 
@@ -364,7 +373,7 @@ function module.Init(UI, Core, notify)
                 end
                 notify("Radar", "Radar " .. (value and "Enabled" or "Disabled"), true)
             end
-        })
+        }, 'RDEnabled')
 
         -- Регулировка масштаба
         UI.Sections.Radar:Slider({
@@ -375,9 +384,9 @@ function module.Init(UI, Core, notify)
             Default = 0.1,
             Callback = function(value)
                 Radar.State.Scale = value
-                notify("Radar Scale", "Set to: " .. tostring(value), true)
+                notify("Radar Scale", "Set to: " .. tostring(value), false)
             end
-        })
+        }, 'RDScale')
 
         -- Регулировка размера радара
         UI.Sections.Radar:Slider({
@@ -395,9 +404,9 @@ function module.Init(UI, Core, notify)
                     -- Обновляем точки игроков
                     updateRadar()
                 end
-                notify("Radar Size", "Set to: " .. tostring(value), true)
+                notify("Radar Size", "Set to: " .. tostring(value), false)
             end
-        })
+        }, 'RDSize')
 
         -- Регулировка размера точек
         UI.Sections.Radar:Slider({
@@ -412,9 +421,9 @@ function module.Init(UI, Core, notify)
                     dot.Size = UDim2.new(0, value, 0, value)
                 end
                 updateRadar()
-                notify("Dot Size", "Set to: " .. tostring(value), true)
+                notify("Dot Size", "Set to: " .. tostring(value), false)
             end
-        })
+        }, 'DTSize')
 
         -- Регулировка прозрачности фона
         UI.Sections.Radar:Slider({
@@ -428,9 +437,9 @@ function module.Init(UI, Core, notify)
                 if Radar.Elements.Container then
                     Radar.Elements.Container.BackgroundTransparency = value
                 end
-                notify("Background Transparency", "Set to: " .. tostring(value), true)
+                notify("Background Transparency", "Set to: " .. tostring(value), false)
             end
-        })
+        }, 'BackgroundTransperencyRD')
 
         -- Переключатель для отладочных меток
         UI.Sections.Radar:Toggle({
@@ -450,7 +459,48 @@ function module.Init(UI, Core, notify)
                 end
                 notify("Debug Labels", value and "Enabled" or "Disabled", true)
             end
-        })
+        }, 'ShowDebugLabelsRD')
+
+        -- Переключатель для градиента
+        UI.Sections.Radar:Toggle({
+            Name = "Gradient Enabled",
+            Default = Radar.Config.GradientEnabled,
+            Callback = function(value)
+                Radar.Config.GradientEnabled = value
+                if Radar.Elements.Gradient then
+                    Radar.Elements.Gradient.Enabled = value
+                    if not value then
+                        Radar.Elements.Border.BackgroundColor3 = Radar.Config.RadarColor
+                    end
+                end
+                notify("Gradient", value and "Enabled" or "Disabled", true)
+            end
+        }, "GradientEnabledRadar")
+
+        -- Регулировка скорости градиента
+        UI.Sections.Radar:Slider({
+            Name = "Gradient Speed",
+            Minimum = 10,
+            Maximum = 100,
+            Precision = 0,
+            Default = Radar.Config.GradientSpeed,
+            Callback = function(value)
+                Radar.Config.GradientSpeed = value
+                notify("Gradient Speed", "Set to: " .. tostring(value), false)
+            end
+        }, "GradientSpeedRadar")
+
+        UI.Sections.Radar:Colorpicker({
+            Name = "Radar Color",
+            Default = Radar.Config.RadarColor,
+            Callback = function(value)
+                Radar.Config.RadarColor = value
+                if Radar.Elements.Border and not Radar.Config.GradientEnabled then
+                    Radar.Elements.Border.BackgroundColor3 = value
+                end
+                notify("Radar Color", "Updated", true)
+            end
+        }, "RadarColor")
 
         -- Цвет врагов
         UI.Sections.Radar:Colorpicker({
