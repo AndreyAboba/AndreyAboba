@@ -287,19 +287,19 @@ function HSCR.Init(UI, Core, notify)
             end
             local newDotSize = CrosshairSettings.DotSize.Value * (1 + scale)
             local newInnerDotSize = CrosshairSettings.DotInnerSize.Value * (1 + scale)
-            u4.tween(crosshairFrame.Dot, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
+            u4.tween(crosshairFrame.Dot, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Quad), {
                 Size = UDim2.fromOffset(newDotSize, newDotSize),
                 Position = UDim2.new(0.5, -newDotSize / 2, 0.5, -newDotSize / 2),
             })
-            u4.tween(crosshairFrame.Dot.InnerDot, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
+            u4.tween(crosshairFrame.Dot.InnerDot, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Quad), {
                 Size = UDim2.fromOffset(newInnerDotSize, newInnerDotSize),
                 Position = UDim2.new(0.5, -newInnerDotSize / 2, 0.5, -newInnerDotSize / 2),
             }).Completed:Wait()
-            u4.tween(crosshairFrame.Dot, TweenInfo.new(0.05, Enum.EasingStyle.Quad), {
+            u4.tween(crosshairFrame.Dot, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Quad), {
                 Size = UDim2.fromOffset(CrosshairSettings.DotSize.Value, CrosshairSettings.DotSize.Value),
                 Position = UDim2.new(0.5, -CrosshairSettings.DotSize.Value / 2, 0.5, -CrosshairSettings.DotSize.Value / 2),
             })
-            u4.tween(crosshairFrame.Dot.InnerDot, TweenInfo.new(0.05, Enum.EasingStyle.Quad), {
+            u4.tween(crosshairFrame.Dot.InnerDot, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Quad), {
                 Size = UDim2.fromOffset(CrosshairSettings.DotInnerSize.Value, CrosshairSettings.DotInnerSize.Value),
                 Position = UDim2.new(0.5, -CrosshairSettings.DotInnerSize.Value / 2, 0.5, -CrosshairSettings.DotInnerSize.Value / 2),
             })
@@ -314,37 +314,37 @@ function HSCR.Init(UI, Core, notify)
             local thickness = 2
             local newGap = gap * (1 + scale)
 
-            u4.tween(crosshairFrame, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
+            u4.tween(crosshairFrame, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Quad), {
                 Size = UDim2.fromOffset(CrosshairSettings.Size.Value * (1 + scale), CrosshairSettings.Size.Value * (1 + scale)),
             }).Completed:Wait()
 
-            u4.tween(crosshairFrame.Top, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
+            u4.tween(crosshairFrame.Top, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Quad), {
                 Position = UDim2.new(0.5, -thickness / 2, 0.5, -newGap - length),
             })
-            u4.tween(crosshairFrame.Right, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
+            u4.tween(crosshairFrame.Right, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Quad), {
                 Position = UDim2.new(0.5, newGap, 0.5, -thickness / 2),
             })
-            u4.tween(crosshairFrame.Bottom, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
+            u4.tween(crosshairFrame.Bottom, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Quad), {
                 Position = UDim2.new(0.5, -thickness / 2, 0.5, newGap),
             })
-            u4.tween(crosshairFrame.Left, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
+            u4.tween(crosshairFrame.Left, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Quad), {
                 Position = UDim2.new(0.5, -newGap - length, 0.5, -thickness / 2),
             })
 
-            u4.tween(crosshairFrame, TweenInfo.new(0.05, Enum.EasingStyle.Quad), {
+            u4.tween(crosshairFrame, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Quad), {
                 Size = UDim2.fromOffset(CrosshairSettings.Size.Value, CrosshairSettings.Size.Value),
             }).Completed:Wait()
 
-            u4.tween(crosshairFrame.Top, TweenInfo.new(0.05, Enum.EasingStyle.Quad), {
+            u4.tween(crosshairFrame.Top, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Quad), {
                 Position = UDim2.new(0.5, -thickness / 2, 0.5, -gap - length),
             })
-            u4.tween(crosshairFrame.Right, TweenInfo.new(0.05, Enum.EasingStyle.Quad), {
+            u4.tween(crosshairFrame.Right, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Quad), {
                 Position = UDim2.new(0.5, gap, 0.5, -thickness / 2),
             })
-            u4.tween(crosshairFrame.Bottom, TweenInfo.new(0.05, Enum.EasingStyle.Quad), {
+            u4.tween(crosshairFrame.Bottom, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Quad), {
                 Position = UDim2.new(0.5, -thickness / 2, 0.5, gap),
             })
-            u4.tween(crosshairFrame.Left, TweenInfo.new(0.05, Enum.EasingStyle.Quad), {
+            u4.tween(crosshairFrame.Left, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Quad), {
                 Position = UDim2.new(0.5, -gap - length, 0.5, -thickness / 2),
             })
         end
@@ -480,6 +480,153 @@ function HSCR.Init(UI, Core, notify)
                 updateCrosshairDesign()
             end
         }, "CrosshairStyle")
+
+        print("Adding Slider: Size")
+        section:Slider({
+            Name = "Size",
+            Minimum = 10,
+            Maximum = 30,
+            Default = CrosshairSettings.Size.Default,
+            Precision = 0,
+            Callback = function(value)
+                CrosshairSettings.Size.Value = value
+                updateCrosshairDesign()
+            end
+        }, "CrosshairSize")
+
+        print("Adding Slider: Gap (Default Style)")
+        section:Slider({
+            Name = "Gap (Default Style)",
+            Minimum = 2,
+            Maximum = 10,
+            Default = CrosshairSettings.Gap.Default,
+            Precision = 0,
+            Callback = function(value)
+                CrosshairSettings.Gap.Value = value
+                updateCrosshairDesign()
+            end
+        }, "CrosshairGap")
+
+        print("Adding Slider: Length (Default Style)")
+        section:Slider({
+            Name = "Length (Default Style)",
+            Minimum = 4,
+            Maximum = 12,
+            Default = CrosshairSettings.Length.Default,
+            Precision = 0,
+            Callback = function(value)
+                CrosshairSettings.Length.Value = value
+                updateCrosshairDesign()
+            end
+        }, "CrosshairLength")
+
+        print("Adding Slider: Dot Size (Dot Style)")
+        section:Slider({
+            Name = "Dot Size (Dot Style)",
+            Minimum = 10,
+            Maximum = 30,
+            Default = CrosshairSettings.DotSize.Default,
+            Precision = 0,
+            Callback = function(value)
+                CrosshairSettings.DotSize.Value = value
+                updateCrosshairDesign()
+            end
+        }, "CrosshairDotSize")
+
+        print("Adding Slider: Dot Inner Size (Dot Style)")
+        section:Slider({
+            Name = "Dot Inner Size (Dot Style)",
+            Minimum = 2,
+            Maximum = 10,
+            Default = CrosshairSettings.DotInnerSize.Default,
+            Precision = 0,
+            Callback = function(value)
+                CrosshairSettings.DotInnerSize.Value = value
+                updateCrosshairDesign()
+            end
+        }, "CrosshairDotInnerSize")
+
+        print("Adding Slider: Dot Outline Thickness (Dot Style)")
+        section:Slider({
+            Name = "Dot Outline Thickness (Dot Style)",
+            Minimum = 1,
+            Maximum = 5,
+            Default = CrosshairSettings.DotOutlineThickness.Default,
+            Precision = 0,
+            Callback = function(value)
+                CrosshairSettings.DotOutlineThickness.Value = value
+                updateCrosshairDesign()
+            end
+        }, "CrosshairDotOutlineThickness")
+
+        print("Adding Slider: Gradient Speed")
+        section:Slider({
+            Name = "Gradient Speed",
+            Minimum = 0.5,
+            Maximum = 5,
+            Default = CrosshairSettings.GradientSpeed.Default,
+            Precision = 1,
+            Callback = function(value)
+                CrosshairSettings.GradientSpeed.Value = value
+                updateCrosshairDesign()
+            end
+        }, "CrosshairGradientSpeed")
+
+        print("Adding Slider: Expand Distance")
+        section:Slider({
+            Name = "Expand Distance",
+            Minimum = 0.1,
+            Maximum = 1,
+            Default = CrosshairSettings.ExpandDistance.Default,
+            Precision = 1,
+            Callback = function(value)
+                CrosshairSettings.ExpandDistance.Value = value
+            end
+        }, "CrosshairExpandDistance")
+
+        print("Adding Slider: Expand Duration")
+        section:Slider({
+            Name = "Expand Duration",
+            Minimum = 0.05,
+            Maximum = 0.5,
+            Default = CrosshairSettings.ExpandDuration.Default,
+            Precision = 2,
+            Callback = function(value)
+                CrosshairSettings.ExpandDuration.Value = value
+            end
+        }, "CrosshairExpandDuration")
+
+        print("Adding Slider: Shrink Duration")
+        section:Slider({
+            Name = "Shrink Duration",
+            Minimum = 0.05,
+            Maximum = 0.5,
+            Default = CrosshairSettings.ShrinkDuration.Default,
+            Precision = 2,
+            Callback = function(value)
+                CrosshairSettings.ShrinkDuration.Value = value
+            end
+        }, "CrosshairShrinkDuration")
+
+        print("Adding Colorpicker: Base Color")
+        section:Colorpicker({
+            Name = "Base Color",
+            Default = CrosshairSettings.BaseColor.Default,
+            Callback = function(value)
+                CrosshairSettings.BaseColor.Value = value
+                updateCrosshairDesign()
+            end
+        }, "CrosshairBaseColor")
+
+        print("Adding Colorpicker: Hit Color")
+        section:Colorpicker({
+            Name = "Hit Color",
+            Default = CrosshairSettings.HitColor.Default,
+            Callback = function(value)
+                CrosshairSettings.HitColor.Value = value
+                updateCrosshairDesign()
+            end
+        }, "CrosshairHitColor")
 
         print("Adding Header: Hitsound Settings")
         section:Header({ Name = "Hitsound Settings" })
