@@ -59,7 +59,6 @@ function HSCR.Init(UI, Core, notify)
     local u7 = require(game.ReplicatedStorage.Modules.Game.UI.RadialModule)
     local v3 = require(game.ReplicatedStorage.Modules.Core.State)
 
-    -- Проверка на успешную загрузку модуля State
     if not v3 then
         error("Failed to load ReplicatedStorage.Modules.Core.State")
         return
@@ -427,7 +426,6 @@ function HSCR.Init(UI, Core, notify)
             radial:SetProgressColor(CrosshairSettings.GradientColor)
         end
 
-        -- Используем RunService для проверки изменений состояния
         local lastIsReloading = u27.is_reloading:get()
         RunService.Heartbeat:Connect(function()
             if not CrosshairSettings.Enabled then return end
@@ -469,161 +467,291 @@ function HSCR.Init(UI, Core, notify)
     initiate()
 
     task.defer(function()
+        local uiElements = {}
+
         local section = UI.Tabs.Visuals:Section({ Name = "Custom Crosshair & Hitsound", Side = "Right" })
         section:Header({ Name = "Crosshair Settings" })
-        section:Toggle({
-            Name = "Enabled",
-            Default = CrosshairSettings.Enabled,
-            Callback = function(value)
+
+        uiElements.Enabled = {
+            element = section:Toggle({
+                Name = "Enabled",
+                Default = CrosshairSettings.Enabled,
+                Callback = function(value)
+                    CrosshairSettings.Enabled = value
+                    AnimationFunctions.updateCrosshairDesign()
+                end
+            }, "CustomCrosshairEnabled"),
+            callback = function(value)
                 CrosshairSettings.Enabled = value
                 AnimationFunctions.updateCrosshairDesign()
             end
-        }, "CustomCrosshairEnabled")
+        }
 
-        section:Dropdown({
-            Name = "Style",
-            Options = {"Dot", "Default"},
-            Default = CrosshairSettings.Style.Default,
-            Callback = function(value)
+        uiElements.Style = {
+            element = section:Dropdown({
+                Name = "Style",
+                Options = {"Dot", "Default"},
+                Default = CrosshairSettings.Style.Default,
+                Callback = function(value)
+                    CrosshairSettings.Style.Value = value
+                    AnimationFunctions.updateCrosshairDesign()
+                end
+            }, "CrosshairStyle"),
+            callback = function(value)
                 CrosshairSettings.Style.Value = value
                 AnimationFunctions.updateCrosshairDesign()
             end
-        }, "CrosshairStyle")
+        }
 
-        section:Slider({
-            Name = "Size",
-            Minimum = 10,
-            Maximum = 30,
-            Default = CrosshairSettings.Size.Default,
-            Precision = 0,
-            Callback = function(value)
+        uiElements.Size = {
+            element = section:Slider({
+                Name = "Size",
+                Minimum = 10,
+                Maximum = 30,
+                Default = CrosshairSettings.Size.Default,
+                Precision = 0,
+                Callback = function(value)
+                    CrosshairSettings.Size.Value = value
+                    AnimationFunctions.updateCrosshairDesign()
+                end
+            }, "CrosshairSize"),
+            callback = function(value)
                 CrosshairSettings.Size.Value = value
                 AnimationFunctions.updateCrosshairDesign()
             end
-        }, "CrosshairSize")
+        }
 
-        section:Slider({
-            Name = "Gap (Default Style)",
-            Minimum = 2,
-            Maximum = 10,
-            Default = CrosshairSettings.Gap.Default,
-            Precision = 0,
-            Callback = function(value)
+        uiElements.Gap = {
+            element = section:Slider({
+                Name = "Gap (Default Style)",
+                Minimum = 2,
+                Maximum = 10,
+                Default = CrosshairSettings.Gap.Default,
+                Precision = 0,
+                Callback = function(value)
+                    CrosshairSettings.Gap.Value = value
+                    AnimationFunctions.updateCrosshairDesign()
+                end
+            }, "CrosshairGap"),
+            callback = function(value)
                 CrosshairSettings.Gap.Value = value
                 AnimationFunctions.updateCrosshairDesign()
             end
-        }, "CrosshairGap")
+        }
 
-        section:Slider({
-            Name = "Length (Default Style)",
-            Minimum = 4,
-            Maximum = 12,
-            Default = CrosshairSettings.Length.Default,
-            Precision = 0,
-            Callback = function(value)
+        uiElements.Length = {
+            element = section:Slider({
+                Name = "Length (Default Style)",
+                Minimum = 4,
+                Maximum = 12,
+                Default = CrosshairSettings.Length.Default,
+                Precision = 0,
+                Callback = function(value)
+                    CrosshairSettings.Length.Value = value
+                    AnimationFunctions.updateCrosshairDesign()
+                end
+            }, "CrosshairLength"),
+            callback = function(value)
                 CrosshairSettings.Length.Value = value
                 AnimationFunctions.updateCrosshairDesign()
             end
-        }, "CrosshairLength")
+        }
 
-        section:Slider({
-            Name = "Dot Size (Dot Style)",
-            Minimum = 10,
-            Maximum = 30,
-            Default = CrosshairSettings.DotSize.Default,
-            Precision = 0,
-            Callback = function(value)
+        uiElements.DotSize = {
+            element = section:Slider({
+                Name = "Dot Size (Dot Style)",
+                Minimum = 10,
+                Maximum = 30,
+                Default = CrosshairSettings.DotSize.Default,
+                Precision = 0,
+                Callback = function(value)
+                    CrosshairSettings.DotSize.Value = value
+                    AnimationFunctions.updateCrosshairDesign()
+                end
+            }, "CrosshairDotSize"),
+            callback = function(value)
                 CrosshairSettings.DotSize.Value = value
                 AnimationFunctions.updateCrosshairDesign()
             end
-        }, "CrosshairDotSize")
+        }
 
-        section:Slider({
-            Name = "Dot Inner Size (Dot Style)",
-            Minimum = 2,
-            Maximum = 10,
-            Default = CrosshairSettings.DotInnerSize.Default,
-            Precision = 0,
-            Callback = function(value)
+        uiElements.DotInnerSize = {
+            element = section:Slider({
+                Name = "Dot Inner Size (Dot Style)",
+                Minimum = 2,
+                Maximum = 10,
+                Default = CrosshairSettings.DotInnerSize.Default,
+                Precision = 0,
+                Callback = function(value)
+                    CrosshairSettings.DotInnerSize.Value = value
+                    AnimationFunctions.updateCrosshairDesign()
+                end
+            }, "CrosshairDotInnerSize"),
+            callback = function(value)
                 CrosshairSettings.DotInnerSize.Value = value
                 AnimationFunctions.updateCrosshairDesign()
             end
-        }, "CrosshairDotInnerSize")
+        }
 
-        section:Slider({
-            Name = "Dot Outline Thickness (Dot Style)",
-            Minimum = 1,
-            Maximum = 5,
-            Default = CrosshairSettings.DotOutlineThickness.Default,
-            Precision = 0,
-            Callback = function(value)
+        uiElements.DotOutlineThickness = {
+            element = section:Slider({
+                Name = "Dot Outline Thickness (Dot Style)",
+                Minimum = 1,
+                Maximum = 5,
+                Default = CrosshairSettings.DotOutlineThickness.Default,
+                Precision = 0,
+                Callback = function(value)
+                    CrosshairSettings.DotOutlineThickness.Value = value
+                    AnimationFunctions.updateCrosshairDesign()
+                end
+            }, "CrosshairDotOutlineThickness"),
+            callback = function(value)
                 CrosshairSettings.DotOutlineThickness.Value = value
                 AnimationFunctions.updateCrosshairDesign()
             end
-        }, "CrosshairDotOutlineThickness")
+        }
 
-        section:Slider({
-            Name = "Expand Distance",
-            Minimum = 0.1,
-            Maximum = 1,
-            Default = CrosshairSettings.ExpandDuration.Value,
-            Precision = 1,
-            Callback = function(value)
+        uiElements.ExpandDistance = {
+            element = section:Slider({
+                Name = "Expand Distance",
+                Minimum = 0.1,
+                Maximum = 1,
+                Default = CrosshairSettings.ExpandDistance.Default,
+                Precision = 1,
+                Callback = function(value)
+                    CrosshairSettings.ExpandDistance.Value = value
+                end
+            }, "CrosshairExpandDistance"),
+            callback = function(value)
                 CrosshairSettings.ExpandDistance.Value = value
             end
-        }, "CrosshairExpandDistance")
+        }
 
-        section:Slider({
-            Name = "Expand Duration",
-            Minimum = 0.05,
-            Maximum = 0.5,
-            Default = CrosshairSettings.ExpandDuration.Default,
-            Precision = 2,
-            Callback = function(value)
+        uiElements.ExpandDuration = {
+            element = section:Slider({
+                Name = "Expand Duration",
+                Minimum = 0.05,
+                Maximum = 0.5,
+                Default = CrosshairSettings.ExpandDuration.Default,
+                Precision = 2,
+                Callback = function(value)
+                    CrosshairSettings.ExpandDuration.Value = value
+                end
+            }, "CrosshairExpandDuration"),
+            callback = function(value)
                 CrosshairSettings.ExpandDuration.Value = value
             end
-        }, "CrosshairExpandDuration")
+        }
 
-        section:Slider({
-            Name = "Shrink Duration",
-            Minimum = 0.05,
-            Maximum = 0.5,
-            Default = CrosshairSettings.ShrinkDuration.Default,
-            Precision = 2,
-            Callback = function(value)
+        uiElements.ShrinkDuration = {
+            element = section:Slider({
+                Name = "Shrink Duration",
+                Minimum = 0.05,
+                Maximum = 0.5,
+                Default = CrosshairSettings.ShrinkDuration.Default,
+                Precision = 2,
+                Callback = function(value)
+                    CrosshairSettings.ShrinkDuration.Value = value
+                end
+            }, "CrosshairShrinkDuration"),
+            callback = function(value)
                 CrosshairSettings.ShrinkDuration.Value = value
             end
-        }, "CrosshairShrinkDuration")
+        }
 
-        section:Colorpicker({
-            Name = "Crosshair Color",
-            Default = CrosshairSettings.GradientColor,
-            Callback = function(value)
+        uiElements.GradientColor = {
+            element = section:Colorpicker({
+                Name = "Crosshair Color",
+                Default = CrosshairSettings.GradientColor,
+                Callback = function(value)
+                    CrosshairSettings.GradientColor = value
+                    AnimationFunctions.updateCrosshairDesign()
+                end
+            }, "GradientColor"),
+            callback = function(value)
                 CrosshairSettings.GradientColor = value
                 AnimationFunctions.updateCrosshairDesign()
             end
-        }, "GradientColor")
+        }
+
+        -- Добавляем кнопку Sync Config
+        section:Button({
+            Name = "Sync Config",
+            Callback = function()
+                -- Синхронизация всех элементов
+                uiElements.Enabled.callback(uiElements.Enabled.element:GetState())
+
+                local styleOptions = uiElements.Style.element:GetOptions()
+                for option, selected in pairs(styleOptions) do
+                    if selected then
+                        uiElements.Style.callback(option)
+                        break
+                    end
+                end
+
+                uiElements.Size.callback(uiElements.Size.element:GetValue())
+                uiElements.Gap.callback(uiElements.Gap.element:GetValue())
+                uiElements.Length.callback(uiElements.Length.element:GetValue())
+                uiElements.DotSize.callback(uiElements.DotSize.element:GetValue())
+                uiElements.DotInnerSize.callback(uiElements.DotInnerSize.element:GetValue())
+                uiElements.DotOutlineThickness.callback(uiElements.DotOutlineThickness.element:GetValue())
+                uiElements.ExpandDistance.callback(uiElements.ExpandDistance.element:GetValue())
+                uiElements.ExpandDuration.callback(uiElements.ExpandDuration.element:GetValue())
+                uiElements.ShrinkDuration.callback(uiElements.ShrinkDuration.element:GetValue())
+                uiElements.GradientColor.callback(uiElements.GradientColor.element:GetValue())
+
+                uiElements.HeadshotSoundEnabled.callback(uiElements.HeadshotSoundEnabled.element:GetState())
+
+                local soundOptions = uiElements.SelectedSound.element:GetOptions()
+                for option, selected in pairs(soundOptions) do
+                    if selected then
+                        uiElements.SelectedSound.callback(option)
+                        break
+                    end
+                end
+
+                notify("Crosshair", "Settings synchronized with UI!", true)
+            end
+        }, "SyncConfig")
 
         section:Header({ Name = "Hitsound Settings" })
 
-        section:Toggle({
-            Name = "Enable Hitsound",
-            Default = CrosshairSettings.HeadshotSoundEnabled,
-            Callback = function(value)
+        uiElements.HeadshotSoundEnabled = {
+            element = section:Toggle({
+                Name = "Enable Hitsound",
+                Default = CrosshairSettings.HeadshotSoundEnabled,
+                Callback = function(value)
+                    CrosshairSettings.HeadshotSoundEnabled = value
+                end
+            }, "HeadshotSoundEnabled"),
+            callback = function(value)
                 CrosshairSettings.HeadshotSoundEnabled = value
             end
-        }, "HeadshotSoundEnabled")
+        }
 
         local soundOptions = {}
         for _, sound in ipairs(CrosshairSettings.SoundData) do
             table.insert(soundOptions, sound.Label)
         end
 
-        section:Dropdown({
-            Name = "Sound",
-            Options = soundOptions,
-            Default = CrosshairSettings.SelectedSound.Default,
-            Callback = function(value)
+        uiElements.SelectedSound = {
+            element = section:Dropdown({
+                Name = "Sound",
+                Options = soundOptions,
+                Default = CrosshairSettings.SelectedSound.Default,
+                Callback = function(value)
+                    if value and type(value) == "string" then
+                        for _, sound in ipairs(CrosshairSettings.SoundData) do
+                            if sound.Label == value then
+                                CrosshairSettings.SelectedSound.Value = value
+                                CrosshairSettings.SoundIds[value] = sound.SoundId
+                                break
+                            end
+                        end
+                    end
+                end
+            }, "HeadshotSound"),
+            callback = function(value)
                 if value and type(value) == "string" then
                     for _, sound in ipairs(CrosshairSettings.SoundData) do
                         if sound.Label == value then
@@ -634,7 +762,7 @@ function HSCR.Init(UI, Core, notify)
                     end
                 end
             end
-        }, "HeadshotSound")
+        }
     end)
 end
 
