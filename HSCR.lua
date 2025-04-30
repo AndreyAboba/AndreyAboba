@@ -380,20 +380,26 @@ function HSCR.Init(UI, Core, notify)
 
         local lastHitTime
         u27.hitmarker = function(isHeadshot, isKill)
-            -- Переносим действия с Instance в главный поток
+            print("Hitmarker called - isHeadshot:", isHeadshot, "isKill:", isKill)
             task.defer(function()
+                print("Inside task.defer for hitmarker")
                 local u7 = require(game.ReplicatedStorage.Modules.Game.UI.RadialModule)
                 local radial = u7.new(crosshairFrame)
+                print("Radial created")
                 radial:SetProgressColor(Core.GlobalConfigs.GradientColors["Gradient Color 2"])
+                print("Progress color set")
 
                 if isKill then
                     headshotSound.SoundId = HeadshotSound.Enabled and HeadshotSound.SoundIds[HeadshotSound.Settings.SelectedSound.Value] or HeadshotSound.OriginalSounds.headshotSound
+                    print("Playing headshotSound:", headshotSound.SoundId)
                     headshotSound:Play()
                 elseif isHeadshot then
                     headshotNormalSound.SoundId = HeadshotSound.Enabled and HeadshotSound.SoundIds[HeadshotSound.Settings.SelectedSound.Value] or HeadshotSound.OriginalSounds.headshotNormalSound
+                    print("Playing headshotNormalSound:", headshotNormalSound.SoundId)
                     headshotNormalSound:Play()
                 else
                     hitSound.SoundId = HeadshotSound.OriginalSounds.hitSound
+                    print("Playing hitSound:", hitSound.SoundId)
                     hitSound:Play()
                 end
 
@@ -401,6 +407,7 @@ function HSCR.Init(UI, Core, notify)
                 lastHitTime = hitTime
                 task.delay(0.2, function()
                     if lastHitTime == hitTime then
+                        print("Resetting radial color")
                         radial:SetProgressColor(Core.GlobalConfigs.GradientColors["Gradient Color 1"])
                     end
                 end)
@@ -409,8 +416,9 @@ function HSCR.Init(UI, Core, notify)
 
         local u6 = require(game.ReplicatedStorage.Modules.Core.Net)
         u6.hook("hit_confirmed", function(isHeadshot, isKill)
-            -- Убедимся, что hitmarker вызывается в главном потоке
+            print("hit_confirmed event fired")
             task.defer(function()
+                print("Calling hitmarker in task.defer")
                 u27.hitmarker(isHeadshot, isKill)
             end)
         end)
@@ -429,6 +437,7 @@ function HSCR.Init(UI, Core, notify)
         Callback = function(value)
             CustomCrosshair.Enabled = value
             updateCrosshairDesign()
+            print("Notifying Custom Crosshair toggle:", value)
             notify("Custom Crosshair", value and "Enabled" or "Disabled")
         end
     }, "CustomCrosshairEnabled")
@@ -439,6 +448,7 @@ function HSCR.Init(UI, Core, notify)
         Callback = function(value)
             CustomCrosshair.Settings.Style.Value = value
             updateCrosshairDesign()
+            print("Notifying Style change:", value)
             notify("Custom Crosshair", "Style set to: " .. value)
         end
     }, "CrosshairStyle")
@@ -451,6 +461,7 @@ function HSCR.Init(UI, Core, notify)
         Callback = function(value)
             CustomCrosshair.Settings.Size.Value = value
             updateCrosshairDesign()
+            print("Notifying Size change:", value)
             notify("Custom Crosshair", "Size set to: " .. value)
         end
     }, "CrosshairSize")
@@ -463,6 +474,7 @@ function HSCR.Init(UI, Core, notify)
         Callback = function(value)
             CustomCrosshair.Settings.Gap.Value = value
             updateCrosshairDesign()
+            print("Notifying Gap change:", value)
             notify("Custom Crosshair", "Gap set to: " .. value)
         end
     }, "CrosshairGap")
@@ -475,6 +487,7 @@ function HSCR.Init(UI, Core, notify)
         Callback = function(value)
             CustomCrosshair.Settings.Length.Value = value
             updateCrosshairDesign()
+            print("Notifying Length change:", value)
             notify("Custom Crosshair", "Length set to: " .. value)
         end
     }, "CrosshairLength")
@@ -486,6 +499,7 @@ function HSCR.Init(UI, Core, notify)
         Precision = 1,
         Callback = function(value)
             CustomCrosshair.Settings.GradientSpeed.Value = value
+            print("Notifying Gradient Speed change:", value)
             notify("Custom Crosshair", "Gradient Speed set to: " .. value)
         end
     }, "CrosshairGradientSpeed")
@@ -496,6 +510,7 @@ function HSCR.Init(UI, Core, notify)
         Default = HeadshotSound.Enabled,
         Callback = function(value)
             HeadshotSound.Enabled = value
+            print("Notifying Headshot Sound toggle:", value)
             notify("Headshot Sound", value and "Enabled" or "Disabled")
         end
     }, "HeadshotSoundEnabled")
@@ -515,6 +530,7 @@ function HSCR.Init(UI, Core, notify)
         Callback = function(value, selectedIndex)
             HeadshotSound.Settings.SelectedSound.Value = value
             HeadshotSound.SoundIds[value] = HeadshotSound.SoundOptions[selectedIndex]
+            print("Notifying Sound change:", value)
             notify("Headshot Sound", "Selected: " .. value)
         end
     }, "HeadshotSound")
