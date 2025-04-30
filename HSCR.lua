@@ -455,202 +455,66 @@ function HSCR.Init(UI, Core, notify)
     -- Вызов инициализации
     initiate()
 
-    -- Создание UI с обёрткой в task.defer
-    local section = UI.Tabs.Visuals:Section({ Name = "Custom Crosshair & Hitsound", Side = "Right" })
-    section:Header({ Name = "Crosshair Settings" })
-    print("Adding Toggle: Enabled")
-    section:Toggle({
-        Name = "Enabled",
-        Default = CrosshairSettings.Enabled,
-        Callback = function(value)
-            task.defer(function()
+    -- Создание UI в главном потоке
+    task.defer(function()
+        print("Starting UI creation in main thread")
+        local section = UI.Tabs.Visuals:Section({ Name = "Custom Crosshair & Hitsound", Side = "Right" })
+        section:Header({ Name = "Crosshair Settings" })
+        print("Adding Toggle: Enabled")
+        section:Toggle({
+            Name = "Enabled",
+            Default = CrosshairSettings.Enabled,
+            Callback = function(value)
                 CrosshairSettings.Enabled = value
                 updateCrosshairDesign()
-                notify("Custom Crosshair", value and "Enabled" or "Disabled")
-            end)
-        end
-    }, "CustomCrosshairEnabled")
+            end
+        }, "CustomCrosshairEnabled")
 
-    print("Adding Dropdown: Style")
-    section:Dropdown({
-        Name = "Style",
-        Options = {"Dot", "Default"},
-        Default = CrosshairSettings.Style.Default,
-        Callback = function(value)
-            task.defer(function()
+        print("Adding Dropdown: Style")
+        section:Dropdown({
+            Name = "Style",
+            Options = {"Dot", "Default"},
+            Default = CrosshairSettings.Style.Default,
+            Callback = function(value)
                 CrosshairSettings.Style.Value = value
                 updateCrosshairDesign()
-                notify("Custom Crosshair", "Style set to: " .. value)
-            end)
-        end
-    }, "CrosshairStyle")
+            end
+        }, "CrosshairStyle")
 
-    print("Adding Slider: Size")
-    section:Slider({
-        Name = "Size",
-        Minimum = 10,
-        Maximum = 30,
-        Default = CrosshairSettings.Size.Default,
-        Precision = 0,
-        Callback = function(value)
-            task.defer(function()
-                CrosshairSettings.Size.Value = value
-                updateCrosshairDesign()
-            end)
-        end
-    }, "CrosshairSize")
+        print("Adding Header: Hitsound Settings")
+        section:Header({ Name = "Hitsound Settings" })
 
-    print("Adding Slider: Gap (Default Style)")
-    section:Slider({
-        Name = "Gap (Default Style)",
-        Minimum = 2,
-        Maximum = 10,
-        Default = CrosshairSettings.Gap.Default,
-        Precision = 0,
-        Callback = function(value)
-            task.defer(function()
-                CrosshairSettings.Gap.Value = value
-                updateCrosshairDesign()
-            end)
-        end
-    }, "CrosshairGap")
-
-    print("Adding Slider: Length (Default Style)")
-    section:Slider({
-        Name = "Length (Default Style)",
-        Minimum = 4,
-        Maximum = 12,
-        Default = CrosshairSettings.Length.Default,
-        Precision = 0,
-        Callback = function(value)
-            task.defer(function()
-                CrosshairSettings.Length.Value = value
-                updateCrosshairDesign()
-            end)
-        end
-    }, "CrosshairLength")
-
-    print("Adding Slider: Dot Size (Dot Style)")
-    section:Slider({
-        Name = "Dot Size (Dot Style)",
-        Minimum = 10,
-        Maximum = 30,
-        Default = CrosshairSettings.DotSize.Default,
-        Precision = 0,
-        Callback = function(value)
-            task.defer(function()
-                CrosshairSettings.DotSize.Value = value
-                updateCrosshairDesign()
-            end)
-        end
-    }, "CrosshairDotSize")
-
-    print("Adding Slider: Dot Inner Size (Dot Style)")
-    section:Slider({
-        Name = "Dot Inner Size (Dot Style)",
-        Minimum = 2,
-        Maximum = 10,
-        Default = CrosshairSettings.DotInnerSize.Default,
-        Precision = 0,
-        Callback = function(value)
-            task.defer(function()
-                CrosshairSettings.DotInnerSize.Value = value
-                updateCrosshairDesign()
-            end)
-        end
-    }, "CrosshairDotInnerSize")
-
-    print("Adding Slider: Dot Outline Thickness (Dot Style)")
-    section:Slider({
-        Name = "Dot Outline Thickness (Dot Style)",
-        Minimum = 1,
-        Maximum = 5,
-        Default = CrosshairSettings.DotOutlineThickness.Default,
-        Precision = 0,
-        Callback = function(value)
-            task.defer(function()
-                CrosshairSettings.DotOutlineThickness.Value = value
-                updateCrosshairDesign()
-            end)
-        end
-    }, "CrosshairDotOutlineThickness")
-
-    print("Adding Slider: Gradient Speed")
-    section:Slider({
-        Name = "Gradient Speed",
-        Minimum = 0.5,
-        Maximum = 5,
-        Default = CrosshairSettings.GradientSpeed.Default,
-        Precision = 1,
-        Callback = function(value)
-            task.defer(function()
-                CrosshairSettings.GradientSpeed.Value = value
-                updateCrosshairDesign()
-            end)
-        end
-    }, "CrosshairGradientSpeed")
-
-    print("Adding Colorpicker: Base Color")
-    section:Colorpicker({
-        Name = "Base Color",
-        Default = CrosshairSettings.BaseColor.Default,
-        Callback = function(value)
-            task.defer(function()
-                CrosshairSettings.BaseColor.Value = value
-                updateCrosshairDesign()
-            end)
-        end
-    }, "CrosshairBaseColor")
-
-    print("Adding Colorpicker: Hit Color")
-    section:Colorpicker({
-        Name = "Hit Color",
-        Default = CrosshairSettings.HitColor.Default,
-        Callback = function(value)
-            task.defer(function()
-                CrosshairSettings.HitColor.Value = value
-                updateCrosshairDesign()
-            end)
-        end
-    }, "CrosshairHitColor")
-
-    print("Adding Header: Hitsound Settings")
-    section:Header({ Name = "Hitsound Settings" })
-
-    print("Adding Toggle: Enable Hitsound")
-    section:Toggle({
-        Name = "Enable Hitsound",
-        Default = CrosshairSettings.HeadshotSoundEnabled,
-        Callback = function(value)
-            task.defer(function()
+        print("Adding Toggle: Enable Hitsound")
+        section:Toggle({
+            Name = "Enable Hitsound",
+            Default = CrosshairSettings.HeadshotSoundEnabled,
+            Callback = function(value)
                 CrosshairSettings.HeadshotSoundEnabled = value
-                notify("Headshot Sound", value and "Enabled" or "Disabled")
-            end)
-        end
-    }, "HeadshotSoundEnabled")
+            end
+        }, "HeadshotSoundEnabled")
 
-    print("Adding Dropdown: Sound")
-    section:Dropdown({
-        Name = "Sound",
-        Options = CrosshairSettings.SoundOptions,
-        Default = CrosshairSettings.SelectedSound.Default,
-        Values = {
-            "rbxassetid://10476301420", "rbxassetid://132390332380260", "rbxassetid://9086370184",
-            "rbxassetid://121311089745141", "rbxassetid://104467173440576", "rbxassetid://7246809481",
-            "rbxassetid://5622443597", "rbxassetid://105190141089785", "rbxassetid://1053296915",
-            "rbxassetid://135478009117226", "rbxassetid://90342360691837", "rbxassetid://83773429281082",
-            "rbxassetid://97643101798871", "rbxassetid://92614567965693", "rbxassetid://115982072912004",
-            "rbxassetid://6937353691", "rbxassetid://105543133746827", "rbxassetid://119697580657161",
-            "rbxassetid://4868633804", "rbxassetid://102911066745395"
-        },
-        Callback = function(value, selectedIndex)
-            task.defer(function()
+        print("Adding Dropdown: Sound")
+        section:Dropdown({
+            Name = "Sound",
+            Options = CrosshairSettings.SoundOptions,
+            Default = CrosshairSettings.SelectedSound.Default,
+            Values = {
+                "rbxassetid://10476301420", "rbxassetid://132390332380260", "rbxassetid://9086370184",
+                "rbxassetid://121311089745141", "rbxassetid://104467173440576", "rbxassetid://7246809481",
+                "rbxassetid://5622443597", "rbxassetid://105190141089785", "rbxassetid://1053296915",
+                "rbxassetid://135478009117226", "rbxassetid://90342360691837", "rbxassetid://83773429281082",
+                "rbxassetid://97643101798871", "rbxassetid://92614567965693", "rbxassetid://115982072912004",
+                "rbxassetid://6937353691", "rbxassetid://105543133746827", "rbxassetid://119697580657161",
+                "rbxassetid://4868633804", "rbxassetid://102911066745395"
+            },
+            Callback = function(value, selectedIndex)
                 CrosshairSettings.SelectedSound.Value = value
                 CrosshairSettings.SoundIds[value] = CrosshairSettings.SoundOptions[selectedIndex]
-                notify("Headshot Sound", "Selected: " .. value)
-            end)
-        end
-    }, "HeadshotSound")
+            end
+        }, "HeadshotSound")
+
+        print("UI creation completed")
+    end)
 end
 
 return HSCR
