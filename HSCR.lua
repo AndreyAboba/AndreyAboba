@@ -496,7 +496,6 @@ function HSCR.Init(UI, Core, notify)
             task.defer(function()
                 CrosshairSettings.Size.Value = value
                 updateCrosshairDesign()
-                notify("Custom Crosshair", "Size set to: " .. value)
             end)
         end
     }, "CrosshairSize")
@@ -512,7 +511,6 @@ function HSCR.Init(UI, Core, notify)
             task.defer(function()
                 CrosshairSettings.Gap.Value = value
                 updateCrosshairDesign()
-                notify("Custom Crosshair", "Gap set to: " .. value)
             end)
         end
     }, "CrosshairGap")
@@ -528,7 +526,6 @@ function HSCR.Init(UI, Core, notify)
             task.defer(function()
                 CrosshairSettings.Length.Value = value
                 updateCrosshairDesign()
-                notify("Custom Crosshair", "Length set to: " .. value)
             end)
         end
     }, "CrosshairLength")
@@ -544,7 +541,6 @@ function HSCR.Init(UI, Core, notify)
             task.defer(function()
                 CrosshairSettings.DotSize.Value = value
                 updateCrosshairDesign()
-                notify("Custom Crosshair", "Dot Size set to: " .. value)
             end)
         end
     }, "CrosshairDotSize")
@@ -560,7 +556,6 @@ function HSCR.Init(UI, Core, notify)
             task.defer(function()
                 CrosshairSettings.DotInnerSize.Value = value
                 updateCrosshairDesign()
-                notify("Custom Crosshair", "Dot Inner Size set to: " .. value)
             end)
         end
     }, "CrosshairDotInnerSize")
@@ -576,7 +571,6 @@ function HSCR.Init(UI, Core, notify)
             task.defer(function()
                 CrosshairSettings.DotOutlineThickness.Value = value
                 updateCrosshairDesign()
-                notify("Custom Crosshair", "Dot Outline Thickness set to: " .. value)
             end)
         end
     }, "CrosshairDotOutlineThickness")
@@ -592,7 +586,6 @@ function HSCR.Init(UI, Core, notify)
             task.defer(function()
                 CrosshairSettings.GradientSpeed.Value = value
                 updateCrosshairDesign()
-                notify("Custom Crosshair", "Gradient Speed set to: " .. value)
             end)
         end
     }, "CrosshairGradientSpeed")
@@ -605,7 +598,6 @@ function HSCR.Init(UI, Core, notify)
             task.defer(function()
                 CrosshairSettings.BaseColor.Value = value
                 updateCrosshairDesign()
-                notify("Custom Crosshair", "Base Color updated")
             end)
         end
     }, "CrosshairBaseColor")
@@ -618,7 +610,6 @@ function HSCR.Init(UI, Core, notify)
             task.defer(function()
                 CrosshairSettings.HitColor.Value = value
                 updateCrosshairDesign()
-                notify("Custom Crosshair", "Hit Color updated")
             end)
         end
     }, "CrosshairHitColor")
