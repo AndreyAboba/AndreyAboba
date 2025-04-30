@@ -27,10 +27,7 @@ LocalPlayer.Config = {
         JumpPower = 50,
         JumpInterval = 0.3,
         PulseTPDist = 5,
-        PulseTPDelay = 0.2,
-        ToggleKey = nil
-    },
-    TickSpeed = {
+        Pulse artyku: {
         Enabled = false,
         HighSpeedMultiplier = 1.4,
         NormalSpeedMultiplier = 0.1,
@@ -53,8 +50,7 @@ LocalPlayer.Config = {
     },
     NoStamina = {
         Enabled = false,
-        ToggleKey = nil,
-        TargetPosition = nil
+        ToggleKey = nil
     }
 }
 
@@ -114,11 +110,7 @@ local NoStaminaStatus = {
     Enabled = LocalPlayer.Config.NoStamina.Enabled,
     Connection = nil,
     Key = LocalPlayer.Config.NoStamina.ToggleKey,
-    Path = nil,
-    Waypoints = nil,
-    CurrentWaypointIndex = 1,
-    TargetPosition = nil,
-    LastPosition = nil
+    Path = nil
 }
 
 -- Вспомогательные функции
@@ -148,53 +140,17 @@ NoStamina.Start = function()
 
     NoStaminaStatus.Connection = Services.RunService.Heartbeat:Connect(function()
         if not NoStaminaStatus.Enabled then return end
-        local humanoid, rootPart = getCharacterData()
-        if not humanoid or not rootPart then return end
+        local _, rootPart = getCharacterData()
+        if not rootPart then return end
 
-        -- Проверяем, если игрок вручную двигается, отключаем pathfinding
-        if humanoid.MoveDirection.Magnitude > 0 then
-            NoStaminaStatus.Path = pathfindingService:CreatePath()
-            NoStaminaStatus.Waypoints = nil
-            NoStaminaStatus.CurrentWaypointIndex = 1
-            NoStaminaStatus.TargetPosition = nil
-            NoStaminaStatus.LastPosition = rootPart.Position
-            return
-        end
-
-        -- Если есть целевая позиция, создаём путь
-        if NoStaminaStatus.TargetPosition then
-            local success, errorMessage = pcall(function()
-                NoStaminaStatus.Path:ComputeAsync(rootPart.Position, NoStaminaStatus.TargetPosition)
-            end)
-
-            if success and NoStaminaStatus.Path.Status == Enum.PathStatus.Success then
-                NoStaminaStatus.Waypoints = NoStaminaStatus.Path:GetWaypoints()
-                NoStaminaStatus.CurrentWaypointIndex = 1
-            else
-                notify("NoStamina", "Failed to compute path: " .. (errorMessage or "Unknown error"), true)
-                NoStaminaStatus.TargetPosition = nil
-                return
-            end
-        end
-
-        -- Если есть путь, следуем по нему
-        if NoStaminaStatus.Waypoints and NoStaminaStatus.CurrentWaypointIndex <= #NoStaminaStatus.Waypoints then
-            local waypoint = NoStaminaStatus.Waypoints[NoStaminaStatus.CurrentWaypointIndex]
-            local distance = (rootPart.Position - waypoint.Position).Magnitude
-
-            if distance < 3 then
-                NoStaminaStatus.CurrentWaypointIndex = NoStaminaStatus.CurrentWaypointIndex + 1
-            else
-                humanoid:MoveTo(waypoint.Position)
-            end
-        else
-            NoStaminaStatus.TargetPosition = nil
-            NoStaminaStatus.Waypoints = nil
-            NoStaminaStatus.CurrentWaypointIndex = 1
-        end
+        -- Вызываем ComputeAsync, чтобы активировать pathfinding, но не используем результат
+        -- Целевая точка — текущая позиция игрока, чтобы не инициировать движение
+        pcall(function()
+            NoStaminaStatus.Path:ComputeAsync(rootPart.Position, rootPart.Position + Vector3.new(0, 0, 0.1))
+        end)
     end)
 
-    notify("NoStamina", "Started", true)
+    notify("NoStamina", "Started (Pathfinding active to bypass stamina)", true)
 end
 
 NoStamina.Stop = function()
@@ -203,15 +159,7 @@ NoStamina.Stop = function()
         NoStaminaStatus.Connection = nil
     end
     NoStaminaStatus.Path = nil
-    NoStaminaStatus.Waypoints = nil
-    NoStaminaStatus.CurrentWaypointIndex = 1
-    NoStaminaStatus.TargetPosition = nil
     notify("NoStamina", "Stopped", true)
-end
-
-NoStamina.SetTarget = function(position)
-    NoStaminaStatus.TargetPosition = position
-    notify("NoStamina", "Target position set", true)
 end
 
 -- TickSpeed Functions
@@ -481,7 +429,7 @@ end
 
 Speed.UpdateJumps = function(humanoid, rootPart, currentTime)
     if SpeedStatus.AutoJump and currentTime - SpeedStatus.LastJumpTime >= SpeedStatus.JumpInterval then
-        if humanoid:GetState() ~= Enum.HumanoidStateType.Jumping and humanoid:GetState() ~= Enum.HumanoidStateType.Freefall then
+        if humanoid:GetState() ~= Enum.HumanoidStateType.Jumping and humanoid:GetState() != Enum.HumanoidStateType.Freefall then
             rootPart.Velocity = Vector3.new(rootPart.Velocity.X, SpeedStatus.JumpPower, rootPart.Velocity.Z)
             humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
             SpeedStatus.LastJumpTime = currentTime
@@ -1028,22 +976,14 @@ local function SetupUI(UI)
                 NoStaminaStatus.Key = value
                 LocalPlayer.Config.NoStamina.ToggleKey = value
                 if isUserInputFocused() then return end
+                NoStaminaStatus.Enabled = not NoStaminaStatus.Enabled
+                LocalPlayer.Config.NoStamina.Enabled = NoStaminaStatus.Enabled
                 if NoStaminaStatus.Enabled then
-                    if NoStaminaStatus.TargetPosition then
-                        NoStaminaStatus.TargetPosition = nil
-                        notify("NoStamina", "Pathfinding stopped", true)
-                    else
-                        local humanoid, rootPart = getCharacterData()
-                        if rootPart then
-                            -- Устанавливаем цель на 50 единиц впереди по направлению взгляда
-                            local lookDirection = rootPart.CFrame.LookVector
-                            local targetPos = rootPart.Position + (lookDirection * 50)
-                            NoStamina.SetTarget(targetPos)
-                        end
-                    end
+                    NoStamina.Start()
                 else
-                    notify("NoStamina", "Enable NoStamina to use keybind.", true)
+                    NoStamina.Stop()
                 end
+                notify("NoStamina", NoStaminaStatus.Enabled and "Enabled" or "Disabled", true)
             end
         }, "NoStaminaKey")
     end
