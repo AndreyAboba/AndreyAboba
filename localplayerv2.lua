@@ -816,10 +816,15 @@ local function SetupUI(UI)
                 end
             end
         }, "SpeedKey")
+    end
 
-        -- TickSpeed UI с отдельным заголовком
-        UI.Sections.Speed:Header({ Name = "TickSpeed" })
-        uiElements.TickSpeedEnabled = UI.Sections.Speed:Toggle({
+    -- TickSpeed UI (отдельная секция)
+    if not UI.Sections.TickSpeed then
+        UI.Sections.TickSpeed = UI.Tabs.Main:Section({ Name = "TickSpeed", Side = "Left" })
+    end
+    if UI.Sections.TickSpeed then
+        UI.Sections.TickSpeed:Header({ Name = "TickSpeed" })
+        uiElements.TickSpeedEnabled = UI.Sections.TickSpeed:Toggle({
             Name = "Enabled",
             Default = LocalPlayer.Config.TickSpeed.Enabled,
             Callback = function(value)
@@ -828,7 +833,7 @@ local function SetupUI(UI)
                 if value then TickSpeed.Start() else TickSpeed.Stop() end
             end
         }, "TickSpeedEnabled")
-        uiElements.TickSpeedHighMultiplier = UI.Sections.Speed:Slider({
+        uiElements.TickSpeedHighMultiplier = UI.Sections.TickSpeed:Slider({
             Name = "High Speed Multiplier",
             Minimum = 1,
             Maximum = 3,
@@ -839,7 +844,7 @@ local function SetupUI(UI)
                 LocalPlayer.Config.TickSpeed.HighSpeedMultiplier = value
             end
         }, "TickSpeedHighMultiplier")
-        uiElements.TickSpeedNormalMultiplier = UI.Sections.Speed:Slider({
+        uiElements.TickSpeedNormalMultiplier = UI.Sections.TickSpeed:Slider({
             Name = "Normal Speed Multiplier",
             Minimum = 0.1,
             Maximum = 1,
@@ -850,7 +855,7 @@ local function SetupUI(UI)
                 LocalPlayer.Config.TickSpeed.NormalSpeedMultiplier = value
             end
         }, "TickSpeedNormalMultiplier")
-        uiElements.TickSpeedOnDuration = UI.Sections.Speed:Slider({
+        uiElements.TickSpeedOnDuration = UI.Sections.TickSpeed:Slider({
             Name = "On Duration",
             Minimum = 0.05,
             Maximum = 0.5,
@@ -861,7 +866,7 @@ local function SetupUI(UI)
                 LocalPlayer.Config.TickSpeed.OnDuration = value
             end
         }, "TickSpeedOnDuration")
-        uiElements.TickSpeedOffDuration = UI.Sections.Speed:Slider({
+        uiElements.TickSpeedOffDuration = UI.Sections.TickSpeed:Slider({
             Name = "Off Duration",
             Minimum = 0.1,
             Maximum = 0.5,
@@ -872,7 +877,7 @@ local function SetupUI(UI)
                 LocalPlayer.Config.TickSpeed.OffDuration = value
             end
         }, "TickSpeedOffDuration")
-        uiElements.TickSpeedKey = UI.Sections.Speed:Keybind({
+        uiElements.TickSpeedKey = UI.Sections.TickSpeed:Keybind({
             Name = "Toggle Key",
             Default = LocalPlayer.Config.TickSpeed.ToggleKey,
             Callback = function(value)
@@ -963,13 +968,10 @@ local function SetupUI(UI)
         }, "FastAttackEnabled")
     end
 
-    -- NoStamina UI (переносим в Misc или создаём новую секцию)
-    if not UI.Sections.Misc then
-        UI.Sections.Misc = UI.Tabs.Main:Section({ Name = "Miscellaneous", Side = "Left" })
-    end
-    if UI.Sections.Misc then
-        UI.Sections.Misc:Header({ Name = "NoStamina" })
-        uiElements.NoStaminaEnabled = UI.Sections.Misc:Toggle({
+    -- NoStamina UI (в LocalPlayer, т.е. в UI.Tabs.Main)
+    if UI.Sections.NoStamina then
+        UI.Sections.NoStamina:Header({ Name = "NoStamina" })
+        uiElements.NoStaminaEnabled = UI.Sections.NoStamina:Toggle({
             Name = "Enabled",
             Default = LocalPlayer.Config.NoStamina.Enabled,
             Callback = function(value)
@@ -978,7 +980,7 @@ local function SetupUI(UI)
                 if value then NoStamina.Start() else NoStamina.Stop() end
             end
         }, "NoStaminaEnabled")
-        uiElements.NoStaminaKey = UI.Sections.Misc:Keybind({
+        uiElements.NoStaminaKey = UI.Sections.NoStamina:Keybind({
             Name = "Toggle Key",
             Default = LocalPlayer.Config.NoStamina.ToggleKey,
             Callback = function(value)
