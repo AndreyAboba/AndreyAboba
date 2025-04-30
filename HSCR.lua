@@ -1,3 +1,4 @@
+print('1')
 local HSCR = {}
 
 -- Общие настройки для CustomCrosshair и HeadshotSound
