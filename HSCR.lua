@@ -49,8 +49,25 @@ function HSCR.Init(UI, Core, notify)
     local crosshairScreenGui = u5.get("CrosshairScreenGui")
     local crosshairFrame = u5.get("CrosshairFrame")
     local bulletsLabel = u5.get("Bullets")
-    local frame1 = crosshairFrame.Frame1.ImageLabel
-    local frame2 = crosshairFrame.Frame2.ImageLabel
+    local frame1 = crosshairFrame and crosshairFrame.Frame1 and crosshairFrame.Frame1.ImageLabel
+    local frame2 = crosshairFrame and crosshairFrame.Frame2 and crosshairFrame.Frame2.ImageLabel
+
+    -- Проверка на существование crosshairFrame
+    if not crosshairFrame then
+        warn("CrosshairFrame not found, attempting to wait for it")
+        local attempts = 0
+        while not crosshairFrame and attempts < 10 do
+            wait(1)
+            crosshairFrame = u5.get("CrosshairFrame")
+            attempts = attempts + 1
+        end
+        if not crosshairFrame then
+            error("Failed to initialize: CrosshairFrame not found after 10 seconds")
+            return
+        end
+        frame1 = crosshairFrame.Frame1.ImageLabel
+        frame2 = crosshairFrame.Frame2.ImageLabel
+    end
 
     -- Создание объектов звука
     local headshotSound = Instance.new("Sound")
@@ -80,13 +97,33 @@ function HSCR.Init(UI, Core, notify)
 
         print("Processing hitmarker in main thread - isHeadshot:", isHeadshot, "isKill:", isKill)
 
+        -- Проверка на существование crosshairFrame
+        if not crosshairFrame or not crosshairFrame.Parent then
+            warn("CrosshairFrame is nil or destroyed, attempting to reinitialize")
+            crosshairFrame = u5.get("CrosshairFrame")
+            if not crosshairFrame then
+                warn("Failed to reinitialize CrosshairFrame")
+                return
+            end
+            frame1 = crosshairFrame.Frame1.ImageLabel
+            frame2 = crosshairFrame.Frame2.ImageLabel
+            radial = u7.new(crosshairFrame)
+        end
+
         -- Вызов анимаций
         if CrosshairSettings.Enabled then
-            print("Attempting to call pulse and pulseRed")
             print("CrosshairFrame exists:", crosshairFrame ~= nil)
+            print("Attempting to call updateCrosshairDesign before animations")
+            updateCrosshairDesign() -- Гарантируем, что элементы прицела созданы
+            print("Attempting to call pulse and pulseRed")
             pulse(CrosshairSettings.ExpandDistance.Value)
             pulseRed()
-            radial:SetProgressColor(CrosshairSettings.HitColor.Value)
+            if radial and radial.SetProgressColor then
+                print("Setting radial progress color")
+                radial:SetProgressColor(CrosshairSettings.HitColor.Value)
+            else
+                warn("Radial is nil or SetProgressColor is not a function")
+            end
         end
 
         -- Воспроизведение звука
@@ -110,7 +147,11 @@ function HSCR.Init(UI, Core, notify)
         wait(0.2)
         if lastHitTime == hitTime then
             print("Resetting radial color")
-            radial:SetProgressColor(CrosshairSettings.BaseColor.Value)
+            if radial and radial.SetProgressColor then
+                radial:SetProgressColor(CrosshairSettings.BaseColor.Value)
+            else
+                warn("Radial is nil or SetProgressColor is not a function during reset")
+            end
         end
     end
 
@@ -121,6 +162,10 @@ function HSCR.Init(UI, Core, notify)
     local function updateCrosshairDesign()
         print("Updating crosshair design - Enabled:", CrosshairSettings.Enabled)
         print("CrosshairFrame exists:", crosshairFrame ~= nil)
+        if not crosshairFrame or not crosshairFrame.Parent then
+            warn("CrosshairFrame is nil or destroyed during updateCrosshairDesign")
+            return
+        end
         for _, child in pairs(crosshairFrame:GetChildren()) do
             if child.Name ~= "Frame1" and child.Name ~= "Frame2" then
                 child:Destroy()
@@ -128,8 +173,8 @@ function HSCR.Init(UI, Core, notify)
         end
 
         if not CrosshairSettings.Enabled then
-            frame1.Visible = CrosshairSettings.OriginalElements.Frame1Visible or true
-            frame2.Visible = CrosshairSettings.OriginalElements.Frame2Visible or true
+            if frame1 then frame1.Visible = CrosshairSettings.OriginalElements.Frame1Visible or true end
+            if frame2 then frame2.Visible = CrosshairSettings.OriginalElements.Frame2Visible or true end
             crosshairFrame.Size = CrosshairSettings.OriginalElements.Size or UDim2.fromOffset(18, 18)
             return
         end
@@ -137,8 +182,8 @@ function HSCR.Init(UI, Core, notify)
         crosshairFrame.Size = UDim2.fromOffset(CrosshairSettings.Size.Value, CrosshairSettings.Size.Value)
         crosshairFrame.BackgroundTransparency = 1
 
-        frame1.Visible = false
-        frame2.Visible = false
+        if frame1 then frame1.Visible = false end
+        if frame2 then frame2.Visible = false end
 
         if CrosshairSettings.Style.Value == "Dot" then
             local dot = Instance.new("Frame")
@@ -285,6 +330,11 @@ function HSCR.Init(UI, Core, notify)
             return
         end
 
+        if not crosshairFrame or not crosshairFrame.Parent then
+            print("Pulse failed: CrosshairFrame is nil or destroyed")
+            return
+        end
+
         if CrosshairSettings.Style.Value == "Dot" then
             if not crosshairFrame:FindFirstChild("Dot") or not crosshairFrame.Dot:FindFirstChild("InnerDot") then
                 print("Pulse failed: Dot or InnerDot not found")
@@ -293,22 +343,34 @@ function HSCR.Init(UI, Core, notify)
             local newDotSize = CrosshairSettings.DotSize.Value * (1 + scale)
             local newInnerDotSize = CrosshairSettings.DotInnerSize.Value * (1 + scale)
             print("Animating Dot - New size:", newDotSize, "New inner size:", newInnerDotSize)
-            u4.tween(crosshairFrame.Dot, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Quad), {
-                Size = UDim2.fromOffset(newDotSize, newDotSize),
-                Position = UDim2.new(0.5, -newDotSize / 2, 0.5, -newDotSize / 2),
-            })
-            u4.tween(crosshairFrame.Dot.InnerDot, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Quad), {
-                Size = UDim2.fromOffset(newInnerDotSize, newInnerDotSize),
-                Position = UDim2.new(0.5, -newInnerDotSize / 2, 0.5, -newInnerDotSize / 2),
-            }).Completed:Wait()
-            u4.tween(crosshairFrame.Dot, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Quad), {
-                Size = UDim2.fromOffset(CrosshairSettings.DotSize.Value, CrosshairSettings.DotSize.Value),
-                Position = UDim2.new(0.5, -CrosshairSettings.DotSize.Value / 2, 0.5, -CrosshairSettings.DotSize.Value / 2),
-            })
-            u4.tween(crosshairFrame.Dot.InnerDot, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Quad), {
-                Size = UDim2.fromOffset(CrosshairSettings.DotInnerSize.Value, CrosshairSettings.DotInnerSize.Value),
-                Position = UDim2.new(0.5, -CrosshairSettings.DotInnerSize.Value / 2, 0.5, -CrosshairSettings.DotInnerSize.Value / 2),
-            })
+            if crosshairFrame.Dot and crosshairFrame.Dot.Parent then
+                u4.tween(crosshairFrame.Dot, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Quad), {
+                    Size = UDim2.fromOffset(newDotSize, newDotSize),
+                    Position = UDim2.new(0.5, -newDotSize / 2, 0.5, -newDotSize / 2),
+                })
+            else
+                print("Dot is nil or destroyed during animation")
+            end
+            if crosshairFrame.Dot and crosshairFrame.Dot.InnerDot and crosshairFrame.Dot.InnerDot.Parent then
+                u4.tween(crosshairFrame.Dot.InnerDot, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Quad), {
+                    Size = UDim2.fromOffset(newInnerDotSize, newInnerDotSize),
+                    Position = UDim2.new(0.5, -newInnerDotSize / 2, 0.5, -newInnerDotSize / 2),
+                }).Completed:Wait()
+            else
+                print("InnerDot is nil or destroyed during animation")
+            end
+            if crosshairFrame.Dot and crosshairFrame.Dot.Parent then
+                u4.tween(crosshairFrame.Dot, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Quad), {
+                    Size = UDim2.fromOffset(CrosshairSettings.DotSize.Value, CrosshairSettings.DotSize.Value),
+                    Position = UDim2.new(0.5, -CrosshairSettings.DotSize.Value / 2, 0.5, -CrosshairSettings.DotSize.Value / 2),
+                })
+            end
+            if crosshairFrame.Dot and crosshairFrame.Dot.InnerDot and crosshairFrame.Dot.InnerDot.Parent then
+                u4.tween(crosshairFrame.Dot.InnerDot, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Quad), {
+                    Size = UDim2.fromOffset(CrosshairSettings.DotInnerSize.Value, CrosshairSettings.DotInnerSize.Value),
+                    Position = UDim2.new(0.5, -CrosshairSettings.DotInnerSize.Value / 2, 0.5, -CrosshairSettings.DotInnerSize.Value / 2),
+                })
+            end
         elseif CrosshairSettings.Style.Value == "Default" then
             if not crosshairFrame:FindFirstChild("Top") or not crosshairFrame:FindFirstChild("Right") or
                not crosshairFrame:FindFirstChild("Bottom") or not crosshairFrame:FindFirstChild("Left") then
@@ -325,35 +387,51 @@ function HSCR.Init(UI, Core, notify)
                 Size = UDim2.fromOffset(CrosshairSettings.Size.Value * (1 + scale), CrosshairSettings.Size.Value * (1 + scale)),
             }).Completed:Wait()
 
-            u4.tween(crosshairFrame.Top, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Quad), {
-                Position = UDim2.new(0.5, -thickness / 2, 0.5, -newGap - length),
-            })
-            u4.tween(crosshairFrame.Right, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Quad), {
-                Position = UDim2.new(0.5, newGap, 0.5, -thickness / 2),
-            })
-            u4.tween(crosshairFrame.Bottom, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Quad), {
-                Position = UDim2.new(0.5, -thickness / 2, 0.5, newGap),
-            })
-            u4.tween(crosshairFrame.Left, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Quad), {
-                Position = UDim2.new(0.5, -newGap - length, 0.5, -thickness / 2),
-            })
+            if crosshairFrame.Top and crosshairFrame.Top.Parent then
+                u4.tween(crosshairFrame.Top, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Quad), {
+                    Position = UDim2.new(0.5, -thickness / 2, 0.5, -newGap - length),
+                })
+            end
+            if crosshairFrame.Right and crosshairFrame.Right.Parent then
+                u4.tween(crosshairFrame.Right, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Quad), {
+                    Position = UDim2.new(0.5, newGap, 0.5, -thickness / 2),
+                })
+            end
+            if crosshairFrame.Bottom and crosshairFrame.Bottom.Parent then
+                u4.tween(crosshairFrame.Bottom, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Quad), {
+                    Position = UDim2.new(0.5, -thickness / 2, 0.5, newGap),
+                })
+            end
+            if crosshairFrame.Left and crosshairFrame.Left.Parent then
+                u4.tween(crosshairFrame.Left, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Quad), {
+                    Position = UDim2.new(0.5, -newGap - length, 0.5, -thickness / 2),
+                })
+            end
 
             u4.tween(crosshairFrame, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Quad), {
                 Size = UDim2.fromOffset(CrosshairSettings.Size.Value, CrosshairSettings.Size.Value),
             }).Completed:Wait()
 
-            u4.tween(crosshairFrame.Top, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Quad), {
-                Position = UDim2.new(0.5, -thickness / 2, 0.5, -gap - length),
-            })
-            u4.tween(crosshairFrame.Right, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Quad), {
-                Position = UDim2.new(0.5, gap, 0.5, -thickness / 2),
-            })
-            u4.tween(crosshairFrame.Bottom, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Quad), {
-                Position = UDim2.new(0.5, -thickness / 2, 0.5, gap),
-            })
-            u4.tween(crosshairFrame.Left, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Quad), {
-                Position = UDim2.new(0.5, -gap - length, 0.5, -thickness / 2),
-            })
+            if crosshairFrame.Top and crosshairFrame.Top.Parent then
+                u4.tween(crosshairFrame.Top, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Quad), {
+                    Position = UDim2.new(0.5, -thickness / 2, 0.5, -gap - length),
+                })
+            end
+            if crosshairFrame.Right and crosshairFrame.Right.Parent then
+                u4.tween(crosshairFrame.Right, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Quad), {
+                    Position = UDim2.new(0.5, gap, 0.5, -thickness / 2),
+                })
+            end
+            if crosshairFrame.Bottom and crosshairFrame.Bottom.Parent then
+                u4.tween(crosshairFrame.Bottom, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Quad), {
+                    Position = UDim2.new(0.5, -thickness / 2, 0.5, gap),
+                })
+            end
+            if crosshairFrame.Left and crosshairFrame.Left.Parent then
+                u4.tween(crosshairFrame.Left, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Quad), {
+                    Position = UDim2.new(0.5, -gap - length, 0.5, -thickness / 2),
+                })
+            end
         end
     end
 
@@ -364,6 +442,11 @@ function HSCR.Init(UI, Core, notify)
             return
         end
 
+        if not crosshairFrame or not crosshairFrame.Parent then
+            print("PulseRed failed: CrosshairFrame is nil or destroyed")
+            return
+        end
+
         if CrosshairSettings.Style.Value == "Dot" then
             if not crosshairFrame:FindFirstChild("Dot") or not crosshairFrame.Dot:FindFirstChild("UIStroke") or
                not crosshairFrame.Dot:FindFirstChild("InnerDot") then
@@ -371,12 +454,16 @@ function HSCR.Init(UI, Core, notify)
                 return
             end
             print("Animating Dot color change")
-            u4.tween(crosshairFrame.Dot.UIStroke, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
-                Color = CrosshairSettings.HitColor.Value
-            })
-            u4.tween(crosshairFrame.Dot.InnerDot, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
-                BackgroundColor3 = CrosshairSettings.BaseColor.Value
-            })
+            if crosshairFrame.Dot and crosshairFrame.Dot.UIStroke and crosshairFrame.Dot.UIStroke.Parent then
+                u4.tween(crosshairFrame.Dot.UIStroke, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
+                    Color = CrosshairSettings.HitColor.Value
+                })
+            end
+            if crosshairFrame.Dot and crosshairFrame.Dot.InnerDot and crosshairFrame.Dot.InnerDot.Parent then
+                u4.tween(crosshairFrame.Dot.InnerDot, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
+                    BackgroundColor3 = CrosshairSettings.BaseColor.Value
+                })
+            end
         elseif CrosshairSettings.Style.Value == "Default" then
             if not crosshairFrame:FindFirstChild("Top") or not crosshairFrame:FindFirstChild("Right") or
                not crosshairFrame:FindFirstChild("Bottom") or not crosshairFrame:FindFirstChild("Left") then
@@ -385,7 +472,7 @@ function HSCR.Init(UI, Core, notify)
             end
             print("Animating Default style color change")
             for _, child in pairs(crosshairFrame:GetChildren()) do
-                if child:IsA("Frame") and child.Name ~= "Frame1" and child.Name ~= "Frame2" then
+                if child:IsA("Frame") and child.Name ~= "Frame1" and child.Name ~= "Frame2" and child.Parent then
                     u4.tween(child, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
                         BackgroundColor3 = CrosshairSettings.HitColor.Value
                     })
@@ -393,8 +480,8 @@ function HSCR.Init(UI, Core, notify)
             end
         end
 
-        if not bulletsLabel then
-            print("PulseRed failed: bulletsLabel not found")
+        if not bulletsLabel or not bulletsLabel.Parent then
+            print("PulseRed failed: bulletsLabel not found or destroyed")
             return
         end
         print("Animating bulletsLabel color change")
@@ -403,15 +490,19 @@ function HSCR.Init(UI, Core, notify)
         }).Completed:Wait()
 
         if CrosshairSettings.Style.Value == "Dot" then
-            u4.tween(crosshairFrame.Dot.UIStroke, TweenInfo.new(0.05, Enum.EasingStyle.Quad), {
-                Color = CrosshairSettings.BaseColor.Value
-            })
-            u4.tween(crosshairFrame.Dot.InnerDot, TweenInfo.new(0.05, Enum.EasingStyle.Quad), {
-                BackgroundColor3 = CrosshairSettings.HitColor.Value
-            })
+            if crosshairFrame.Dot and crosshairFrame.Dot.UIStroke and crosshairFrame.Dot.UIStroke.Parent then
+                u4.tween(crosshairFrame.Dot.UIStroke, TweenInfo.new(0.05, Enum.EasingStyle.Quad), {
+                    Color = CrosshairSettings.BaseColor.Value
+                })
+            end
+            if crosshairFrame.Dot and crosshairFrame.Dot.InnerDot and crosshairFrame.Dot.InnerDot.Parent then
+                u4.tween(crosshairFrame.Dot.InnerDot, TweenInfo.new(0.05, Enum.EasingStyle.Quad), {
+                    BackgroundColor3 = CrosshairSettings.HitColor.Value
+                })
+            end
         elseif CrosshairSettings.Style.Value == "Default" then
             for _, child in pairs(crosshairFrame:GetChildren()) do
-                if child:IsA("Frame") and child.Name ~= "Frame1" and child.Name ~= "Frame2" then
+                if child:IsA("Frame") and child.Name ~= "Frame1" and child.Name ~= "Frame2" and child.Parent then
                     u4.tween(child, TweenInfo.new(0.05, Enum.EasingStyle.Quad), {
                         BackgroundColor3 = CrosshairSettings.BaseColor.Value
                     })
@@ -427,8 +518,8 @@ function HSCR.Init(UI, Core, notify)
     -- Инициализация прицела и хитсаунда
     local function initiate()
         CrosshairSettings.OriginalElements.Size = crosshairFrame.Size
-        CrosshairSettings.OriginalElements.Frame1Visible = frame1.Visible
-        CrosshairSettings.OriginalElements.Frame2Visible = frame2.Visible
+        CrosshairSettings.OriginalElements.Frame1Visible = frame1 and frame1.Visible
+        CrosshairSettings.OriginalElements.Frame2Visible = frame2 and frame2.Visible
 
         updateCrosshairDesign()
 
@@ -440,19 +531,27 @@ function HSCR.Init(UI, Core, notify)
         }
 
         -- Настройка радиального индикатора
-        radial:Init()
-        radial:SetProgress(100)
-        radial:SetProgressColor(CrosshairSettings.BaseColor.Value)
+        if radial and radial.Init then
+            radial:Init()
+            radial:SetProgress(100)
+            radial:SetProgressColor(CrosshairSettings.BaseColor.Value)
+        else
+            warn("Radial is nil or Init is not a function")
+        end
 
         -- Хук для перезарядки
         u27.is_reloading.hook(function(isReloading)
             if not CrosshairSettings.Enabled then return end
             if isReloading then
                 local length = u27.reloading_length.get()
-                radial:SetProgress(0)
-                radial:TweenProgress(100, length)
+                if radial and radial.SetProgress and radial.TweenProgress then
+                    radial:SetProgress(0)
+                    radial:TweenProgress(100, length)
+                end
             else
-                radial:StopAnimating(true)
+                if radial and radial.StopAnimating then
+                    radial:StopAnimating(true)
+                end
             end
         end)
 
