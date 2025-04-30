@@ -59,6 +59,12 @@ function HSCR.Init(UI, Core, notify)
     local u7 = require(game.ReplicatedStorage.Modules.Game.UI.RadialModule)
     local v3 = require(game.ReplicatedStorage.Modules.Core.State)
 
+    -- Проверка на успешную загрузку модуля State
+    if not v3 then
+        error("Failed to load ReplicatedStorage.Modules.Core.State")
+        return
+    end
+
     local crosshairScreenGui = u5.get("CrosshairScreenGui")
     local crosshairFrame = u5.get("CrosshairFrame")
     local bulletsLabel = u5.get("Bullets")
@@ -410,24 +416,34 @@ function HSCR.Init(UI, Core, notify)
             reloading_length = v3.new(0),
         }
 
+        if not u27.is_reloading or not u27.reloading_length then
+            warn("Failed to initialize state objects for is_reloading or reloading_length")
+            return
+        end
+
         if radial and radial.Init then
             radial:Init()
             radial:SetProgress(100)
             radial:SetProgressColor(CrosshairSettings.GradientColor)
         end
 
-        -- Исправляем подписку на изменения состояния
-        u27.is_reloading.Changed:Connect(function()
-            local isReloading = u27.is_reloading.Value
+        -- Используем RunService для проверки изменений состояния
+        local lastIsReloading = u27.is_reloading:get()
+        RunService.Heartbeat:Connect(function()
             if not CrosshairSettings.Enabled then return end
-            if isReloading then
-                local length = u27.reloading_length:get()
-                if radial and radial.SetProgress and radial.TweenProgress then
-                    radial:SetProgress(0)
-                    radial:TweenProgress(100, length)
+
+            local isReloading = u27.is_reloading:get()
+            if isReloading ~= lastIsReloading then
+                lastIsReloading = isReloading
+                if isReloading then
+                    local length = u27.reloading_length:get()
+                    if radial and radial.SetProgress and radial.TweenProgress then
+                        radial:SetProgress(0)
+                        radial:TweenProgress(100, length)
+                    end
+                elseif radial and radial.StopAnimating then
+                    radial:StopAnimating(true)
                 end
-            elseif radial and radial.StopAnimating then
-                radial:StopAnimating(true)
             end
         end)
 
