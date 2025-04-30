@@ -18,20 +18,27 @@ local CrosshairSettings = {
     GradientSpeed = { Value = 2, Default = 2 },
     HeadshotSoundEnabled = false,
     SelectedSound = { Value = "Default", Default = "Default" },
-    SoundOptions = {
-        "Default", "KillSound", "Bubble2", "KillSound2", "KillSound3",
-        "OUH", "Fart", "PUI", "minecraftEXP", "Minecraft2",
-        "TF2 HS", "CriminalityHS", "neverlose", "bameware", "fatality",
-        "csgoHS", "PopHS", "BubblePop", "NiggaHS", "IdkHS"
-    },
-    SoundValues = {
-        "rbxassetid://10476301420", "rbxassetid://132390332380260", "rbxassetid://9086370184",
-        "rbxassetid://121311089745141", "rbxassetid://104467173440576", "rbxassetid://7246809481",
-        "rbxassetid://5622443597", "rbxassetid://105190141089785", "rbxassetid://1053296915",
-        "rbxassetid://135478009117226", "rbxassetid://90342360691837", "rbxassetid://83773429281082",
-        "rbxassetid://97643101798871", "rbxassetid://92614567965693", "rbxassetid://115982072912004",
-        "rbxassetid://6937353691", "rbxassetid://105543133746827", "rbxassetid://119697580657161",
-        "rbxassetid://4868633804", "rbxassetid://102911066745395"
+    SoundData = {
+        { Label = "Default", SoundId = "rbxassetid://10476301420" },
+        { Label = "KillSound", SoundId = "rbxassetid://132390332380260" },
+        { Label = "Bubble2", SoundId = "rbxassetid://9086370184" },
+        { Label = "KillSound2", SoundId = "rbxassetid://121311089745141" },
+        { Label = "KillSound3", SoundId = "rbxassetid://104467173440576" },
+        { Label = "OUH", SoundId = "rbxassetid://7246809481" },
+        { Label = "Fart", SoundId = "rbxassetid://5622443597" },
+        { Label = "PUI", SoundId = "rbxassetid://105190141089785" },
+        { Label = "minecraftEXP", SoundId = "rbxassetid://1053296915" },
+        { Label = "Minecraft2", SoundId = "rbxassetid://135478009117226" },
+        { Label = "TF2 HS", SoundId = "rbxassetid://90342360691837" },
+        { Label = "CriminalityHS", SoundId = "rbxassetid://83773429281082" },
+        { Label = "neverlose", SoundId = "rbxassetid://97643101798871" },
+        { Label = "bameware", SoundId = "rbxassetid://92614567965693" },
+        { Label = "fatality", SoundId = "rbxassetid://115982072912004" },
+        { Label = "csgoHS", SoundId = "rbxassetid://6937353691" },
+        { Label = "PopHS", SoundId = "rbxassetid://105543133746827" },
+        { Label = "BubblePop", SoundId = "rbxassetid://119697580657161" },
+        { Label = "NiggaHS", SoundId = "rbxassetid://4868633804" },
+        { Label = "IdkHS", SoundId = "rbxassetid://102911066745395" },
     },
     SoundIds = {},
     OriginalSounds = {
@@ -763,15 +770,26 @@ function HSCR.Init(UI, Core, notify)
             end
         }, "HeadshotSoundEnabled")
 
+        -- Создаём список опций для дропдауна из SoundData
+        local soundOptions = {}
+        for _, sound in ipairs(CrosshairSettings.SoundData) do
+            table.insert(soundOptions, sound.Label)
+        end
+
         print("Adding Dropdown: Sound")
         section:Dropdown({
             Name = "Sound",
-            Options = CrosshairSettings.SoundOptions,
+            Options = soundOptions,
             Default = CrosshairSettings.SelectedSound.Default,
-            Values = CrosshairSettings.SoundValues, -- Сохраняем Values для доступа в callback
-            Callback = function(value, selectedIndex)
+            Callback = function(value)
                 CrosshairSettings.SelectedSound.Value = value
-                CrosshairSettings.SoundIds[value] = CrosshairSettings.SoundValues[selectedIndex]
+                -- Находим соответствующий SoundId
+                for _, sound in ipairs(CrosshairSettings.SoundData) do
+                    if sound.Label == value then
+                        CrosshairSettings.SoundIds[value] = sound.SoundId
+                        break
+                    end
+                end
                 print("Selected sound:", value, "SoundId:", CrosshairSettings.SoundIds[value])
             end
         }, "HeadshotSound")
