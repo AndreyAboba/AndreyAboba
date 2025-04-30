@@ -10,9 +10,9 @@ local CrosshairSettings = {
     DotSize = { Value = 20, Default = 20 },
     DotInnerSize = { Value = 4, Default = 4 },
     DotOutlineThickness = { Value = 2, Default = 2 },
-    GradientColors = { -- Добавляем gradientcolors
-        Color3.fromRGB(255, 255, 255), -- Белый (первый цвет)
-        Color3.fromRGB(255, 0, 0)      -- Красный (второй цвет)
+    GradientColors = { -- Для теста используем контрастные цвета
+        Color3.fromRGB(0, 0, 255), -- Синий (первый цвет)
+        Color3.fromRGB(255, 255, 0) -- Жёлтый (второй цвет)
     },
     ExpandDistance = { Value = 0.8, Default = 0.8 },
     ExpandDuration = { Value = 0.3, Default = 0.3 },
@@ -291,33 +291,28 @@ function HSCR.Init(UI, Core, notify)
             innerCorner.Parent = innerDot
 
             -- Анимация градиента
-            task.spawn(function()
-                while dot and dot.Parent do
-                    local tweenInfo = TweenInfo.new(
-                        CrosshairSettings.GradientSpeed.Value,
-                        Enum.EasingStyle.Linear,
-                        Enum.EasingDirection.In
-                    )
-                    local tween = TweenService:Create(gradient, tweenInfo, { Offset = Vector2.new(1, 0) })
-                    tween:Play()
-                    wait(CrosshairSettings.GradientSpeed.Value)
-                    if gradient and gradient.Parent then
-                        gradient.Offset = Vector2.new(-1, 0)
-                    end
-                end
-            end)
+            local tweenInfo = TweenInfo.new(
+                CrosshairSettings.GradientSpeed.Value,
+                Enum.EasingStyle.Linear,
+                Enum.EasingDirection.InOut,
+                -1,
+                true
+            )
+            local tween = TweenService:Create(gradient, tweenInfo, { Offset = Vector2.new(1, 0) })
+            tween:Play()
 
             print("Dot created:", dot ~= nil, "InnerDot created:", innerDot ~= nil)
         elseif CrosshairSettings.Style.Value == "Default" then
             local gap = CrosshairSettings.Gap.Value
             local length = CrosshairSettings.Length.Value
             local thickness = 2
+            local frameSize = CrosshairSettings.Size.Value
 
             local top = Instance.new("Frame")
             top.Name = "Top"
             top.Size = UDim2.new(0, thickness, 0, length)
-            top.Position = UDim2.new(0.5, -thickness / 2, 0.5, -gap - length)
-            top.BackgroundTransparency = 1 -- Убираем BackgroundColor3
+            top.Position = UDim2.new(0.5, -thickness / 2, 0, -gap) -- Позиция относительно верхней границы
+            top.BackgroundTransparency = 1
             top.BorderSizePixel = 0
             top.Parent = crosshairFrame
 
@@ -332,8 +327,8 @@ function HSCR.Init(UI, Core, notify)
             local right = Instance.new("Frame")
             right.Name = "Right"
             right.Size = UDim2.new(0, length, 0, thickness)
-            right.Position = UDim2.new(0.5, gap, 0.5, -thickness / 2)
-            right.BackgroundTransparency = 1 -- Убираем BackgroundColor3
+            right.Position = UDim2.new(1, gap, 0.5, -thickness / 2) -- Позиция относительно правой границы
+            right.BackgroundTransparency = 1
             right.BorderSizePixel = 0
             right.Parent = crosshairFrame
 
@@ -348,8 +343,8 @@ function HSCR.Init(UI, Core, notify)
             local bottom = Instance.new("Frame")
             bottom.Name = "Bottom"
             bottom.Size = UDim2.new(0, thickness, 0, length)
-            bottom.Position = UDim2.new(0.5, -thickness / 2, 0.5, gap)
-            bottom.BackgroundTransparency = 1 -- Убираем BackgroundColor3
+            bottom.Position = UDim2.new(0.5, -thickness / 2, 1, gap) -- Позиция относительно нижней границы
+            bottom.BackgroundTransparency = 1
             bottom.BorderSizePixel = 0
             bottom.Parent = crosshairFrame
 
@@ -364,8 +359,8 @@ function HSCR.Init(UI, Core, notify)
             local left = Instance.new("Frame")
             left.Name = "Left"
             left.Size = UDim2.new(0, length, 0, thickness)
-            left.Position = UDim2.new(0.5, -gap - length, 0.5, -thickness / 2)
-            left.BackgroundTransparency = 1 -- Убираем BackgroundColor3
+            left.Position = UDim2.new(0, -gap - length, 0.5, -thickness / 2) -- Позиция относительно левой границы
+            left.BackgroundTransparency = 1
             left.BorderSizePixel = 0
             left.Parent = crosshairFrame
 
@@ -377,44 +372,41 @@ function HSCR.Init(UI, Core, notify)
             leftGradient.Rotation = 0
             leftGradient.Parent = left
 
-            -- Синхронная анимация градиента для всех элементов
-            task.spawn(function()
-                while crosshairFrame and crosshairFrame.Parent do
-                    local tweenInfo = TweenInfo.new(
-                        CrosshairSettings.GradientSpeed.Value,
-                        Enum.EasingStyle.Linear,
-                        Enum.EasingDirection.In
-                    )
+            -- Анимация градиента с "инь-янь" эффектом
+            local tweenInfo = TweenInfo.new(
+                CrosshairSettings.GradientSpeed.Value,
+                Enum.EasingStyle.Sine,
+                Enum.EasingDirection.InOut,
+                -1,
+                true
+            )
 
-                    if topGradient and topGradient.Parent then
-                        topGradient.Offset = Vector2.new(0, -1)
-                        local topTween = TweenService:Create(topGradient, tweenInfo, { Offset = Vector2.new(0, 1) })
-                        topTween:Play()
-                    end
+            if topGradient and topGradient.Parent then
+                topGradient.Offset = Vector2.new(0, -1)
+                local topTween = TweenService:Create(topGradient, tweenInfo, { Offset = Vector2.new(0, 1) })
+                topTween:Play()
+            end
 
-                    if rightGradient and rightGradient.Parent then
-                        rightGradient.Offset = Vector2.new(-1, 0)
-                        local rightTween = TweenService:Create(rightGradient, tweenInfo, { Offset = Vector2.new(1, 0) })
-                        rightTween:Play()
-                    end
+            if rightGradient and rightGradient.Parent then
+                rightGradient.Offset = Vector2.new(-1, 0)
+                local rightTween = TweenService:Create(rightGradient, tweenInfo, { Offset = Vector2.new(1, 0) })
+                rightTween:Play()
+            end
 
-                    if bottomGradient and bottomGradient.Parent then
-                        bottomGradient.Offset = Vector2.new(0, -1)
-                        local bottomTween = TweenService:Create(bottomGradient, tweenInfo, { Offset = Vector2.new(0, 1) })
-                        bottomTween:Play()
-                    end
+            if bottomGradient and bottomGradient.Parent then
+                bottomGradient.Offset = Vector2.new(0, -1)
+                local bottomTween = TweenService:Create(bottomGradient, tweenInfo, { Offset = Vector2.new(0, 1) })
+                bottomTween:Play()
+            end
 
-                    if leftGradient and leftGradient.Parent then
-                        leftGradient.Offset = Vector2.new(-1, 0)
-                        local leftTween = TweenService:Create(leftGradient, tweenInfo, { Offset = Vector2.new(1, 0) })
-                        leftTween:Play()
-                    end
-
-                    wait(CrosshairSettings.GradientSpeed.Value)
-                end
-            end)
+            if leftGradient and leftGradient.Parent then
+                leftGradient.Offset = Vector2.new(-1, 0)
+                local leftTween = TweenService:Create(leftGradient, tweenInfo, { Offset = Vector2.new(1, 0) })
+                leftTween:Play()
+            end
 
             print("Default style elements created - Top:", top ~= nil, "Right:", right ~= nil, "Bottom:", bottom ~= nil, "Left:", left ~= nil)
+            print("Top Position:", top.Position, "Right Position:", right.Position, "Bottom Position:", bottom.Position, "Left Position:", left.Position)
             print("Gradient Colors - Color1:", CrosshairSettings.GradientColors[1], "Color2:", CrosshairSettings.GradientColors[2])
         end
     end
@@ -493,33 +485,32 @@ function HSCR.Init(UI, Core, notify)
             local gap = CrosshairSettings.Gap.Value
             local length = CrosshairSettings.Length.Value
             local thickness = 2
+            local frameSize = CrosshairSettings.Size.Value
             local newGap = gap * (1 + scale)
-            print("Animating Default style - New gap:", newGap)
 
             -- Анимация расширения
             u4.tween(crosshairFrame, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
-                Size = UDim2.fromOffset(CrosshairSettings.Size.Value * (1 + scale), CrosshairSettings.Size.Value * (1 + scale)),
+                Size = UDim2.fromOffset(frameSize * (1 + scale), frameSize * (1 + scale)),
             })
 
-            -- Пересчитываем позиции с учётом нового размера crosshairFrame
             if crosshairFrame.Top and crosshairFrame.Top.Parent then
                 u4.tween(crosshairFrame.Top, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
-                    Position = UDim2.new(0.5, -thickness / 2, 0, -(CrosshairSettings.Size.Value * (1 + scale) / 2 + newGap + length)),
+                    Position = UDim2.new(0.5, -thickness / 2, 0, -newGap),
                 })
             end
             if crosshairFrame.Right and crosshairFrame.Right.Parent then
                 u4.tween(crosshairFrame.Right, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
-                    Position = UDim2.new(1, CrosshairSettings.Size.Value * (1 + scale) / 2 + newGap, 0.5, -thickness / 2),
+                    Position = UDim2.new(1, newGap, 0.5, -thickness / 2),
                 })
             end
             if crosshairFrame.Bottom and crosshairFrame.Bottom.Parent then
                 u4.tween(crosshairFrame.Bottom, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
-                    Position = UDim2.new(0.5, -thickness / 2, 1, CrosshairSettings.Size.Value * (1 + scale) / 2 + newGap),
+                    Position = UDim2.new(0.5, -thickness / 2, 1, newGap),
                 })
             end
             if crosshairFrame.Left and crosshairFrame.Left.Parent then
                 u4.tween(crosshairFrame.Left, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
-                    Position = UDim2.new(0, -(CrosshairSettings.Size.Value * (1 + scale) / 2 + newGap + length), 0.5, -thickness / 2),
+                    Position = UDim2.new(0, -newGap - length, 0.5, -thickness / 2),
                 })
             end
 
@@ -531,28 +522,27 @@ function HSCR.Init(UI, Core, notify)
                 end
 
                 u4.tween(crosshairFrame, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
-                    Size = UDim2.fromOffset(CrosshairSettings.Size.Value, CrosshairSettings.Size.Value),
+                    Size = UDim2.fromOffset(frameSize, frameSize),
                 })
 
-                -- Пересчитываем позиции с учётом исходного размера crosshairFrame
                 if crosshairFrame.Top and crosshairFrame.Top.Parent then
                     u4.tween(crosshairFrame.Top, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
-                        Position = UDim2.new(0.5, -thickness / 2, 0, -(CrosshairSettings.Size.Value / 2 + gap + length)),
+                        Position = UDim2.new(0.5, -thickness / 2, 0, -gap),
                     })
                 end
                 if crosshairFrame.Right and crosshairFrame.Right.Parent then
                     u4.tween(crosshairFrame.Right, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
-                        Position = UDim2.new(1, CrosshairSettings.Size.Value / 2 + gap, 0.5, -thickness / 2),
+                        Position = UDim2.new(1, gap, 0.5, -thickness / 2),
                     })
                 end
                 if crosshairFrame.Bottom and crosshairFrame.Bottom.Parent then
                     u4.tween(crosshairFrame.Bottom, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
-                        Position = UDim2.new(0.5, -thickness / 2, 1, CrosshairSettings.Size.Value / 2 + gap),
+                        Position = UDim2.new(0.5, -thickness / 2, 1, gap),
                     })
                 end
                 if crosshairFrame.Left and crosshairFrame.Left.Parent then
                     u4.tween(crosshairFrame.Left, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
-                        Position = UDim2.new(0, -(CrosshairSettings.Size.Value / 2 + gap + length), 0.5, -thickness / 2),
+                        Position = UDim2.new(0, -gap - length, 0.5, -thickness / 2),
                     })
                 end
             end)
