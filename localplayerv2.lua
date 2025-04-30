@@ -702,7 +702,7 @@ local function SetupUI(UI)
             end
         }, "FastAttackEnabled")
     end
-    if UI.Sections.LocalPlayerSettings then
+    if UI.Tabs.Config then
         local localconfigSection = UI.Tabs.Config:Section({ Name = "LocalPlayerSettings", Side = "Right" })
         localconfigSection:Header({ Name = "Local Player Settings" })
         localconfigSection:Button({
