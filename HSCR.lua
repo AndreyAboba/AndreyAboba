@@ -70,6 +70,9 @@ function HSCR.Init(UI, Core, notify)
 
     -- Очередь для обработки hitmarker в главном потоке
     local hitQueue = {}
+    local radial = u7.new(crosshairFrame)
+    local lastHitTime
+
     local function processHitQueue()
         if #hitQueue == 0 then return end
         local hit = table.remove(hitQueue, 1)
@@ -77,7 +80,17 @@ function HSCR.Init(UI, Core, notify)
 
         print("Processing hitmarker in main thread - isHeadshot:", isHeadshot, "isKill:", isKill)
 
-        -- Временное упрощение: только воспроизведение звука
+        -- Вызов анимаций
+        if CrosshairSettings.Enabled then
+            print("Attempting to call pulse and pulseRed")
+            pcall(function()
+                pulse(CrosshairSettings.ExpandDistance.Value)
+                pulseRed()
+                radial:SetProgressColor(CrosshairSettings.HitColor.Value)
+            end)
+        end
+
+        -- Воспроизведение звука
         if isKill then
             headshotSound.SoundId = CrosshairSettings.HeadshotSoundEnabled and CrosshairSettings.SoundIds[CrosshairSettings.SelectedSound.Value] or CrosshairSettings.OriginalSounds.headshotSound
             print("Playing headshotSound:", headshotSound.SoundId)
@@ -91,6 +104,14 @@ function HSCR.Init(UI, Core, notify)
             print("Playing hitSound:", hitSound.SoundId)
             hitSound:Play()
         end
+
+        local hitTime = os.clock()
+        lastHitTime = hitTime
+        wait(0.2)
+        if lastHitTime == hitTime then
+            print("Resetting radial color")
+            radial:SetProgressColor(CrosshairSettings.BaseColor.Value)
+        end
     end
 
     -- Привязка к главному потоку через BindToRenderStep
@@ -98,6 +119,7 @@ function HSCR.Init(UI, Core, notify)
 
     -- Функция для обновления дизайна прицела
     local function updateCrosshairDesign()
+        print("Updating crosshair design - Enabled:", CrosshairSettings.Enabled)
         for _, child in pairs(crosshairFrame:GetChildren()) do
             if child.Name ~= "Frame1" and child.Name ~= "Frame2" then
                 child:Destroy()
@@ -253,9 +275,16 @@ function HSCR.Init(UI, Core, notify)
 
     -- Функция для анимации прицела (pulse)
     local function pulse(scale)
-        if not CrosshairSettings.Enabled then return end
+        if not CrosshairSettings.Enabled then
+            print("Pulse skipped: Crosshair not enabled")
+            return
+        end
 
         if CrosshairSettings.Style.Value == "Dot" then
+            if not crosshairFrame:FindFirstChild("Dot") or not crosshairFrame.Dot:FindFirstChild("InnerDot") then
+                print("Pulse failed: Dot or InnerDot not found")
+                return
+            end
             local newDotSize = CrosshairSettings.DotSize.Value * (1 + scale)
             local newInnerDotSize = CrosshairSettings.DotInnerSize.Value * (1 + scale)
             u4.tween(crosshairFrame.Dot, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
@@ -275,6 +304,11 @@ function HSCR.Init(UI, Core, notify)
                 Position = UDim2.new(0.5, -CrosshairSettings.DotInnerSize.Value / 2, 0.5, -CrosshairSettings.DotInnerSize.Value / 2),
             })
         elseif CrosshairSettings.Style.Value == "Default" then
+            if not crosshairFrame:FindFirstChild("Top") or not crosshairFrame:FindFirstChild("Right") or
+               not crosshairFrame:FindFirstChild("Bottom") or not crosshairFrame:FindFirstChild("Left") then
+                print("Pulse failed: Default style elements (Top, Right, Bottom, Left) not found")
+                return
+            end
             local gap = CrosshairSettings.Gap.Value
             local length = CrosshairSettings.Length.Value
             local thickness = 2
@@ -318,9 +352,17 @@ function HSCR.Init(UI, Core, notify)
 
     -- Функция для изменения цвета прицела (pulse_red)
     local function pulseRed()
-        if not CrosshairSettings.Enabled then return end
+        if not CrosshairSettings.Enabled then
+            print("PulseRed skipped: Crosshair not enabled")
+            return
+        end
 
         if CrosshairSettings.Style.Value == "Dot" then
+            if not crosshairFrame:FindFirstChild("Dot") or not crosshairFrame.Dot:FindFirstChild("UIStroke") or
+               not crosshairFrame.Dot:FindFirstChild("InnerDot") then
+                print("PulseRed failed: Dot, UIStroke, or InnerDot not found")
+                return
+            end
             u4.tween(crosshairFrame.Dot.UIStroke, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
                 Color = CrosshairSettings.HitColor.Value
             })
@@ -337,6 +379,10 @@ function HSCR.Init(UI, Core, notify)
             end
         end
 
+        if not bulletsLabel then
+            print("PulseRed failed: bulletsLabel not found")
+            return
+        end
         u4.tween(bulletsLabel, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
             TextColor3 = CrosshairSettings.HitColor.Value
         }).Completed:Wait()
@@ -374,12 +420,11 @@ function HSCR.Init(UI, Core, notify)
         local u27 = {
             pulse = pulse,
             pulse_red = pulseRed,
-           —is_reloading = v3.new(false),
-            --reloading_length = v3.new(0),
+            is_reloading = v3.new(false),
+            reloading_length = v3.new(0),
         }
 
         -- Настройка радиального индикатора
-        local radial = u7.new(crosshairFrame)
         radial:Init()
         radial:SetProgress(100)
         radial:SetProgressColor(CrosshairSettings.BaseColor.Value)
@@ -396,7 +441,6 @@ function HSCR.Init(UI, Core, notify)
             end
         end)
 
-        local lastHitTime
         u27.hitmarker = function(isHeadshot, isKill)
             print("Hitmarker called - isHeadshot:", isHeadshot, "isKill:", isKill)
             table.insert(hitQueue, { isHeadshot = isHeadshot, isKill = isKill })
@@ -411,28 +455,37 @@ function HSCR.Init(UI, Core, notify)
     -- Вызов инициализации
     initiate()
 
-    -- Создание UI
+    -- Создание UI с обёрткой в task.defer
     local section = UI.Tabs.Visuals:Section({ Name = "Custom Crosshair & Hitsound", Side = "Right" })
     section:Header({ Name = "Crosshair Settings" })
+    print("Adding Toggle: Enabled")
     section:Toggle({
         Name = "Enabled",
         Default = CrosshairSettings.Enabled,
         Callback = function(value)
-            CrosshairSettings.Enabled = value
-            updateCrosshairDesign()
-            notify("Custom Crosshair", value and "Enabled" or "Disabled")
+            task.defer(function()
+                CrosshairSettings.Enabled = value
+                updateCrosshairDesign()
+                notify("Custom Crosshair", value and "Enabled" or "Disabled")
+            end)
         end
     }, "CustomCrosshairEnabled")
+
+    print("Adding Dropdown: Style")
     section:Dropdown({
         Name = "Style",
         Options = {"Dot", "Default"},
         Default = CrosshairSettings.Style.Default,
         Callback = function(value)
-            CrosshairSettings.Style.Value = value
-            updateCrosshairDesign()
-            notify("Custom Crosshair", "Style set to: " .. value)
+            task.defer(function()
+                CrosshairSettings.Style.Value = value
+                updateCrosshairDesign()
+                notify("Custom Crosshair", "Style set to: " .. value)
+            end)
         end
     }, "CrosshairStyle")
+
+    print("Adding Slider: Size")
     section:Slider({
         Name = "Size",
         Minimum = 10,
@@ -440,11 +493,15 @@ function HSCR.Init(UI, Core, notify)
         Default = CrosshairSettings.Size.Default,
         Precision = 0,
         Callback = function(value)
-            CrosshairSettings.Size.Value = value
-            updateCrosshairDesign()
-            notify("Custom Crosshair", "Size set to: " .. value)
+            task.defer(function()
+                CrosshairSettings.Size.Value = value
+                updateCrosshairDesign()
+                notify("Custom Crosshair", "Size set to: " .. value)
+            end)
         end
     }, "CrosshairSize")
+
+    print("Adding Slider: Gap (Default Style)")
     section:Slider({
         Name = "Gap (Default Style)",
         Minimum = 2,
@@ -452,11 +509,15 @@ function HSCR.Init(UI, Core, notify)
         Default = CrosshairSettings.Gap.Default,
         Precision = 0,
         Callback = function(value)
-            CrosshairSettings.Gap.Value = value
-            updateCrosshairDesign()
-            notify("Custom Crosshair", "Gap set to: " .. value)
+            task.defer(function()
+                CrosshairSettings.Gap.Value = value
+                updateCrosshairDesign()
+                notify("Custom Crosshair", "Gap set to: " .. value)
+            end)
         end
     }, "CrosshairGap")
+
+    print("Adding Slider: Length (Default Style)")
     section:Slider({
         Name = "Length (Default Style)",
         Minimum = 4,
@@ -464,11 +525,15 @@ function HSCR.Init(UI, Core, notify)
         Default = CrosshairSettings.Length.Default,
         Precision = 0,
         Callback = function(value)
-            CrosshairSettings.Length.Value = value
-            updateCrosshairDesign()
-            notify("Custom Crosshair", "Length set to: " .. value)
+            task.defer(function()
+                CrosshairSettings.Length.Value = value
+                updateCrosshairDesign()
+                notify("Custom Crosshair", "Length set to: " .. value)
+            end)
         end
     }, "CrosshairLength")
+
+    print("Adding Slider: Dot Size (Dot Style)")
     section:Slider({
         Name = "Dot Size (Dot Style)",
         Minimum = 10,
@@ -476,11 +541,15 @@ function HSCR.Init(UI, Core, notify)
         Default = CrosshairSettings.DotSize.Default,
         Precision = 0,
         Callback = function(value)
-            CrosshairSettings.DotSize.Value = value
-            updateCrosshairDesign()
-            notify("Custom Crosshair", "Dot Size set to: " .. value)
+            task.defer(function()
+                CrosshairSettings.DotSize.Value = value
+                updateCrosshairDesign()
+                notify("Custom Crosshair", "Dot Size set to: " .. value)
+            end)
         end
     }, "CrosshairDotSize")
+
+    print("Adding Slider: Dot Inner Size (Dot Style)")
     section:Slider({
         Name = "Dot Inner Size (Dot Style)",
         Minimum = 2,
@@ -488,11 +557,15 @@ function HSCR.Init(UI, Core, notify)
         Default = CrosshairSettings.DotInnerSize.Default,
         Precision = 0,
         Callback = function(value)
-            CrosshairSettings.DotInnerSize.Value = value
-            updateCrosshairDesign()
-            notify("Custom Crosshair", "Dot Inner Size set to: " .. value)
+            task.defer(function()
+                CrosshairSettings.DotInnerSize.Value = value
+                updateCrosshairDesign()
+                notify("Custom Crosshair", "Dot Inner Size set to: " .. value)
+            end)
         end
     }, "CrosshairDotInnerSize")
+
+    print("Adding Slider: Dot Outline Thickness (Dot Style)")
     section:Slider({
         Name = "Dot Outline Thickness (Dot Style)",
         Minimum = 1,
@@ -500,11 +573,15 @@ function HSCR.Init(UI, Core, notify)
         Default = CrosshairSettings.DotOutlineThickness.Default,
         Precision = 0,
         Callback = function(value)
-            CrosshairSettings.DotOutlineThickness.Value = value
-            updateCrosshairDesign()
-            notify("Custom Crosshair", "Dot Outline Thickness set to: " .. value)
+            task.defer(function()
+                CrosshairSettings.DotOutlineThickness.Value = value
+                updateCrosshairDesign()
+                notify("Custom Crosshair", "Dot Outline Thickness set to: " .. value)
+            end)
         end
     }, "CrosshairDotOutlineThickness")
+
+    print("Adding Slider: Gradient Speed")
     section:Slider({
         Name = "Gradient Speed",
         Minimum = 0.5,
@@ -512,39 +589,56 @@ function HSCR.Init(UI, Core, notify)
         Default = CrosshairSettings.GradientSpeed.Default,
         Precision = 1,
         Callback = function(value)
-            CrosshairSettings.GradientSpeed.Value = value
-            updateCrosshairDesign()
-            notify("Custom Crosshair", "Gradient Speed set to: " .. value)
+            task.defer(function()
+                CrosshairSettings.GradientSpeed.Value = value
+                updateCrosshairDesign()
+                notify("Custom Crosshair", "Gradient Speed set to: " .. value)
+            end)
         end
     }, "CrosshairGradientSpeed")
+
+    print("Adding Colorpicker: Base Color")
     section:Colorpicker({
         Name = "Base Color",
         Default = CrosshairSettings.BaseColor.Default,
         Callback = function(value)
-            CrosshairSettings.BaseColor.Value = value
-            updateCrosshairDesign()
-            notify("Custom Crosshair", "Base Color updated")
+            task.defer(function()
+                CrosshairSettings.BaseColor.Value = value
+                updateCrosshairDesign()
+                notify("Custom Crosshair", "Base Color updated")
+            end)
         end
     }, "CrosshairBaseColor")
+
+    print("Adding Colorpicker: Hit Color")
     section:Colorpicker({
         Name = "Hit Color",
         Default = CrosshairSettings.HitColor.Default,
         Callback = function(value)
-            CrosshairSettings.HitColor.Value = value
-            updateCrosshairDesign()
-            notify("Custom Crosshair", "Hit Color updated")
+            task.defer(function()
+                CrosshairSettings.HitColor.Value = value
+                updateCrosshairDesign()
+                notify("Custom Crosshair", "Hit Color updated")
+            end)
         end
     }, "CrosshairHitColor")
 
+    print("Adding Header: Hitsound Settings")
     section:Header({ Name = "Hitsound Settings" })
+
+    print("Adding Toggle: Enable Hitsound")
     section:Toggle({
         Name = "Enable Hitsound",
         Default = CrosshairSettings.HeadshotSoundEnabled,
         Callback = function(value)
-            CrosshairSettings.HeadshotSoundEnabled = value
-            notify("Headshot Sound", value and "Enabled" or "Disabled")
+            task.defer(function()
+                CrosshairSettings.HeadshotSoundEnabled = value
+                notify("Headshot Sound", value and "Enabled" or "Disabled")
+            end)
         end
     }, "HeadshotSoundEnabled")
+
+    print("Adding Dropdown: Sound")
     section:Dropdown({
         Name = "Sound",
         Options = CrosshairSettings.SoundOptions,
@@ -559,9 +653,11 @@ function HSCR.Init(UI, Core, notify)
             "rbxassetid://4868633804", "rbxassetid://102911066745395"
         },
         Callback = function(value, selectedIndex)
-            CrosshairSettings.SelectedSound.Value = value
-            CrosshairSettings.SoundIds[value] = CrosshairSettings.SoundOptions[selectedIndex]
-            notify("Headshot Sound", "Selected: " .. value)
+            task.defer(function()
+                CrosshairSettings.SelectedSound.Value = value
+                CrosshairSettings.SoundIds[value] = CrosshairSettings.SoundOptions[selectedIndex]
+                notify("Headshot Sound", "Selected: " .. value)
+            end)
         end
     }, "HeadshotSound")
 end
