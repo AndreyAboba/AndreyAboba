@@ -12,9 +12,9 @@ local CrosshairSettings = {
     DotOutlineThickness = { Value = 2, Default = 2 },
     BaseColor = { Value = Color3.fromRGB(255, 255, 255), Default = Color3.fromRGB(255, 255, 255) },
     HitColor = { Value = Color3.fromRGB(255, 0, 0), Default = Color3.fromRGB(255, 0, 0) },
-    ExpandDistance = { Value = 0.8, Default = 0.8 }, -- Обновлено с 0.5 до 0.8
-    ExpandDuration = { Value = 0.3, Default = 0.3 }, -- Обновлено с 0.15 до 0.3
-    ShrinkDuration = { Value = 0.2, Default = 0.2 }, -- Обновлено с 0.1 до 0.2
+    ExpandDistance = { Value = 0.8, Default = 0.8 },
+    ExpandDuration = { Value = 0.3, Default = 0.3 },
+    ShrinkDuration = { Value = 0.2, Default = 0.2 },
     GradientSpeed = { Value = 2, Default = 2 },
     HeadshotSoundEnabled = false,
     SelectedSound = { Value = "Default", Default = "Default" },
@@ -54,6 +54,7 @@ function HSCR.Init(UI, Core, notify)
     local TweenService = game:GetService("TweenService")
     local SoundService = game:GetService("SoundService")
     local RunService = game:GetService("RunService")
+    local ContentProvider = game:GetService("ContentProvider")
 
     -- Получение элементов прицела
     local u5 = require(game.ReplicatedStorage.Modules.Core.UI)
@@ -101,6 +102,18 @@ function HSCR.Init(UI, Core, notify)
     hitSound.Volume = 1
     hitSound.Parent = SoundService
 
+    -- Предзагрузка звуков
+    local soundsToPreload = {
+        headshotSound.SoundId,
+        headshotNormalSound.SoundId,
+        hitSound.SoundId
+    }
+    for _, soundData in ipairs(CrosshairSettings.SoundData) do
+        table.insert(soundsToPreload, soundData.SoundId)
+    end
+    ContentProvider:PreloadAsync(soundsToPreload)
+    print("All sounds preloaded")
+
     -- Хранилище для функций анимации
     local AnimationFunctions = {
         pulse = nil,
@@ -116,9 +129,8 @@ function HSCR.Init(UI, Core, notify)
     local function processHitQueue()
         if #hitQueue == 0 then return end
         local hit = table.remove(hitQueue, 1)
-        local isHeadshot, isKill = hit.isHeadshot, hit.isKill
 
-        print("Processing hitmarker in main thread - isHeadshot:", isHeadshot, "isKill:", isKill)
+        print("Processing hitmarker in main thread")
 
         -- Проверка на существование crosshairFrame
         if not crosshairFrame or not crosshairFrame.Parent then
@@ -167,22 +179,6 @@ function HSCR.Init(UI, Core, notify)
             end
         end
 
-        -- Воспроизведение звука
-        if isKill then
-            local selectedSoundId = CrosshairSettings.SoundIds[CrosshairSettings.SelectedSound.Value] or CrosshairSettings.OriginalSounds.headshotSound
-            headshotSound.SoundId = CrosshairSettings.HeadshotSoundEnabled and selectedSoundId or CrosshairSettings.OriginalSounds.headshotSound
-            print("Playing headshotSound (Kill):", headshotSound.SoundId)
-            headshotSound:Play()
-        elseif isHeadshot then
-            headshotNormalSound.SoundId = CrosshairSettings.OriginalSounds.headshotNormalSound
-            print("Playing headshotNormalSound:", headshotNormalSound.SoundId)
-            headshotNormalSound:Play()
-        else
-            hitSound.SoundId = CrosshairSettings.OriginalSounds.hitSound
-            print("Playing hitSound:", hitSound.SoundId)
-            hitSound:Play()
-        end
-
         local hitTime = os.clock()
         lastHitTime = hitTime
         wait(0.2)
@@ -196,8 +192,8 @@ function HSCR.Init(UI, Core, notify)
         end
     end
 
-    -- Привязка к главному потоку через BindToRenderStep
-    RunService:BindToRenderStep("ProcessHitQueue", Enum.RenderPriority.Last.Value, processHitQueue)
+    -- Привязка к главному потоку через BindToRenderStep с более высоким приоритетом
+    RunService:BindToRenderStep("ProcessHitQueue", Enum.RenderPriority.Input.Value, processHitQueue)
 
     -- Функция для обновления дизайна прицела
     local function updateCrosshairDesign()
@@ -364,7 +360,7 @@ function HSCR.Init(UI, Core, notify)
         end
     end
 
-    -- Функция для анимации прицела (pulse) — обновлена для соответствия hitAnimation
+    -- Функция для анимации прицела (pulse)
     local function pulse(scale)
         if not CrosshairSettings.Enabled then
             print("Pulse skipped: Crosshair not enabled")
@@ -401,7 +397,7 @@ function HSCR.Init(UI, Core, notify)
                 u4.tween(crosshairFrame.Dot.InnerDot, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
                     Size = UDim2.fromOffset(newInnerDotSize, newInnerDotSize),
                     Position = UDim2.new(0.5, -newInnerDotSize / 2, 0.5, -newInnerDotSize / 2),
-                }).Completed:Wait()
+                }) -- Убрали .Completed:Wait()
             else
                 print("InnerDot is nil or destroyed during animation")
             end
@@ -431,7 +427,7 @@ function HSCR.Init(UI, Core, notify)
 
             u4.tween(crosshairFrame, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
                 Size = UDim2.fromOffset(CrosshairSettings.Size.Value * (1 + scale), CrosshairSettings.Size.Value * (1 + scale)),
-            }).Completed:Wait()
+            }) -- Убрали .Completed:Wait()
 
             if crosshairFrame.Top and crosshairFrame.Top.Parent then
                 u4.tween(crosshairFrame.Top, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
@@ -456,7 +452,7 @@ function HSCR.Init(UI, Core, notify)
 
             u4.tween(crosshairFrame, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
                 Size = UDim2.fromOffset(CrosshairSettings.Size.Value, CrosshairSettings.Size.Value),
-            }).Completed:Wait()
+            }) -- Убрали .Completed:Wait()
 
             if crosshairFrame.Top and crosshairFrame.Top.Parent then
                 u4.tween(crosshairFrame.Top, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
@@ -533,7 +529,7 @@ function HSCR.Init(UI, Core, notify)
         print("Animating bulletsLabel color change")
         u4.tween(bulletsLabel, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
             TextColor3 = CrosshairSettings.HitColor.Value
-        }).Completed:Wait()
+        }) -- Убрали .Completed:Wait()
 
         if CrosshairSettings.Style.Value == "Dot" then
             if crosshairFrame.Dot and crosshairFrame.Dot.UIStroke and crosshairFrame.Dot.UIStroke.Parent then
@@ -608,6 +604,24 @@ function HSCR.Init(UI, Core, notify)
 
         u27.hitmarker = function(isHeadshot, isKill)
             print("Hitmarker called - isHeadshot:", isHeadshot, "isKill:", isKill)
+
+            -- Воспроизведение звука сразу
+            if isKill then
+                local selectedSoundId = CrosshairSettings.SoundIds[CrosshairSettings.SelectedSound.Value] or CrosshairSettings.OriginalSounds.headshotSound
+                headshotSound.SoundId = CrosshairSettings.HeadshotSoundEnabled and selectedSoundId or CrosshairSettings.OriginalSounds.headshotSound
+                print("Playing headshotSound (Kill):", headshotSound.SoundId)
+                headshotSound:Play()
+            elseif isHeadshot then
+                headshotNormalSound.SoundId = CrosshairSettings.OriginalSounds.headshotNormalSound
+                print("Playing headshotNormalSound:", headshotNormalSound.SoundId)
+                headshotNormalSound:Play()
+            else
+                hitSound.SoundId = CrosshairSettings.OriginalSounds.hitSound
+                print("Playing hitSound:", hitSound.SoundId)
+                hitSound:Play()
+            end
+
+            -- Добавляем в очередь для анимаций
             table.insert(hitQueue, { isHeadshot = isHeadshot, isKill = isKill })
         end
 
