@@ -37,6 +37,7 @@ local CrosshairSettings = {
 function HSCR.Init(UI, Core, notify)
     local TweenService = game:GetService("TweenService")
     local SoundService = game:GetService("SoundService")
+    local RunService = game:GetService("RunService")
 
     -- Получение элементов прицела
     local u5 = require(game.ReplicatedStorage.Modules.Core.UI)
@@ -67,9 +68,36 @@ function HSCR.Init(UI, Core, notify)
     hitSound.Volume = 1
     hitSound.Parent = SoundService
 
+    -- Очередь для обработки hitmarker в главном потоке
+    local hitQueue = {}
+    local function processHitQueue()
+        if #hitQueue == 0 then return end
+        local hit = table.remove(hitQueue, 1)
+        local isHeadshot, isKill = hit.isHeadshot, hit.isKill
+
+        print("Processing hitmarker in main thread - isHeadshot:", isHeadshot, "isKill:", isKill)
+
+        -- Временное упрощение: только воспроизведение звука
+        if isKill then
+            headshotSound.SoundId = CrosshairSettings.HeadshotSoundEnabled and CrosshairSettings.SoundIds[CrosshairSettings.SelectedSound.Value] or CrosshairSettings.OriginalSounds.headshotSound
+            print("Playing headshotSound:", headshotSound.SoundId)
+            headshotSound:Play()
+        elseif isHeadshot then
+            headshotNormalSound.SoundId = CrosshairSettings.OriginalSounds.headshotNormalSound
+            print("Playing headshotNormalSound:", headshotNormalSound.SoundId)
+            headshotNormalSound:Play()
+        else
+            hitSound.SoundId = CrosshairSettings.OriginalSounds.hitSound
+            print("Playing hitSound:", hitSound.SoundId)
+            hitSound:Play()
+        end
+    end
+
+    -- Привязка к главному потоку через BindToRenderStep
+    RunService:BindToRenderStep("ProcessHitQueue", Enum.RenderPriority.Last.Value, processHitQueue)
+
     -- Функция для обновления дизайна прицела
     local function updateCrosshairDesign()
-        -- Очистка старого дизайна
         for _, child in pairs(crosshairFrame:GetChildren()) do
             if child.Name ~= "Frame1" and child.Name ~= "Frame2" then
                 child:Destroy()
@@ -86,7 +114,6 @@ function HSCR.Init(UI, Core, notify)
         crosshairFrame.Size = UDim2.fromOffset(CrosshairSettings.Size.Value, CrosshairSettings.Size.Value)
         crosshairFrame.BackgroundTransparency = 1
 
-        -- Скрытие оригинальных элементов
         frame1.Visible = false
         frame2.Visible = false
 
@@ -128,7 +155,6 @@ function HSCR.Init(UI, Core, notify)
             innerCorner.CornerRadius = UDim.new(1, 0)
             innerCorner.Parent = innerDot
 
-            -- Анимация градиента с помощью TweenService
             local tweenInfo = TweenInfo.new(
                 CrosshairSettings.GradientSpeed.Value,
                 Enum.EasingStyle.Sine,
@@ -207,7 +233,6 @@ function HSCR.Init(UI, Core, notify)
             leftGradient.Rotation = 0
             leftGradient.Parent = left
 
-            -- Анимация градиента с помощью TweenService
             local tweenInfo = TweenInfo.new(
                 CrosshairSettings.GradientSpeed.Value,
                 Enum.EasingStyle.Sine,
@@ -349,15 +374,17 @@ function HSCR.Init(UI, Core, notify)
         local u27 = {
             pulse = pulse,
             pulse_red = pulseRed,
-            is_reloading = v3.new(false),
-            reloading_length = v3.new(0),
+           —is_reloading = v3.new(false),
+            --reloading_length = v3.new(0),
         }
 
+        -- Настройка радиального индикатора
         local radial = u7.new(crosshairFrame)
         radial:Init()
         radial:SetProgress(100)
         radial:SetProgressColor(CrosshairSettings.BaseColor.Value)
 
+        -- Хук для перезарядки
         u27.is_reloading.hook(function(isReloading)
             if not CrosshairSettings.Enabled then return end
             if isReloading then
@@ -372,42 +399,12 @@ function HSCR.Init(UI, Core, notify)
         local lastHitTime
         u27.hitmarker = function(isHeadshot, isKill)
             print("Hitmarker called - isHeadshot:", isHeadshot, "isKill:", isKill)
-            coroutine.wrap(function()
-                print("Inside coroutine for hitmarker")
-                pulse(CrosshairSettings.ExpandDistance.Value)
-                pulseRed()
-                radial:SetProgressColor(CrosshairSettings.HitColor.Value)
-
-                if isKill then
-                    headshotSound.SoundId = CrosshairSettings.HeadshotSoundEnabled and CrosshairSettings.SoundIds[CrosshairSettings.SelectedSound.Value] or CrosshairSettings.OriginalSounds.headshotSound
-                    print("Playing headshotSound:", headshotSound.SoundId)
-                    headshotSound:Play()
-                elseif isHeadshot then
-                    headshotNormalSound.SoundId = CrosshairSettings.OriginalSounds.headshotNormalSound
-                    print("Playing headshotNormalSound:", headshotNormalSound.SoundId)
-                    headshotNormalSound:Play()
-                else
-                    hitSound.SoundId = CrosshairSettings.OriginalSounds.hitSound
-                    print("Playing hitSound:", hitSound.SoundId)
-                    hitSound:Play()
-                end
-
-                local hitTime = os.clock()
-                lastHitTime = hitTime
-                wait(0.2)
-                if lastHitTime == hitTime then
-                    print("Resetting radial color")
-                    radial:SetProgressColor(CrosshairSettings.BaseColor.Value)
-                end
-            end)()
+            table.insert(hitQueue, { isHeadshot = isHeadshot, isKill = isKill })
         end
 
         u6.hook("hit_confirmed", function(isHeadshot, isKill)
-            print("hit_confirmed event fired")
-            coroutine.wrap(function()
-                print("Calling hitmarker in coroutine")
-                u27.hitmarker(isHeadshot, isKill)
-            end)()
+            print("hit_confirmed event fired - isHeadshot:", isHeadshot, "isKill:", isKill)
+            u27.hitmarker(isHeadshot, isKill)
         end)
     end
 
