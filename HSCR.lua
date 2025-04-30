@@ -275,6 +275,9 @@ function HSCR.Init(UI, Core, notify)
         if frame1 then frame1.Visible = false end
         if frame2 then frame2.Visible = false end
 
+        -- Логируем текущие цвета градиента
+        print("Gradient Colors in updateCrosshairDesign - Color1:", CrosshairSettings.GradientColors[1], "Color2:", CrosshairSettings.GradientColors[2])
+
         if CrosshairSettings.Style.Value == "Dot" then
             local dot = Instance.new("Frame")
             dot.Name = "Dot"
@@ -341,6 +344,7 @@ function HSCR.Init(UI, Core, notify)
                 ColorSequenceKeypoint.new(0.5, CrosshairSettings.GradientColors[2]),
                 ColorSequenceKeypoint.new(1, CrosshairSettings.GradientColors[1]),
             })
+            topGradient.Rotation = 90 -- Вертикальное переливание (сверху вниз)
             topGradient.Parent = top
 
             local right = Instance.new("Frame")
@@ -358,6 +362,7 @@ function HSCR.Init(UI, Core, notify)
                 ColorSequenceKeypoint.new(0.5, CrosshairSettings.GradientColors[2]),
                 ColorSequenceKeypoint.new(1, CrosshairSettings.GradientColors[1]),
             })
+            rightGradient.Rotation = 0 -- Горизонтальное переливание (слева направо)
             rightGradient.Parent = right
 
             local bottom = Instance.new("Frame")
@@ -375,6 +380,7 @@ function HSCR.Init(UI, Core, notify)
                 ColorSequenceKeypoint.new(0.5, CrosshairSettings.GradientColors[2]),
                 ColorSequenceKeypoint.new(1, CrosshairSettings.GradientColors[1]),
             })
+            bottomGradient.Rotation = 90 -- Вертикальное переливание (снизу вверх)
             bottomGradient.Parent = bottom
 
             local left = Instance.new("Frame")
@@ -392,21 +398,23 @@ function HSCR.Init(UI, Core, notify)
                 ColorSequenceKeypoint.new(0.5, CrosshairSettings.GradientColors[2]),
                 ColorSequenceKeypoint.new(1, CrosshairSettings.GradientColors[1]),
             })
+            leftGradient.Rotation = 0 -- Горизонтальное переливание (справа налево)
             leftGradient.Parent = left
 
-            -- Анимация градиента с использованием Heartbeat
+            -- Анимация градиента с разными направлениями
             gradientConnection = RunService.Heartbeat:Connect(function()
+                local offsetValue = math.sin(tick() * CrosshairSettings.GradientSpeed.Value) * 0.5
                 if topGradient and topGradient.Parent then
-                    topGradient.Offset = Vector2.new(math.sin(tick() * CrosshairSettings.GradientSpeed.Value) * 0.5, 0)
+                    topGradient.Offset = Vector2.new(0, offsetValue) -- Сверху вниз
                 end
                 if rightGradient and rightGradient.Parent then
-                    rightGradient.Offset = Vector2.new(math.sin(tick() * CrosshairSettings.GradientSpeed.Value) * 0.5, 0)
+                    rightGradient.Offset = Vector2.new(offsetValue, 0) -- Слева направо
                 end
                 if bottomGradient and bottomGradient.Parent then
-                    bottomGradient.Offset = Vector2.new(math.sin(tick() * CrosshairSettings.GradientSpeed.Value) * 0.5, 0)
+                    bottomGradient.Offset = Vector2.new(0, -offsetValue) -- Снизу вверх
                 end
                 if leftGradient and leftGradient.Parent then
-                    leftGradient.Offset = Vector2.new(math.sin(tick() * CrosshairSettings.GradientSpeed.Value) * 0.5, 0)
+                    leftGradient.Offset = Vector2.new(-offsetValue, 0) -- Справа налево
                 end
             end)
 
@@ -893,8 +901,9 @@ function HSCR.Init(UI, Core, notify)
             Name = "Gradient Color 1",
             Default = CrosshairSettings.GradientColors[1],
             Callback = function(value)
+                print("Gradient Color 1 updated to:", value)
                 CrosshairSettings.GradientColors[1] = value
-                AnimationFunctions.updateCrosshairDesign()
+                AnimationFunctions.updateCrosshairDesign() -- Пересоздаём прицел для применения нового цвета
             end
         }, "GradientColor1")
 
@@ -903,8 +912,9 @@ function HSCR.Init(UI, Core, notify)
             Name = "Gradient Color 2",
             Default = CrosshairSettings.GradientColors[2],
             Callback = function(value)
+                print("Gradient Color 2 updated to:", value)
                 CrosshairSettings.GradientColors[2] = value
-                AnimationFunctions.updateCrosshairDesign()
+                AnimationFunctions.updateCrosshairDesign() -- Пересоздаём прицел для применения нового цвета
             end
         }, "GradientColor2")
 
