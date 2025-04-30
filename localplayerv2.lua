@@ -53,7 +53,9 @@ LocalPlayer.Config = {
     },
     NoStamina = {
         Enabled = false,
-        ToggleKey = nil
+        ToggleKey = nil,
+        StaminaAttribute = "Stamina", -- Название атрибута стамины (может быть "Energy", "Stam", и т.д.)
+        MaxStaminaValue = 100 -- Предполагаемый максимум стамины
     }
 }
 
@@ -113,9 +115,10 @@ local NoStaminaStatus = {
     Enabled = LocalPlayer.Config.NoStamina.Enabled,
     Connection = nil,
     Key = LocalPlayer.Config.NoStamina.ToggleKey,
-    Path = nil,
-    LastComputeTime = 0,
-    ComputeInterval = 0.1 -- Интервал пересчёта пути
+    StaminaAttribute = LocalPlayer.Config.NoStamina.StaminaAttribute,
+    MaxStamina = LocalPlayer.Config.NoStamina.MaxStaminaValue,
+    LastCheckTime = 0,
+    CheckInterval = 0.05 -- Интервал проверки стамины
 }
 
 -- Вспомогательные функции
@@ -140,57 +143,39 @@ NoStamina.Start = function()
         NoStaminaStatus.Connection = nil
     end
 
-    -- Проверяем наличие PathfindingService
-    if not Services.PathfindingService then
-        notify("NoStamina", "PathfindingService is not available.", true)
-        return
-    end
-
-    local pathfindingService = Services.PathfindingService
-    local success, path = pcall(function()
-        return pathfindingService:CreatePath()
-    end)
-
-    if not success or not path then
-        notify("NoStamina", "Failed to create path: " .. (path or "Unknown error"), true)
-        return
-    end
-
-    NoStaminaStatus.Path = path
-
-    NoStaminaStatus.Connection = Services.RunService.Heartbeat:Connect(function(deltaTime)
+    NoStaminaStatus.Connection = Services.RunService.Heartbeat:Connect(function()
         if not NoStaminaStatus.Enabled then return end
         local humanoid, rootPart = getCharacterData()
         if not humanoid or not rootPart then return end
 
-        -- Проверяем интервал пересчёта пути
+        -- Проверяем интервал
         local currentTime = tick()
-        if currentTime - NoStaminaStatus.LastComputeTime < NoStaminaStatus.ComputeInterval then return end
-        NoStaminaStatus.LastComputeTime = currentTime
+        if currentTime - NoStaminaStatus.LastCheckTime < NoStaminaStatus.CheckInterval then return end
+        NoStaminaStatus.LastCheckTime = currentTime
 
-        -- Определяем недостижимую точку (например, точку на высоте 1000 единиц над игроком)
-        local startPos = rootPart.Position
-        local unreachablePos = startPos + Vector3.new(0, 1000, 0) -- Точка высоко в воздухе
-
-        -- Пытаемся вычислить путь к недостижимой точке
-        local success, errorMessage = pcall(function()
-            NoStaminaStatus.Path:ComputeAsync(startPos, unreachablePos)
-        end)
-
-        if success then
-            -- Проверяем статус пути
-            local status = NoStaminaStatus.Path.Status
-            if status == Enum.PathStatus.NoPath then
-                notify("NoStamina", "Pathfinding: No path found (expected, stamina bypass active)", false)
+        -- Проверяем наличие атрибута стамины
+        local stamina = humanoid:GetAttribute(NoStaminaStatus.StaminaAttribute)
+        if stamina ~= nil then
+            -- Если атрибут найден, устанавливаем его на максимум
+            local success, err = pcall(function()
+                humanoid:SetAttribute(NoStaminaStatus.StaminaAttribute, NoStaminaStatus.MaxStamina)
+            end)
+            if success then
+                notify("NoStamina", "Stamina set to max (" .. NoStaminaStatus.MaxStamina .. ")", false)
             else
-                notify("NoStamina", "Pathfinding: Path status: " .. tostring(status), false)
+                notify("NoStamina", "Failed to set stamina: " .. tostring(err), true)
             end
         else
-            notify("NoStamina", "Pathfinding failed: " .. (errorMessage or "Unknown error"), true)
+            -- Если атрибут не найден, пробуем альтернативный метод (например, отключение состояния бега)
+            -- Это может не работать, если игра строго проверяет бег на сервере
+            if humanoid.WalkSpeed > 16 then -- Предполагаем, что бег увеличивает скорость
+                humanoid.WalkSpeed = 16 -- Сбрасываем скорость до шага
+                notify("NoStamina", "Attempting to disable running state", false)
+            end
         end
     end)
 
-    notify("NoStamina", "Started (Stamina bypass active)", true)
+    notify("NoStamina", "Started (Direct stamina manipulation active)", true)
 end
 
 NoStamina.Stop = function()
@@ -198,9 +183,20 @@ NoStamina.Stop = function()
         NoStaminaStatus.Connection:Disconnect()
         NoStaminaStatus.Connection = nil
     end
-    NoStaminaStatus.Path = nil
-    NoStaminaStatus.LastComputeTime = 0
+    NoStaminaStatus.LastCheckTime = 0
     notify("NoStamina", "Stopped", true)
+end
+
+NoStamina.SetStaminaAttribute = function(attributeName)
+    NoStaminaStatus.StaminaAttribute = attributeName
+    LocalPlayer.Config.NoStamina.StaminaAttribute = attributeName
+    notify("NoStamina", "Stamina attribute set to: " .. attributeName, false)
+end
+
+NoStamina.SetMaxStamina = function(maxValue)
+    NoStaminaStatus.MaxStamina = maxValue
+    LocalPlayer.Config.NoStamina.MaxStaminaValue = maxValue
+    notify("NoStamina", "Max stamina set to: " .. maxValue, false)
 end
 
 -- TickSpeed Functions
@@ -1028,6 +1024,24 @@ local function SetupUI(UI)
                 end
             end
         }, "NoStaminaKey")
+        uiElements.NoStaminaAttribute = UI.Sections.NoStamina:Textbox({
+            Name = "Stamina Attribute",
+            Default = LocalPlayer.Config.NoStamina.StaminaAttribute,
+            Placeholder = "Enter stamina attribute name",
+            Callback = function(value)
+                NoStamina.SetStaminaAttribute(value)
+            end
+        }, "NoStaminaAttribute")
+        uiElements.NoStaminaMax = UI.Sections.NoStamina:Slider({
+            Name = "Max Stamina",
+            Minimum = 50,
+            Maximum = 200,
+            Default = LocalPlayer.Config.NoStamina.MaxStaminaValue,
+            Precision = 1,
+            Callback = function(value)
+                NoStamina.SetMaxStamina(value)
+            end
+        }, "NoStaminaMax")
     end
 
     -- LocalPlayer Sync UI
@@ -1085,6 +1099,8 @@ local function SetupUI(UI)
 
             LocalPlayer.Config.NoStamina.Enabled = uiElements.NoStaminaEnabled:GetState()
             LocalPlayer.Config.NoStamina.ToggleKey = uiElements.NoStaminaKey:GetBind()
+            LocalPlayer.Config.NoStamina.StaminaAttribute = uiElements.NoStaminaAttribute:GetValue()
+            LocalPlayer.Config.NoStamina.MaxStaminaValue = uiElements.NoStaminaMax:GetValue()
 
             -- Синхронизируем внутренние состояния с обновлённым LocalPlayer.Config
             TimerStatus.Enabled = LocalPlayer.Config.Timer.Enabled
@@ -1156,6 +1172,8 @@ local function SetupUI(UI)
 
             NoStaminaStatus.Enabled = LocalPlayer.Config.NoStamina.Enabled
             NoStaminaStatus.Key = LocalPlayer.Config.NoStamina.ToggleKey
+            NoStaminaStatus.StaminaAttribute = LocalPlayer.Config.NoStamina.StaminaAttribute
+            NoStaminaStatus.MaxStamina = LocalPlayer.Config.NoStamina.MaxStaminaValue
             if NoStaminaStatus.Enabled then
                 if not NoStaminaStatus.Connection then NoStamina.Start() end
             else
