@@ -276,7 +276,7 @@ function HSCR.Init(UI, Core, notify)
             right.Size = UDim2.new(0, length, 0, thickness)
             right.Position = UDim2.new(0.5, gap, 0.5, -thickness / 2)
             right.BackgroundColor3 = CrosshairSettings.BaseColor.Value
-            right.BorderSizePixel = 0
+            top.BorderSizePixel = 0
             right.Parent = crosshairFrame
 
             local rightGradient = Instance.new("UIGradient")
@@ -739,7 +739,7 @@ function HSCR.Init(UI, Core, notify)
         }, "CrosshairShrinkDuration")
 
         print("Adding Colorpicker: Base Color")
-        section:Color picker({
+        section:Colorpicker({
             Name = "Base Color",
             Default = CrosshairSettings.BaseColor.Default,
             Callback = function(value)
@@ -777,16 +777,16 @@ function HSCR.Init(UI, Core, notify)
         end
 
         print("Adding Dropdown: Sound")
-        local soundDropdown = section:Dropdown({
+        section:Dropdown({
             Name = "Sound",
             Options = soundOptions,
             Default = CrosshairSettings.SelectedSound.Default,
             Callback = function(value)
-                -- Получаем текущие опции с помощью :GetOptions()
-                local options = soundDropdown:GetOptions()
+                -- Получаем текущие опции через GetOptions
+                local options = section:GetOptions()
                 print("Dropdown options:", options)
 
-                -- Находим выбранный звук (где значение true)
+                -- Ищем выбранную опцию (где значение true)
                 local selectedSound = nil
                 for option, isSelected in pairs(options) do
                     if isSelected then
@@ -806,7 +806,7 @@ function HSCR.Init(UI, Core, notify)
                     end
                     print("Selected sound:", selectedSound, "SoundId:", CrosshairSettings.SoundIds[selectedSound])
                 else
-                    warn("No sound selected in dropdown")
+                    warn("No sound selected in dropdown!")
                 end
             end
         }, "HeadshotSound")
