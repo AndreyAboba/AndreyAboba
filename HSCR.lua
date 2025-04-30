@@ -1,20 +1,21 @@
-print('1')
 local HSCR = {}
 
--- Общие настройки для CustomCrosshair и HeadshotSound
-HSCR.Settings = {
+-- Настройки для кастомного прицела и хитсаунда
+local CrosshairSettings = {
     Enabled = false,
-    Style = { Value = "Default", Default = "Default" }, -- Dot, Default
+    Style = { Value = "Dot", Default = "Dot" }, -- Dot, Default
     Size = { Value = 18, Default = 18 },
     Gap = { Value = 5, Default = 5 },
     Length = { Value = 8, Default = 8 },
-    DotSize = { Value = 8, Default = 8 },
+    DotSize = { Value = 20, Default = 20 },
     DotInnerSize = { Value = 4, Default = 4 },
     DotOutlineThickness = { Value = 2, Default = 2 },
-    GradientSpeed = { Value = 2, Default = 2 },
+    BaseColor = { Value = Color3.fromRGB(255, 255, 255), Default = Color3.fromRGB(255, 255, 255) },
+    HitColor = { Value = Color3.fromRGB(255, 0, 0), Default = Color3.fromRGB(255, 0, 0) },
     ExpandDistance = { Value = 0.5, Default = 0.5 },
     ExpandDuration = { Value = 0.15, Default = 0.15 },
     ShrinkDuration = { Value = 0.1, Default = 0.1 },
+    GradientSpeed = { Value = 2, Default = 2 },
     HeadshotSoundEnabled = false,
     SelectedSound = { Value = "Default", Default = "Default" },
     SoundOptions = {
@@ -24,20 +25,26 @@ HSCR.Settings = {
         "csgoHS", "PopHS", "BubblePop", "NiggaHS", "IdkHS"
     },
     SoundIds = {},
-    OriginalSounds = {},
-    OriginalElements = {},
-    LastGradientUpdate = 0,
-    GradientTime = 0,
+    OriginalSounds = {
+        headshotSound = "rbxassetid://115982072912004",
+        headshotNormalSound = "rbxassetid://135358980250767",
+        hitSound = "rbxassetid://100758444127105"
+    },
+    OriginalElements = {}
 }
 
 -- Инициализация модуля
 function HSCR.Init(UI, Core, notify)
-    local Services = Core.Services
-    local RunService = Services.RunService
+    local TweenService = game:GetService("TweenService")
     local SoundService = game:GetService("SoundService")
 
     -- Получение элементов прицела
     local u5 = require(game.ReplicatedStorage.Modules.Core.UI)
+    local u4 = require(game.ReplicatedStorage.Modules.Core.Util)
+    local u6 = require(game.ReplicatedStorage.Modules.Core.Net)
+    local u7 = require(game.ReplicatedStorage.Modules.Game.UI.RadialModule)
+    local v3 = require(game.ReplicatedStorage.Modules.Core.State)
+
     local crosshairScreenGui = u5.get("CrosshairScreenGui")
     local crosshairFrame = u5.get("CrosshairFrame")
     local bulletsLabel = u5.get("Bullets")
@@ -46,65 +53,62 @@ function HSCR.Init(UI, Core, notify)
 
     -- Создание объектов звука
     local headshotSound = Instance.new("Sound")
-    headshotSound.SoundId = ""
+    headshotSound.SoundId = CrosshairSettings.OriginalSounds.headshotSound
     headshotSound.Volume = 2.5
     headshotSound.Parent = SoundService
 
     local headshotNormalSound = Instance.new("Sound")
-    headshotNormalSound.SoundId = ""
+    headshotNormalSound.SoundId = CrosshairSettings.OriginalSounds.headshotNormalSound
     headshotNormalSound.Volume = 1
     headshotNormalSound.Parent = SoundService
 
     local hitSound = Instance.new("Sound")
-    hitSound.SoundId = ""
+    hitSound.SoundId = CrosshairSettings.OriginalSounds.hitSound
     hitSound.Volume = 1
     hitSound.Parent = SoundService
 
     -- Функция для обновления дизайна прицела
     local function updateCrosshairDesign()
-        if not HSCR.Settings.Enabled then
-            for _, child in pairs(crosshairFrame:GetChildren()) do
-                if child.Name ~= "Frame1" and child.Name ~= "Frame2" then
-                    child:Destroy()
-                end
-            end
-            frame1.Visible = HSCR.Settings.OriginalElements.Frame1Visible or true
-            frame2.Visible = HSCR.Settings.OriginalElements.Frame2Visible or true
-            crosshairFrame.Size = HSCR.Settings.OriginalElements.Size or UDim2.fromOffset(18, 18)
-            return
-        end
-
+        -- Очистка старого дизайна
         for _, child in pairs(crosshairFrame:GetChildren()) do
             if child.Name ~= "Frame1" and child.Name ~= "Frame2" then
                 child:Destroy()
             end
         end
 
-        crosshairFrame.Size = UDim2.fromOffset(HSCR.Settings.Size.Value, HSCR.Settings.Size.Value)
+        if not CrosshairSettings.Enabled then
+            frame1.Visible = CrosshairSettings.OriginalElements.Frame1Visible or true
+            frame2.Visible = CrosshairSettings.OriginalElements.Frame2Visible or true
+            crosshairFrame.Size = CrosshairSettings.OriginalElements.Size or UDim2.fromOffset(18, 18)
+            return
+        end
+
+        crosshairFrame.Size = UDim2.fromOffset(CrosshairSettings.Size.Value, CrosshairSettings.Size.Value)
         crosshairFrame.BackgroundTransparency = 1
 
+        -- Скрытие оригинальных элементов
         frame1.Visible = false
         frame2.Visible = false
 
-        if HSCR.Settings.Style.Value == "Dot" then
+        if CrosshairSettings.Style.Value == "Dot" then
             local dot = Instance.new("Frame")
             dot.Name = "Dot"
-            dot.Size = UDim2.new(0, HSCR.Settings.DotSize.Value, 0, HSCR.Settings.DotSize.Value)
-            dot.Position = UDim2.new(0.5, -HSCR.Settings.DotSize.Value / 2, 0.5, -HSCR.Settings.DotSize.Value / 2)
+            dot.Size = UDim2.new(0, CrosshairSettings.DotSize.Value, 0, CrosshairSettings.DotSize.Value)
+            dot.Position = UDim2.new(0.5, -CrosshairSettings.DotSize.Value / 2, 0.5, -CrosshairSettings.DotSize.Value / 2)
             dot.BackgroundTransparency = 1
             dot.BorderSizePixel = 0
             dot.Parent = crosshairFrame
 
             local stroke = Instance.new("UIStroke")
-            stroke.Thickness = HSCR.Settings.DotOutlineThickness.Value
-            stroke.Color = Core.GlobalConfigs.GradientColors["Gradient Color 1"]
+            stroke.Thickness = CrosshairSettings.DotOutlineThickness.Value
+            stroke.Color = CrosshairSettings.BaseColor.Value
             stroke.Parent = dot
 
             local gradient = Instance.new("UIGradient")
             gradient.Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0, Core.GlobalConfigs.GradientColors["Gradient Color 1"]),
-                ColorSequenceKeypoint.new(0.5, Core.GlobalConfigs.GradientColors["Gradient Color 2"]),
-                ColorSequenceKeypoint.new(1, Core.GlobalConfigs.GradientColors["Gradient Color 1"]),
+                ColorSequenceKeypoint.new(0, CrosshairSettings.BaseColor.Value),
+                ColorSequenceKeypoint.new(0.5, CrosshairSettings.HitColor.Value),
+                ColorSequenceKeypoint.new(1, CrosshairSettings.BaseColor.Value),
             })
             gradient.Parent = stroke
 
@@ -114,9 +118,9 @@ function HSCR.Init(UI, Core, notify)
 
             local innerDot = Instance.new("Frame")
             innerDot.Name = "InnerDot"
-            innerDot.Size = UDim2.new(0, HSCR.Settings.DotInnerSize.Value, 0, HSCR.Settings.DotInnerSize.Value)
-            innerDot.Position = UDim2.new(0.5, -HSCR.Settings.DotInnerSize.Value / 2, 0.5, -HSCR.Settings.DotInnerSize.Value / 2)
-            innerDot.BackgroundColor3 = Core.GlobalConfigs.GradientColors["Gradient Color 2"]
+            innerDot.Size = UDim2.new(0, CrosshairSettings.DotInnerSize.Value, 0, CrosshairSettings.DotInnerSize.Value)
+            innerDot.Position = UDim2.new(0.5, -CrosshairSettings.DotInnerSize.Value / 2, 0.5, -CrosshairSettings.DotInnerSize.Value / 2)
+            innerDot.BackgroundColor3 = CrosshairSettings.HitColor.Value
             innerDot.BorderSizePixel = 0
             innerDot.Parent = dot
 
@@ -124,31 +128,33 @@ function HSCR.Init(UI, Core, notify)
             innerCorner.CornerRadius = UDim.new(1, 0)
             innerCorner.Parent = innerDot
 
-            RunService.Heartbeat:Connect(function(deltaTime)
-                if not HSCR.Settings.Enabled then return end
-                HSCR.Settings.LastGradientUpdate = HSCR.Settings.LastGradientUpdate + deltaTime
-                if HSCR.Settings.LastGradientUpdate < 0.1 then return end
-                HSCR.Settings.GradientTime = HSCR.Settings.GradientTime + HSCR.Settings.LastGradientUpdate
-                HSCR.Settings.LastGradientUpdate = 0
-                gradient.Offset = Vector2.new(math.sin(HSCR.Settings.GradientTime * HSCR.Settings.GradientSpeed.Value) * 0.5, 0)
-            end)
-        elseif HSCR.Settings.Style.Value == "Default" then
-            local gap = HSCR.Settings.Gap.Value
-            local length = HSCR.Settings.Length.Value
+            -- Анимация градиента с помощью TweenService
+            local tweenInfo = TweenInfo.new(
+                CrosshairSettings.GradientSpeed.Value,
+                Enum.EasingStyle.Sine,
+                Enum.EasingDirection.InOut,
+                -1,
+                true
+            )
+            local tween = TweenService:Create(gradient, tweenInfo, { Offset = Vector2.new(0.5, 0) })
+            tween:Play()
+        elseif CrosshairSettings.Style.Value == "Default" then
+            local gap = CrosshairSettings.Gap.Value
+            local length = CrosshairSettings.Length.Value
             local thickness = 2
 
             local top = Instance.new("Frame")
             top.Name = "Top"
             top.Size = UDim2.new(0, thickness, 0, length)
             top.Position = UDim2.new(0.5, -thickness / 2, 0.5, -gap - length)
-            top.BackgroundColor3 = Core.GlobalConfigs.GradientColors["Gradient Color 1"]
+            top.BackgroundColor3 = CrosshairSettings.BaseColor.Value
             top.BorderSizePixel = 0
             top.Parent = crosshairFrame
 
             local topGradient = Instance.new("UIGradient")
             topGradient.Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0, Core.GlobalConfigs.GradientColors["Gradient Color 1"]),
-                ColorSequenceKeypoint.new(1, Core.GlobalConfigs.GradientColors["Gradient Color 2"]),
+                ColorSequenceKeypoint.new(0, CrosshairSettings.BaseColor.Value),
+                ColorSequenceKeypoint.new(1, CrosshairSettings.HitColor.Value),
             })
             topGradient.Rotation = 90
             topGradient.Parent = top
@@ -157,14 +163,14 @@ function HSCR.Init(UI, Core, notify)
             right.Name = "Right"
             right.Size = UDim2.new(0, length, 0, thickness)
             right.Position = UDim2.new(0.5, gap, 0.5, -thickness / 2)
-            right.BackgroundColor3 = Core.GlobalConfigs.GradientColors["Gradient Color 1"]
+            right.BackgroundColor3 = CrosshairSettings.BaseColor.Value
             right.BorderSizePixel = 0
             right.Parent = crosshairFrame
 
             local rightGradient = Instance.new("UIGradient")
             rightGradient.Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0, Core.GlobalConfigs.GradientColors["Gradient Color 2"]),
-                ColorSequenceKeypoint.new(1, Core.GlobalConfigs.GradientColors["Gradient Color 1"]),
+                ColorSequenceKeypoint.new(0, CrosshairSettings.HitColor.Value),
+                ColorSequenceKeypoint.new(1, CrosshairSettings.BaseColor.Value),
             })
             rightGradient.Rotation = 0
             rightGradient.Parent = right
@@ -173,14 +179,14 @@ function HSCR.Init(UI, Core, notify)
             bottom.Name = "Bottom"
             bottom.Size = UDim2.new(0, thickness, 0, length)
             bottom.Position = UDim2.new(0.5, -thickness / 2, 0.5, gap)
-            bottom.BackgroundColor3 = Core.GlobalConfigs.GradientColors["Gradient Color 1"]
+            bottom.BackgroundColor3 = CrosshairSettings.BaseColor.Value
             bottom.BorderSizePixel = 0
             bottom.Parent = crosshairFrame
 
             local bottomGradient = Instance.new("UIGradient")
             bottomGradient.Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0, Core.GlobalConfigs.GradientColors["Gradient Color 2"]),
-                ColorSequenceKeypoint.new(1, Core.GlobalConfigs.GradientColors["Gradient Color 1"]),
+                ColorSequenceKeypoint.new(0, CrosshairSettings.HitColor.Value),
+                ColorSequenceKeypoint.new(1, CrosshairSettings.BaseColor.Value),
             })
             bottomGradient.Rotation = 90
             bottomGradient.Parent = bottom
@@ -189,41 +195,44 @@ function HSCR.Init(UI, Core, notify)
             left.Name = "Left"
             left.Size = UDim2.new(0, length, 0, thickness)
             left.Position = UDim2.new(0.5, -gap - length, 0.5, -thickness / 2)
-            left.BackgroundColor3 = Core.GlobalConfigs.GradientColors["Gradient Color 1"]
+            left.BackgroundColor3 = CrosshairSettings.BaseColor.Value
             left.BorderSizePixel = 0
             left.Parent = crosshairFrame
 
             local leftGradient = Instance.new("UIGradient")
             leftGradient.Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0, Core.GlobalConfigs.GradientColors["Gradient Color 1"]),
-                ColorSequenceKeypoint.new(1, Core.GlobalConfigs.GradientColors["Gradient Color 2"]),
+                ColorSequenceKeypoint.new(0, CrosshairSettings.BaseColor.Value),
+                ColorSequenceKeypoint.new(1, CrosshairSettings.HitColor.Value),
             })
             leftGradient.Rotation = 0
             leftGradient.Parent = left
 
-            RunService.Heartbeat:Connect(function(deltaTime)
-                if not HSCR.Settings.Enabled then return end
-                HSCR.Settings.LastGradientUpdate = HSCR.Settings.LastGradientUpdate + deltaTime
-                if HSCR.Settings.LastGradientUpdate < 0.1 then return end
-                HSCR.Settings.GradientTime = HSCR.Settings.GradientTime + HSCR.Settings.LastGradientUpdate
-                HSCR.Settings.LastGradientUpdate = 0
-                local gradientOffset = math.sin(HSCR.Settings.GradientTime * HSCR.Settings.GradientSpeed.Value) * 0.5
-                topGradient.Offset = Vector2.new(0, gradientOffset)
-                bottomGradient.Offset = Vector2.new(0, -gradientOffset)
-                rightGradient.Offset = Vector2.new(-gradientOffset, 0)
-                leftGradient.Offset = Vector2.new(gradientOffset, 0)
-            end)
+            -- Анимация градиента с помощью TweenService
+            local tweenInfo = TweenInfo.new(
+                CrosshairSettings.GradientSpeed.Value,
+                Enum.EasingStyle.Sine,
+                Enum.EasingDirection.InOut,
+                -1,
+                true
+            )
+            local topTween = TweenService:Create(topGradient, tweenInfo, { Offset = Vector2.new(0, 0.5) })
+            local bottomTween = TweenService:Create(bottomGradient, tweenInfo, { Offset = Vector2.new(0, -0.5) })
+            local rightTween = TweenService:Create(rightGradient, tweenInfo, { Offset = Vector2.new(-0.5, 0) })
+            local leftTween = TweenService:Create(leftGradient, tweenInfo, { Offset = Vector2.new(0.5, 0) })
+            topTween:Play()
+            bottomTween:Play()
+            rightTween:Play()
+            leftTween:Play()
         end
     end
 
     -- Функция для анимации прицела (pulse)
     local function pulse(scale)
-        if not HSCR.Settings.Enabled then return end
+        if not CrosshairSettings.Enabled then return end
 
-        local u4 = require(game.ReplicatedStorage.Modules.Core.Util)
-        if HSCR.Settings.Style.Value == "Dot" then
-            local newDotSize = HSCR.Settings.DotSize.Value * (1 + scale)
-            local newInnerDotSize = HSCR.Settings.DotInnerSize.Value * (1 + scale)
+        if CrosshairSettings.Style.Value == "Dot" then
+            local newDotSize = CrosshairSettings.DotSize.Value * (1 + scale)
+            local newInnerDotSize = CrosshairSettings.DotInnerSize.Value * (1 + scale)
             u4.tween(crosshairFrame.Dot, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
                 Size = UDim2.fromOffset(newDotSize, newDotSize),
                 Position = UDim2.new(0.5, -newDotSize / 2, 0.5, -newDotSize / 2),
@@ -233,23 +242,23 @@ function HSCR.Init(UI, Core, notify)
                 Position = UDim2.new(0.5, -newInnerDotSize / 2, 0.5, -newInnerDotSize / 2),
             }).Completed:Wait()
             u4.tween(crosshairFrame.Dot, TweenInfo.new(0.05, Enum.EasingStyle.Quad), {
-                Size = UDim2.fromOffset(HSCR.Settings.DotSize.Value, HSCR.Settings.DotSize.Value),
-                Position = UDim2.new(0.5, -HSCR.Settings.DotSize.Value / 2, 0.5, -HSCR.Settings.DotSize.Value / 2),
+                Size = UDim2.fromOffset(CrosshairSettings.DotSize.Value, CrosshairSettings.DotSize.Value),
+                Position = UDim2.new(0.5, -CrosshairSettings.DotSize.Value / 2, 0.5, -CrosshairSettings.DotSize.Value / 2),
             })
             u4.tween(crosshairFrame.Dot.InnerDot, TweenInfo.new(0.05, Enum.EasingStyle.Quad), {
-                Size = UDim2.fromOffset(HSCR.Settings.DotInnerSize.Value, HSCR.Settings.DotInnerSize.Value),
-                Position = UDim2.new(0.5, -HSCR.Settings.DotInnerSize.Value / 2, 0.5, -HSCR.Settings.DotInnerSize.Value / 2),
+                Size = UDim2.fromOffset(CrosshairSettings.DotInnerSize.Value, CrosshairSettings.DotInnerSize.Value),
+                Position = UDim2.new(0.5, -CrosshairSettings.DotInnerSize.Value / 2, 0.5, -CrosshairSettings.DotInnerSize.Value / 2),
             })
-        elseif HSCR.Settings.Style.Value == "Default" then
-            local gap = HSCR.Settings.Gap.Value
-            local length = HSCR.Settings.Length.Value
+        elseif CrosshairSettings.Style.Value == "Default" then
+            local gap = CrosshairSettings.Gap.Value
+            local length = CrosshairSettings.Length.Value
             local thickness = 2
             local newGap = gap * (1 + scale)
-            
+
             u4.tween(crosshairFrame, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
-                Size = UDim2.fromOffset(HSCR.Settings.Size.Value * (1 + scale), HSCR.Settings.Size.Value * (1 + scale)),
+                Size = UDim2.fromOffset(CrosshairSettings.Size.Value * (1 + scale), CrosshairSettings.Size.Value * (1 + scale)),
             }).Completed:Wait()
-            
+
             u4.tween(crosshairFrame.Top, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
                 Position = UDim2.new(0.5, -thickness / 2, 0.5, -newGap - length),
             })
@@ -264,9 +273,9 @@ function HSCR.Init(UI, Core, notify)
             })
 
             u4.tween(crosshairFrame, TweenInfo.new(0.05, Enum.EasingStyle.Quad), {
-                Size = UDim2.fromOffset(HSCR.Settings.Size.Value, HSCR.Settings.Size.Value),
+                Size = UDim2.fromOffset(CrosshairSettings.Size.Value, CrosshairSettings.Size.Value),
             }).Completed:Wait()
-            
+
             u4.tween(crosshairFrame.Top, TweenInfo.new(0.05, Enum.EasingStyle.Quad), {
                 Position = UDim2.new(0.5, -thickness / 2, 0.5, -gap - length),
             })
@@ -284,79 +293,73 @@ function HSCR.Init(UI, Core, notify)
 
     -- Функция для изменения цвета прицела (pulse_red)
     local function pulseRed()
-        if not HSCR.Settings.Enabled then return end
+        if not CrosshairSettings.Enabled then return end
 
-        local u4 = require(game.ReplicatedStorage.Modules.Core.Util)
-        if HSCR.Settings.Style.Value == "Dot" then
+        if CrosshairSettings.Style.Value == "Dot" then
             u4.tween(crosshairFrame.Dot.UIStroke, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
-                Color = Core.GlobalConfigs.GradientColors["Gradient Color 2"]
+                Color = CrosshairSettings.HitColor.Value
             })
             u4.tween(crosshairFrame.Dot.InnerDot, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
-                BackgroundColor3 = Core.GlobalConfigs.GradientColors["Gradient Color 1"]
+                BackgroundColor3 = CrosshairSettings.BaseColor.Value
             })
-        elseif HSCR.Settings.Style.Value == "Default" then
+        elseif CrosshairSettings.Style.Value == "Default" then
             for _, child in pairs(crosshairFrame:GetChildren()) do
                 if child:IsA("Frame") and child.Name ~= "Frame1" and child.Name ~= "Frame2" then
                     u4.tween(child, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
-                        BackgroundColor3 = Core.GlobalConfigs.GradientColors["Gradient Color 2"]
+                        BackgroundColor3 = CrosshairSettings.HitColor.Value
                     })
                 end
             end
         end
 
         u4.tween(bulletsLabel, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
-            TextColor3 = Core.GlobalConfigs.GradientColors["Gradient Color 2"]
+            TextColor3 = CrosshairSettings.HitColor.Value
         }).Completed:Wait()
 
-        if HSCR.Settings.Style.Value == "Dot" then
+        if CrosshairSettings.Style.Value == "Dot" then
             u4.tween(crosshairFrame.Dot.UIStroke, TweenInfo.new(0.05, Enum.EasingStyle.Quad), {
-                Color = Core.GlobalConfigs.GradientColors["Gradient Color 1"]
+                Color = CrosshairSettings.BaseColor.Value
             })
             u4.tween(crosshairFrame.Dot.InnerDot, TweenInfo.new(0.05, Enum.EasingStyle.Quad), {
-                BackgroundColor3 = Core.GlobalConfigs.GradientColors["Gradient Color 2"]
+                BackgroundColor3 = CrosshairSettings.HitColor.Value
             })
-        elseif HSCR.Settings.Style.Value == "Default" then
+        elseif CrosshairSettings.Style.Value == "Default" then
             for _, child in pairs(crosshairFrame:GetChildren()) do
                 if child:IsA("Frame") and child.Name ~= "Frame1" and child.Name ~= "Frame2" then
                     u4.tween(child, TweenInfo.new(0.05, Enum.EasingStyle.Quad), {
-                        BackgroundColor3 = Core.GlobalConfigs.GradientColors["Gradient Color 1"]
+                        BackgroundColor3 = CrosshairSettings.BaseColor.Value
                     })
                 end
             end
         end
 
         u4.tween(bulletsLabel, TweenInfo.new(0.05, Enum.EasingStyle.Quad), {
-            TextColor3 = Core.GlobalConfigs.GradientColors["Gradient Color 1"]
+            TextColor3 = CrosshairSettings.BaseColor.Value
         })
     end
 
-    -- Инициализация HSCR
-    local function initiateHSCR()
-        HSCR.Settings.OriginalElements.Size = crosshairFrame.Size
-        HSCR.Settings.OriginalElements.Frame1Visible = frame1.Visible
-        HSCR.Settings.OriginalElements.Frame2Visible = frame2.Visible
-
-        HSCR.Settings.OriginalSounds.headshotSound = "rbxassetid://115982072912004"
-        HSCR.Settings.OriginalSounds.headshotNormalSound = "rbxassetid://135358980250767"
-        HSCR.Settings.OriginalSounds.hitSound = "rbxassetid://100758444127105"
+    -- Инициализация прицела и хитсаунда
+    local function initiate()
+        CrosshairSettings.OriginalElements.Size = crosshairFrame.Size
+        CrosshairSettings.OriginalElements.Frame1Visible = frame1.Visible
+        CrosshairSettings.OriginalElements.Frame2Visible = frame2.Visible
 
         updateCrosshairDesign()
 
         local u27 = {
             pulse = pulse,
             pulse_red = pulseRed,
-            is_reloading = require(game.ReplicatedStorage.Modules.Core.State).new(false),
-            reloading_length = require(game.ReplicatedStorage.Modules.Core.State).new(0),
+            is_reloading = v3.new(false),
+            reloading_length = v3.new(0),
         }
 
-        local u7 = require(game.ReplicatedStorage.Modules.Game.UI.RadialModule)
         local radial = u7.new(crosshairFrame)
         radial:Init()
         radial:SetProgress(100)
-        radial:SetProgressColor(Core.GlobalConfigs.GradientColors["Gradient Color 1"])
+        radial:SetProgressColor(CrosshairSettings.BaseColor.Value)
 
         u27.is_reloading.hook(function(isReloading)
-            if not HSCR.Settings.Enabled then return end
+            if not CrosshairSettings.Enabled then return end
             if isReloading then
                 local length = u27.reloading_length.get()
                 radial:SetProgress(0)
@@ -368,64 +371,67 @@ function HSCR.Init(UI, Core, notify)
 
         local lastHitTime
         u27.hitmarker = function(isHeadshot, isKill)
-            task.defer(function()
-                local u7 = require(game.ReplicatedStorage.Modules.Game.UI.RadialModule)
-                local radial = u7.new(crosshairFrame)
-                radial:SetProgressColor(Core.GlobalConfigs.GradientColors["Gradient Color 2"])
+            print("Hitmarker called - isHeadshot:", isHeadshot, "isKill:", isKill)
+            coroutine.wrap(function()
+                print("Inside coroutine for hitmarker")
+                pulse(CrosshairSettings.ExpandDistance.Value)
+                pulseRed()
+                radial:SetProgressColor(CrosshairSettings.HitColor.Value)
 
                 if isKill then
-                    headshotSound.SoundId = HSCR.Settings.HeadshotSoundEnabled and HSCR.Settings.SoundIds[HSCR.Settings.SelectedSound.Value] or HSCR.Settings.OriginalSounds.headshotSound
+                    headshotSound.SoundId = CrosshairSettings.HeadshotSoundEnabled and CrosshairSettings.SoundIds[CrosshairSettings.SelectedSound.Value] or CrosshairSettings.OriginalSounds.headshotSound
+                    print("Playing headshotSound:", headshotSound.SoundId)
                     headshotSound:Play()
                 elseif isHeadshot then
-                    headshotNormalSound.SoundId = HSCR.Settings.HeadshotSoundEnabled and HSCR.Settings.SoundIds[HSCR.Settings.SelectedSound.Value] or HSCR.Settings.OriginalSounds.headshotNormalSound
+                    headshotNormalSound.SoundId = CrosshairSettings.OriginalSounds.headshotNormalSound
+                    print("Playing headshotNormalSound:", headshotNormalSound.SoundId)
                     headshotNormalSound:Play()
                 else
-                    hitSound.SoundId = HSCR.Settings.OriginalSounds.hitSound
+                    hitSound.SoundId = CrosshairSettings.OriginalSounds.hitSound
+                    print("Playing hitSound:", hitSound.SoundId)
                     hitSound:Play()
                 end
 
                 local hitTime = os.clock()
                 lastHitTime = hitTime
-                task.spawn(function()
-                    wait(0.2)
-                    if lastHitTime == hitTime then
-                        radial:SetProgressColor(Core.GlobalConfigs.GradientColors["Gradient Color 1"])
-                    end
-                end)
-            end)
+                wait(0.2)
+                if lastHitTime == hitTime then
+                    print("Resetting radial color")
+                    radial:SetProgressColor(CrosshairSettings.BaseColor.Value)
+                end
+            end)()
         end
 
-        local u6 = require(game.ReplicatedStorage.Modules.Core.Net)
         u6.hook("hit_confirmed", function(isHeadshot, isKill)
-            task.defer(function()
+            print("hit_confirmed event fired")
+            coroutine.wrap(function()
+                print("Calling hitmarker in coroutine")
                 u27.hitmarker(isHeadshot, isKill)
-            end)
+            end)()
         end)
-
-        return u27
     end
 
-    -- Инициализация
-    local u27 = initiateHSCR()
+    -- Вызов инициализации
+    initiate()
 
     -- Создание UI
-    local section = UI.Tabs.Visuals:Section({ Name = "Headshot & Crosshair", Side = "Right" })
-    section:Header({ Name = "Custom Crosshair Settings" })
+    local section = UI.Tabs.Visuals:Section({ Name = "Custom Crosshair & Hitsound", Side = "Right" })
+    section:Header({ Name = "Crosshair Settings" })
     section:Toggle({
         Name = "Enabled",
-        Default = HSCR.Settings.Enabled,
+        Default = CrosshairSettings.Enabled,
         Callback = function(value)
-            HSCR.Settings.Enabled = value
+            CrosshairSettings.Enabled = value
             updateCrosshairDesign()
             notify("Custom Crosshair", value and "Enabled" or "Disabled")
         end
-    }, "HSCREnabled")
+    }, "CustomCrosshairEnabled")
     section:Dropdown({
         Name = "Style",
         Options = {"Dot", "Default"},
-        Default = HSCR.Settings.Style.Default,
+        Default = CrosshairSettings.Style.Default,
         Callback = function(value)
-            HSCR.Settings.Style.Value = value
+            CrosshairSettings.Style.Value = value
             updateCrosshairDesign()
             notify("Custom Crosshair", "Style set to: " .. value)
         end
@@ -434,10 +440,10 @@ function HSCR.Init(UI, Core, notify)
         Name = "Size",
         Minimum = 10,
         Maximum = 30,
-        Default = HSCR.Settings.Size.Default,
+        Default = CrosshairSettings.Size.Default,
         Precision = 0,
         Callback = function(value)
-            HSCR.Settings.Size.Value = value
+            CrosshairSettings.Size.Value = value
             updateCrosshairDesign()
             notify("Custom Crosshair", "Size set to: " .. value)
         end
@@ -446,10 +452,10 @@ function HSCR.Init(UI, Core, notify)
         Name = "Gap (Default Style)",
         Minimum = 2,
         Maximum = 10,
-        Default = HSCR.Settings.Gap.Default,
+        Default = CrosshairSettings.Gap.Default,
         Precision = 0,
         Callback = function(value)
-            HSCR.Settings.Gap.Value = value
+            CrosshairSettings.Gap.Value = value
             updateCrosshairDesign()
             notify("Custom Crosshair", "Gap set to: " .. value)
         end
@@ -458,39 +464,94 @@ function HSCR.Init(UI, Core, notify)
         Name = "Length (Default Style)",
         Minimum = 4,
         Maximum = 12,
-        Default = HSCR.Settings.Length.Default,
+        Default = CrosshairSettings.Length.Default,
         Precision = 0,
         Callback = function(value)
-            HSCR.Settings.Length.Value = value
+            CrosshairSettings.Length.Value = value
             updateCrosshairDesign()
             notify("Custom Crosshair", "Length set to: " .. value)
         end
     }, "CrosshairLength")
     section:Slider({
+        Name = "Dot Size (Dot Style)",
+        Minimum = 10,
+        Maximum = 30,
+        Default = CrosshairSettings.DotSize.Default,
+        Precision = 0,
+        Callback = function(value)
+            CrosshairSettings.DotSize.Value = value
+            updateCrosshairDesign()
+            notify("Custom Crosshair", "Dot Size set to: " .. value)
+        end
+    }, "CrosshairDotSize")
+    section:Slider({
+        Name = "Dot Inner Size (Dot Style)",
+        Minimum = 2,
+        Maximum = 10,
+        Default = CrosshairSettings.DotInnerSize.Default,
+        Precision = 0,
+        Callback = function(value)
+            CrosshairSettings.DotInnerSize.Value = value
+            updateCrosshairDesign()
+            notify("Custom Crosshair", "Dot Inner Size set to: " .. value)
+        end
+    }, "CrosshairDotInnerSize")
+    section:Slider({
+        Name = "Dot Outline Thickness (Dot Style)",
+        Minimum = 1,
+        Maximum = 5,
+        Default = CrosshairSettings.DotOutlineThickness.Default,
+        Precision = 0,
+        Callback = function(value)
+            CrosshairSettings.DotOutlineThickness.Value = value
+            updateCrosshairDesign()
+            notify("Custom Crosshair", "Dot Outline Thickness set to: " .. value)
+        end
+    }, "CrosshairDotOutlineThickness")
+    section:Slider({
         Name = "Gradient Speed",
         Minimum = 0.5,
         Maximum = 5,
-        Default = HSCR.Settings.GradientSpeed.Default,
+        Default = CrosshairSettings.GradientSpeed.Default,
         Precision = 1,
         Callback = function(value)
-            HSCR.Settings.GradientSpeed.Value = value
+            CrosshairSettings.GradientSpeed.Value = value
+            updateCrosshairDesign()
             notify("Custom Crosshair", "Gradient Speed set to: " .. value)
         end
     }, "CrosshairGradientSpeed")
+    section:Colorpicker({
+        Name = "Base Color",
+        Default = CrosshairSettings.BaseColor.Default,
+        Callback = function(value)
+            CrosshairSettings.BaseColor.Value = value
+            updateCrosshairDesign()
+            notify("Custom Crosshair", "Base Color updated")
+        end
+    }, "CrosshairBaseColor")
+    section:Colorpicker({
+        Name = "Hit Color",
+        Default = CrosshairSettings.HitColor.Default,
+        Callback = function(value)
+            CrosshairSettings.HitColor.Value = value
+            updateCrosshairDesign()
+            notify("Custom Crosshair", "Hit Color updated")
+        end
+    }, "CrosshairHitColor")
 
-    section:Header({ Name = "Headshot Hitsound Settings" })
+    section:Header({ Name = "Hitsound Settings" })
     section:Toggle({
         Name = "Enable Hitsound",
-        Default = HSCR.Settings.HeadshotSoundEnabled,
+        Default = CrosshairSettings.HeadshotSoundEnabled,
         Callback = function(value)
-            HSCR.Settings.HeadshotSoundEnabled = value
+            CrosshairSettings.HeadshotSoundEnabled = value
             notify("Headshot Sound", value and "Enabled" or "Disabled")
         end
     }, "HeadshotSoundEnabled")
     section:Dropdown({
         Name = "Sound",
-        Options = HSCR.Settings.SoundOptions,
-        Default = HSCR.Settings.SelectedSound.Default,
+        Options = CrosshairSettings.SoundOptions,
+        Default = CrosshairSettings.SelectedSound.Default,
         Values = {
             "rbxassetid://10476301420", "rbxassetid://132390332380260", "rbxassetid://9086370184",
             "rbxassetid://121311089745141", "rbxassetid://104467173440576", "rbxassetid://7246809481",
@@ -501,8 +562,8 @@ function HSCR.Init(UI, Core, notify)
             "rbxassetid://4868633804", "rbxassetid://102911066745395"
         },
         Callback = function(value, selectedIndex)
-            HSCR.Settings.SelectedSound.Value = value
-            HSCR.Settings.SoundIds[value] = HSCR.Settings.SoundOptions[selectedIndex]
+            CrosshairSettings.SelectedSound.Value = value
+            CrosshairSettings.SoundIds[value] = CrosshairSettings.SoundOptions[selectedIndex]
             notify("Headshot Sound", "Selected: " .. value)
         end
     }, "HeadshotSound")
