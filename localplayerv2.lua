@@ -1,4 +1,4 @@
--- Модуль LocalPlayer: Timer, Disabler, Speed, TickSpeed, HighJump, NoRagdoll, FastAttack, NoStamina
+-- Модуль LocalPlayer: Timer, Disabler, Speed, TickSpeed, HighJump, NoRagdoll, FastAttack
 local LocalPlayer = {}
 
 -- Кэшированные сервисы и данные
@@ -50,12 +50,6 @@ LocalPlayer.Config = {
     },
     FastAttack = {
         Enabled = false
-    },
-    NoStamina = {
-        Enabled = false,
-        ToggleKey = nil,
-        StaminaAttribute = "Stamina", -- Название атрибута стамины (может быть "Energy", "Stam", и т.д.)
-        MaxStaminaValue = 100 -- Предполагаемый максимум стамины
     }
 }
 
@@ -111,15 +105,6 @@ local FastAttackStatus = {
     LastCheckTime = 0,
     CheckInterval = 0.1
 }
-local NoStaminaStatus = {
-    Enabled = LocalPlayer.Config.NoStamina.Enabled,
-    Connection = nil,
-    Key = LocalPlayer.Config.NoStamina.ToggleKey,
-    StaminaAttribute = LocalPlayer.Config.NoStamina.StaminaAttribute,
-    MaxStamina = LocalPlayer.Config.NoStamina.MaxStaminaValue,
-    LastCheckTime = 0,
-    CheckInterval = 0.05 -- Интервал проверки стамины
-}
 
 -- Вспомогательные функции
 local function getCharacterData()
@@ -133,70 +118,6 @@ end
 -- Проверка, активно ли UI (например, чат)
 local function isUserInputFocused()
     return Services.UserInputService:GetFocusedTextBox() ~= nil
-end
-
--- NoStamina Functions
-local NoStamina = {}
-NoStamina.Start = function()
-    if NoStaminaStatus.Connection then
-        NoStaminaStatus.Connection:Disconnect()
-        NoStaminaStatus.Connection = nil
-    end
-
-    NoStaminaStatus.Connection = Services.RunService.Heartbeat:Connect(function()
-        if not NoStaminaStatus.Enabled then return end
-        local humanoid, rootPart = getCharacterData()
-        if not humanoid or not rootPart then return end
-
-        -- Проверяем интервал
-        local currentTime = tick()
-        if currentTime - NoStaminaStatus.LastCheckTime < NoStaminaStatus.CheckInterval then return end
-        NoStaminaStatus.LastCheckTime = currentTime
-
-        -- Проверяем наличие атрибута стамины
-        local stamina = humanoid:GetAttribute(NoStaminaStatus.StaminaAttribute)
-        if stamina ~= nil then
-            -- Если атрибут найден, устанавливаем его на максимум
-            local success, err = pcall(function()
-                humanoid:SetAttribute(NoStaminaStatus.StaminaAttribute, NoStaminaStatus.MaxStamina)
-            end)
-            if success then
-                notify("NoStamina", "Stamina set to max (" .. NoStaminaStatus.MaxStamina .. ")", false)
-            else
-                notify("NoStamina", "Failed to set stamina: " .. tostring(err), true)
-            end
-        else
-            -- Если атрибут не найден, пробуем альтернативный метод (например, отключение состояния бега)
-            -- Это может не работать, если игра строго проверяет бег на сервере
-            if humanoid.WalkSpeed > 16 then -- Предполагаем, что бег увеличивает скорость
-                humanoid.WalkSpeed = 16 -- Сбрасываем скорость до шага
-                notify("NoStamina", "Attempting to disable running state", false)
-            end
-        end
-    end)
-
-    notify("NoStamina", "Started (Direct stamina manipulation active)", true)
-end
-
-NoStamina.Stop = function()
-    if NoStaminaStatus.Connection then
-        NoStaminaStatus.Connection:Disconnect()
-        NoStaminaStatus.Connection = nil
-    end
-    NoStaminaStatus.LastCheckTime = 0
-    notify("NoStamina", "Stopped", true)
-end
-
-NoStamina.SetStaminaAttribute = function(attributeName)
-    NoStaminaStatus.StaminaAttribute = attributeName
-    LocalPlayer.Config.NoStamina.StaminaAttribute = attributeName
-    notify("NoStamina", "Stamina attribute set to: " .. attributeName, false)
-end
-
-NoStamina.SetMaxStamina = function(maxValue)
-    NoStaminaStatus.MaxStamina = maxValue
-    LocalPlayer.Config.NoStamina.MaxStaminaValue = maxValue
-    notify("NoStamina", "Max stamina set to: " .. maxValue, false)
 end
 
 -- TickSpeed Functions
@@ -996,54 +917,6 @@ local function SetupUI(UI)
         }, "FastAttackEnabled")
     end
 
-    -- NoStamina UI
-    if UI.Sections.NoStamina then
-        UI.Sections.NoStamina:Header({ Name = "NoStamina" })
-        uiElements.NoStaminaEnabled = UI.Sections.NoStamina:Toggle({
-            Name = "Enabled",
-            Default = LocalPlayer.Config.NoStamina.Enabled,
-            Callback = function(value)
-                NoStaminaStatus.Enabled = value
-                LocalPlayer.Config.NoStamina.Enabled = value
-                if value then NoStamina.Start() else NoStamina.Stop() end
-            end
-        }, "NoStaminaEnabled")
-        uiElements.NoStaminaKey = UI.Sections.NoStamina:Keybind({
-            Name = "Toggle Key",
-            Default = LocalPlayer.Config.NoStamina.ToggleKey,
-            Callback = function(value)
-                NoStaminaStatus.Key = value
-                LocalPlayer.Config.NoStamina.ToggleKey = value
-                if isUserInputFocused() then return end
-                NoStaminaStatus.Enabled = not NoStaminaStatus.Enabled
-                LocalPlayer.Config.NoStamina.Enabled = NoStaminaStatus.Enabled
-                if NoStaminaStatus.Enabled then
-                    NoStamina.Start()
-                else
-                    NoStamina.Stop()
-                end
-            end
-        }, "NoStaminaKey")
-        uiElements.NoStaminaAttribute = UI.Sections.NoStamina:Textbox({
-            Name = "Stamina Attribute",
-            Default = LocalPlayer.Config.NoStamina.StaminaAttribute,
-            Placeholder = "Enter stamina attribute name",
-            Callback = function(value)
-                NoStamina.SetStaminaAttribute(value)
-            end
-        }, "NoStaminaAttribute")
-        uiElements.NoStaminaMax = UI.Sections.NoStamina:Slider({
-            Name = "Max Stamina",
-            Minimum = 50,
-            Maximum = 200,
-            Default = LocalPlayer.Config.NoStamina.MaxStaminaValue,
-            Precision = 1,
-            Callback = function(value)
-                NoStamina.SetMaxStamina(value)
-            end
-        }, "NoStaminaMax")
-    end
-
     -- LocalPlayer Sync UI
     local localconfigSection = UI.Tabs.Config:Section({ Name = "Local Player Sync", Side = "Right" })
     localconfigSection:Header({ Name = "LocalPlayer Settings Sync" })
@@ -1096,11 +969,6 @@ local function SetupUI(UI)
             LocalPlayer.Config.NoRagdoll.Enabled = uiElements.NoRagdollEnabled:GetState()
 
             LocalPlayer.Config.FastAttack.Enabled = uiElements.FastAttackEnabled:GetState()
-
-            LocalPlayer.Config.NoStamina.Enabled = uiElements.NoStaminaEnabled:GetState()
-            LocalPlayer.Config.NoStamina.ToggleKey = uiElements.NoStaminaKey:GetBind()
-            LocalPlayer.Config.NoStamina.StaminaAttribute = uiElements.NoStaminaAttribute:GetValue()
-            LocalPlayer.Config.NoStamina.MaxStaminaValue = uiElements.NoStaminaMax:GetValue()
 
             -- Синхронизируем внутренние состояния с обновлённым LocalPlayer.Config
             TimerStatus.Enabled = LocalPlayer.Config.Timer.Enabled
@@ -1170,16 +1038,6 @@ local function SetupUI(UI)
                 FastAttack.Stop()
             end
 
-            NoStaminaStatus.Enabled = LocalPlayer.Config.NoStamina.Enabled
-            NoStaminaStatus.Key = LocalPlayer.Config.NoStamina.ToggleKey
-            NoStaminaStatus.StaminaAttribute = LocalPlayer.Config.NoStamina.StaminaAttribute
-            NoStaminaStatus.MaxStamina = LocalPlayer.Config.NoStamina.MaxStaminaValue
-            if NoStaminaStatus.Enabled then
-                if not NoStaminaStatus.Connection then NoStamina.Start() end
-            else
-                if NoStaminaStatus.Connection then NoStamina.Stop() end
-            end
-
             notify("LocalPlayer", "Config synchronized!", true)
         end
     })
@@ -1201,9 +1059,6 @@ function LocalPlayer.Init(UI, core, notifyFunc)
         end
         if TickSpeedStatus.Enabled then
             TickSpeed.Start()
-        end
-        if NoStaminaStatus.Enabled then
-            NoStamina.Start()
         end
         if not HighJumpStatus.Enabled then
             HighJump.RestoreJumpHeight()
