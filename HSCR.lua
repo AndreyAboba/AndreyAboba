@@ -14,9 +14,9 @@ local CrosshairSettings = {
     ExpandDuration = { Value = 0.3, Default = 0.3 },
     ShrinkDuration = { Value = 0.2, Default = 0.2 },
     HeadshotSoundEnabled = false,
-    SelectedSound = { Value = "Default", Default = "Default" }, -- Дефолтный хитсаунд теперь "Default"
+    SelectedSound = { Value = "Default", Default = "Default" },
     SoundData = {
-        { Label = "Default", SoundId = "rbxassetid://138464116325809" }, -- Новый SoundId для Default
+        { Label = "Default", SoundId = "rbxassetid://138464116325809" },
         { Label = "KillSound", SoundId = "rbxassetid://132390332380260" },
         { Label = "Bubble2", SoundId = "rbxassetid://9086370184" },
         { Label = "KillSound2", SoundId = "rbxassetid://121311089745141" },
@@ -39,7 +39,7 @@ local CrosshairSettings = {
     },
     SoundIds = {},
     OriginalSounds = {
-        headshotSound = "rbxassetid://138464116325809", -- Обновлён дефолтный звук
+        headshotSound = "rbxassetid://138464116325809",
         headshotNormalSound = "rbxassetid://135358980250767",
         hitSound = "rbxassetid://100758444127105"
     },
@@ -465,8 +465,9 @@ function HSCR.Init(UI, Core, notify)
             end
         end
 
-        -- Исправляем вызов hook, используя Changed:Connect
-        u27.is_reloading.Changed:Connect(function(isReloading)
+        -- Исправляем подписку на изменения состояния
+        u27.is_reloading:GetPropertyChangedSignal("Value"):Connect(function()
+            local isReloading = u27.is_reloading.Value
             if not CrosshairSettings.Enabled then return end
             if isReloading then
                 local length = u27.reloading_length:get()
