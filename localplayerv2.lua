@@ -143,17 +143,16 @@ NoStamina.Start = function()
 
     NoStaminaStatus.Connection = Services.RunService.Heartbeat:Connect(function()
         if not NoStaminaStatus.Enabled then return end
-        local humanoid, rootPart = getCharacterData()
-        if not humanoid or not rootPart then return end
+        local _, rootPart = getCharacterData()
+        if not rootPart then return end
 
-        -- Выполняем ComputeAsync, чтобы сервер "думал", что pathfinding активен, но не двигаем игрока
-        local dummyPosition = rootPart.Position + Vector3.new(10, 0, 10) -- Произвольная точка
+        -- Имитация работы pathfinding: создаём путь к текущей позиции игрока
         local success, errorMessage = pcall(function()
-            NoStaminaStatus.Path:ComputeAsync(rootPart.Position, dummyPosition)
+            NoStaminaStatus.Path:ComputeAsync(rootPart.Position, rootPart.Position + Vector3.new(0, 0, 0.1))
         end)
 
         if not success then
-            notify("NoStamina", "Pathfinding computation failed: " .. (errorMessage or "Unknown error"), true)
+            notify("NoStamina", "Pathfinding simulation failed: " .. (errorMessage or "Unknown error"), true)
         end
     end)
 
@@ -444,7 +443,7 @@ Speed.UpdateJumps = function(humanoid, rootPart, currentTime)
     end
     if SpeedStatus.FakeJump and currentTime - SpeedStatus.LastJumpTime >= SpeedStatus.JumpInterval then
         if humanoid.Health > 0 then
-            local newCFrame = rootPart.CFrame + Vector3.new(כם, SpeedStatus.JumpPower / 20, 0)
+            local newCFrame = rootPart.CFrame + Vector3.new(0, SpeedStatus.JumpPower / 20, 0)
             rootPart.CFrame = newCFrame
             SpeedStatus.LastJumpTime = currentTime
         end
@@ -964,13 +963,13 @@ local function SetupUI(UI)
         }, "FastAttackEnabled")
     end
 
-    -- NoStamina UI (Добавляем новую секцию, если её нет)
-    if not UI.Sections.NoStamina then
-        UI.Sections.NoStamina = UI.Tabs.Main:Section({ Name = "NoStamina", Side = "Left" })
+    -- NoStamina UI (переносим в Misc или создаём новую секцию)
+    if not UI.Sections.Misc then
+        UI.Sections.Misc = UI.Tabs.Main:Section({ Name = "Miscellaneous", Side = "Left" })
     end
-    if UI.Sections.NoStamina then
-        UI.Sections.NoStamina:Header({ Name = "NoStamina" })
-        uiElements.NoStaminaEnabled = UI.Sections.NoStamina:Toggle({
+    if UI.Sections.Misc then
+        UI.Sections.Misc:Header({ Name = "NoStamina" })
+        uiElements.NoStaminaEnabled = UI.Sections.Misc:Toggle({
             Name = "Enabled",
             Default = LocalPlayer.Config.NoStamina.Enabled,
             Callback = function(value)
@@ -979,23 +978,19 @@ local function SetupUI(UI)
                 if value then NoStamina.Start() else NoStamina.Stop() end
             end
         }, "NoStaminaEnabled")
-        uiElements.NoStaminaKey = UI.Sections.NoStamina:Keybind({
+        uiElements.NoStaminaKey = UI.Sections.Misc:Keybind({
             Name = "Toggle Key",
             Default = LocalPlayer.Config.NoStamina.ToggleKey,
             Callback = function(value)
                 NoStaminaStatus.Key = value
                 LocalPlayer.Config.NoStamina.ToggleKey = value
                 if isUserInputFocused() then return end
+                NoStaminaStatus.Enabled = not NoStaminaStatus.Enabled
+                LocalPlayer.Config.NoStamina.Enabled = NoStaminaStatus.Enabled
                 if NoStaminaStatus.Enabled then
-                    NoStaminaStatus.Enabled = false
-                    LocalPlayer.Config.NoStamina.Enabled = false
-                    NoStamina.Stop()
-                    uiElements.NoStaminaEnabled:SetState(false)
-                else
-                    NoStaminaStatus.Enabled = true
-                    LocalPlayer.Config.NoStamina.Enabled = true
                     NoStamina.Start()
-                    uiElements.NoStaminaEnabled:SetState(true)
+                else
+                    NoStamina.Stop()
                 end
             end
         }, "NoStaminaKey")
