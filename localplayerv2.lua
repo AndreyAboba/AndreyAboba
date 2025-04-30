@@ -703,7 +703,7 @@ local function SetupUI(UI)
         }, "FastAttackEnabled")
     end
     local localconfigSection = UI.Tabs.Config:Section({ Name = "Local Player Sync", Side = "Right" })
-        localconfigSection:Header({ Name = "Local Player Settings" })
+        localconfigSection:Header({ Name = "LocalPlayer Settings Sync" })
         localconfigSection:Button({
             Name = "Sync Config",
             Callback = function()
