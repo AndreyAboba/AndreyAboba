@@ -88,6 +88,14 @@ function HSCR.Init(UI, Core, notify)
         frame2 = crosshairFrame.Frame2.ImageLabel
     end
 
+    -- Проверка видимости CrosshairScreenGui и crosshairFrame
+    print("CrosshairScreenGui Enabled:", crosshairScreenGui and crosshairScreenGui.Enabled)
+    print("CrosshairFrame Visible:", crosshairFrame.Visible)
+
+    -- Установка AnchorPoint для crosshairFrame
+    crosshairFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+    print("CrosshairFrame AnchorPoint set to:", crosshairFrame.AnchorPoint)
+
     -- Создание объектов звука
     local headshotSound = Instance.new("Sound")
     headshotSound.SoundId = CrosshairSettings.OriginalSounds.headshotSound
@@ -233,6 +241,11 @@ function HSCR.Init(UI, Core, notify)
             warn("CrosshairFrame is nil or destroyed during updateCrosshairDesign")
             return
         end
+
+        -- Дополнительная проверка видимости
+        print("CrosshairFrame Visible:", crosshairFrame.Visible)
+        print("CrosshairScreenGui Enabled:", crosshairScreenGui and crosshairScreenGui.Enabled)
+
         for _, child in pairs(crosshairFrame:GetChildren()) do
             if child.Name ~= "Frame1" and child.Name ~= "Frame2" then
                 child:Destroy()
@@ -328,11 +341,12 @@ function HSCR.Init(UI, Core, notify)
             local top = Instance.new("Frame")
             top.Name = "Top"
             top.Size = UDim2.new(0, thickness, 0, length)
-            top.Position = UDim2.new(0.5, -thickness / 2, 0, gap) -- Смещаем вниз от верхней границы
-            top.BackgroundTransparency = 1
-            top.BackgroundColor3 = Color3.new(1, 1, 1) -- Для отладки
+            top.Position = UDim2.new(0.5, -thickness / 2, 0, gap)
+            top.BackgroundTransparency = 0 -- Для отладки
+            top.BackgroundColor3 = Color3.new(1, 0, 0) -- Красный для видимости
             top.BorderSizePixel = 0
             top.Parent = crosshairFrame
+            print("Top created:", top ~= nil, "Visible:", top.Visible)
 
             local topGradient = Instance.new("UIGradient")
             topGradient.Color = ColorSequence.new({
@@ -345,11 +359,12 @@ function HSCR.Init(UI, Core, notify)
             local right = Instance.new("Frame")
             right.Name = "Right"
             right.Size = UDim2.new(0, length, 0, thickness)
-            right.Position = UDim2.new(1, -gap - length, 0.5, -thickness / 2) -- Смещаем влево от правой границы
-            right.BackgroundTransparency = 1
-            right.BackgroundColor3 = Color3.new(1, 1, 1) -- Для отладки
+            right.Position = UDim2.new(1, -gap - length, 0.5, -thickness / 2)
+            right.BackgroundTransparency = 0 -- Для отладки
+            right.BackgroundColor3 = Color3.new(0, 1, 0) -- Зелёный для видимости
             right.BorderSizePixel = 0
             right.Parent = crosshairFrame
+            print("Right created:", right ~= nil, "Visible:", right.Visible)
 
             local rightGradient = Instance.new("UIGradient")
             rightGradient.Color = ColorSequence.new({
@@ -362,11 +377,12 @@ function HSCR.Init(UI, Core, notify)
             local bottom = Instance.new("Frame")
             bottom.Name = "Bottom"
             bottom.Size = UDim2.new(0, thickness, 0, length)
-            bottom.Position = UDim2.new(0.5, -thickness / 2, 1, -gap - length) -- Смещаем вверх от нижней границы
-            bottom.BackgroundTransparency = 1
-            bottom.BackgroundColor3 = Color3.new(1, 1, 1) -- Для отладки
+            bottom.Position = UDim2.new(0.5, -thickness / 2, 1, -gap - length)
+            bottom.BackgroundTransparency = 0 -- Для отладки
+            bottom.BackgroundColor3 = Color3.new(0, 0, 1) -- Синий для видимости
             bottom.BorderSizePixel = 0
             bottom.Parent = crosshairFrame
+            print("Bottom created:", bottom ~= nil, "Visible:", bottom.Visible)
 
             local bottomGradient = Instance.new("UIGradient")
             bottomGradient.Color = ColorSequence.new({
@@ -379,11 +395,12 @@ function HSCR.Init(UI, Core, notify)
             local left = Instance.new("Frame")
             left.Name = "Left"
             left.Size = UDim2.new(0, length, 0, thickness)
-            left.Position = UDim2.new(0, gap, 0.5, -thickness / 2) -- Смещаем вправо от левой границы
-            left.BackgroundTransparency = 1
-            left.BackgroundColor3 = Color3.new(1, 1, 1) -- Для отладки
+            left.Position = UDim2.new(0, gap, 0.5, -thickness / 2)
+            left.BackgroundTransparency = 0 -- Для отладки
+            left.BackgroundColor3 = Color3.new(1, 1, 0) -- Жёлтый для видимости
             left.BorderSizePixel = 0
             left.Parent = crosshairFrame
+            print("Left created:", left ~= nil, "Visible:", left.Visible)
 
             local leftGradient = Instance.new("UIGradient")
             leftGradient.Color = ColorSequence.new({
@@ -393,7 +410,7 @@ function HSCR.Init(UI, Core, notify)
             leftGradient.Rotation = 0
             leftGradient.Parent = left
 
-            -- Анимация градиента с плавным переливом
+            -- Анимация градиента (временно отключена для отладки)
             task.spawn(function()
                 while crosshairFrame and crosshairFrame.Parent do
                     local tweenInfoForward = TweenInfo.new(
@@ -542,7 +559,7 @@ function HSCR.Init(UI, Core, notify)
             local gap = CrosshairSettings.Gap.Value
             local length = CrosshairSettings.Length.Value
             local thickness = 2
-            local frameSize = crosshairFrame.Size.X.Offset -- Используем текущий размер
+            local frameSize = crosshairFrame.Size.X.Offset
             local newGap = gap * (1 + scale)
 
             -- Анимация расширения
