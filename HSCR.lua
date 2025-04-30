@@ -16,7 +16,7 @@ local CrosshairSettings = {
     HeadshotSoundEnabled = false,
     SelectedSound = { Value = "Default", Default = "Default" },
     SoundData = {
-        { Label = "Default", SoundId = "rbxassetid://138464116325809" }, -- Обновлено на указанный SoundId
+        { Label = "Default", SoundId = "rbxassetid://138464116325809" },
         { Label = "KillSound", SoundId = "rbxassetid://132390332380260" },
         { Label = "Bubble2", SoundId = "rbxassetid://9086370184" },
         { Label = "KillSound2", SoundId = "rbxassetid://121311089745141" },
@@ -39,12 +39,12 @@ local CrosshairSettings = {
     },
     SoundIds = {},
     OriginalSounds = {
-        headshotSound = "rbxassetid://138464116325809", -- Обновлено на указанный SoundId
+        headshotSound = "rbxassetid://138464116325809",
         headshotNormalSound = "rbxassetid://135358980250767",
         hitSound = "rbxassetid://100758444127105"
     },
     OriginalElements = {},
-    OriginalBulletsColor = nil -- Добавлено для хранения оригинального цвета патронов
+    OriginalBulletsColor = nil
 }
 
 function HSCR.Init(UI, Core, notify)
@@ -109,7 +109,7 @@ function HSCR.Init(UI, Core, notify)
 
     if bulletsLabel then
         CrosshairSettings.OriginalBulletsColor = bulletsLabel.TextColor3
-        bulletsLabel.TextColor3 = CrosshairSettings.GradientColor -- Устанавливаем цвет патронов сразу
+        bulletsLabel.TextColor3 = CrosshairSettings.GradientColor
     end
 
     local AnimationFunctions = {}
@@ -170,7 +170,7 @@ function HSCR.Init(UI, Core, notify)
             if frame2 then frame2.Visible = CrosshairSettings.OriginalElements.Frame2Visible or true end
             crosshairFrame.Size = CrosshairSettings.OriginalElements.Size or UDim2.fromOffset(18, 18)
             if bulletsLabel then
-                bulletsLabel.TextColor3 = CrosshairSettings.GradientColor -- Цвет патронов синхронизирован с прицелом
+                bulletsLabel.TextColor3 = CrosshairSettings.GradientColor
             end
             return
         end
@@ -182,7 +182,7 @@ function HSCR.Init(UI, Core, notify)
         if frame2 then frame2.Visible = false end
 
         if bulletsLabel then
-            bulletsLabel.TextColor3 = CrosshairSettings.GradientColor -- Цвет патронов синхронизирован с прицелом
+            bulletsLabel.TextColor3 = CrosshairSettings.GradientColor
         end
 
         if CrosshairSettings.Style.Value == "Dot" then
@@ -416,7 +416,9 @@ function HSCR.Init(UI, Core, notify)
             radial:SetProgressColor(CrosshairSettings.GradientColor)
         end
 
-        u27.is_reloading:hook(function(isReloading)
+        -- Исправляем подписку на изменения состояния
+        u27.is_reloading.Changed:Connect(function()
+            local isReloading = u27.is_reloading.Value
             if not CrosshairSettings.Enabled then return end
             if isReloading then
                 local length = u27.reloading_length:get()
