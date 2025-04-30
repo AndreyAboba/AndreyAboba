@@ -9,14 +9,14 @@ local CrosshairSettings = {
     DotSize = { Value = 20, Default = 20 },
     DotInnerSize = { Value = 4, Default = 4 },
     DotOutlineThickness = { Value = 2, Default = 2 },
-    GradientColor = Color3.fromRGB(0, 0, 255), -- Один фиксированный цвет
+    GradientColor = Color3.fromRGB(0, 0, 255),
     ExpandDistance = { Value = 0.8, Default = 0.8 },
     ExpandDuration = { Value = 0.3, Default = 0.3 },
     ShrinkDuration = { Value = 0.2, Default = 0.2 },
     HeadshotSoundEnabled = false,
     SelectedSound = { Value = "Default", Default = "Default" },
     SoundData = {
-        { Label = "Default", SoundId = "rbxassetid://10476301420" },
+        { Label = "Default", SoundId = "rbxassetid://138464116325809" }, -- Обновлено на указанный SoundId
         { Label = "KillSound", SoundId = "rbxassetid://132390332380260" },
         { Label = "Bubble2", SoundId = "rbxassetid://9086370184" },
         { Label = "KillSound2", SoundId = "rbxassetid://121311089745141" },
@@ -39,11 +39,12 @@ local CrosshairSettings = {
     },
     SoundIds = {},
     OriginalSounds = {
-        headshotSound = "rbxassetid://115982072912004",
+        headshotSound = "rbxassetid://138464116325809", -- Обновлено на указанный SoundId
         headshotNormalSound = "rbxassetid://135358980250767",
         hitSound = "rbxassetid://100758444127105"
     },
-    OriginalElements = {}
+    OriginalElements = {},
+    OriginalBulletsColor = nil -- Добавлено для хранения оригинального цвета патронов
 }
 
 function HSCR.Init(UI, Core, notify)
@@ -65,12 +66,11 @@ function HSCR.Init(UI, Core, notify)
     local frame2 = crosshairFrame and crosshairFrame.Frame2 and crosshairFrame.Frame2.ImageLabel
 
     if not crosshairFrame then
-        warn("CrosshairFrame not found, attempting to wait for it")
         local attempts = 0
         while not crosshairFrame and attempts < 10 do
-            wait(1)
+            task.wait(1)
             crosshairFrame = u5.get("CrosshairFrame")
-            attempts = attempts + 1
+            attempts += 1
         end
         if not crosshairFrame then
             error("Failed to initialize: CrosshairFrame not found after 10 seconds")
@@ -80,11 +80,7 @@ function HSCR.Init(UI, Core, notify)
         frame2 = crosshairFrame.Frame2.ImageLabel
     end
 
-    print("CrosshairScreenGui Enabled:", crosshairScreenGui and crosshairScreenGui.Enabled)
-    print("CrosshairFrame Visible:", crosshairFrame.Visible)
-
     crosshairFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-    print("CrosshairFrame AnchorPoint set to:", crosshairFrame.AnchorPoint)
 
     local headshotSound = Instance.new("Sound")
     headshotSound.SoundId = CrosshairSettings.OriginalSounds.headshotSound
@@ -110,121 +106,58 @@ function HSCR.Init(UI, Core, notify)
         table.insert(soundsToPreload, soundData.SoundId)
     end
     ContentProvider:PreloadAsync(soundsToPreload)
-    print("All sounds preloaded")
 
-    local AnimationFunctions = {
-        pulse = nil,
-        pulseRed = nil,
-        updateCrosshairDesign = nil
-    }
+    if bulletsLabel then
+        CrosshairSettings.OriginalBulletsColor = bulletsLabel.TextColor3
+        bulletsLabel.TextColor3 = CrosshairSettings.GradientColor -- Устанавливаем цвет патронов сразу
+    end
 
+    local AnimationFunctions = {}
     local hitQueue = {}
     local radial = u7.new(crosshairFrame)
     local lastHitTime
     local isAnimating = false
 
     local function processHitQueue()
-        if #hitQueue == 0 then return end
-        if isAnimating then
-            print("Skipping hit processing: Animation in progress")
-            return
-        end
+        if #hitQueue == 0 or isAnimating then return end
 
         local hit = table.remove(hitQueue, 1)
 
-        print("Processing hitmarker in main thread")
-
         if not crosshairFrame or not crosshairFrame.Parent then
-            warn("CrosshairFrame is nil or destroyed, attempting to reinitialize")
             crosshairFrame = u5.get("CrosshairFrame")
-            if not crosshairFrame then
-                warn("Failed to reinitialize CrosshairFrame")
-                return
-            end
+            if not crosshairFrame then return end
             frame1 = crosshairFrame.Frame1.ImageLabel
             frame2 = crosshairFrame.Frame2.ImageLabel
             radial = u7.new(crosshairFrame)
         end
 
         if CrosshairSettings.Enabled then
-            print("CrosshairFrame exists:", crosshairFrame ~= nil)
-            print("Attempting to call updateCrosshairDesign before animations")
-            if AnimationFunctions.updateCrosshairDesign then
-                local needsUpdate = false
-                if CrosshairSettings.Style.Value == "Dot" then
-                    if not crosshairFrame:FindFirstChild("Dot") or not crosshairFrame.Dot:FindFirstChild("InnerDot") then
-                        needsUpdate = true
-                    end
-                elseif CrosshairSettings.Style.Value == "Default" then
-                    if not crosshairFrame:FindFirstChild("Top") or not crosshairFrame:FindFirstChild("Right") or
-                       not crosshairFrame:FindFirstChild("Bottom") or not crosshairFrame:FindFirstChild("Left") then
-                        needsUpdate = true
-                    end
-                end
-
-                if needsUpdate then
-                    AnimationFunctions.updateCrosshairDesign()
-                else
-                    print("Skipping updateCrosshairDesign: Elements already exist")
-                end
-            else
-                warn("updateCrosshairDesign is nil")
-                return
-            end
-
-            print("Attempting to call pulse and pulseRed")
-            if AnimationFunctions.pulse then
-                isAnimating = true
-                AnimationFunctions.pulse(CrosshairSettings.ExpandDistance.Value)
-                task.delay(CrosshairSettings.ExpandDuration.Value + CrosshairSettings.ShrinkDuration.Value, function()
-                    isAnimating = false
-                    print("Animation completed, isAnimating set to false")
-                end)
-            else
-                warn("pulse is nil")
-                return
-            end
-
-            if AnimationFunctions.pulseRed then
-                AnimationFunctions.pulseRed()
-            else
-                warn("pulseRed is nil")
-                return
-            end
+            AnimationFunctions.updateCrosshairDesign()
+            isAnimating = true
+            AnimationFunctions.pulse(CrosshairSettings.ExpandDistance.Value)
+            AnimationFunctions.pulseRed()
 
             if radial and radial.SetProgressColor then
-                print("Setting radial progress color")
                 radial:SetProgressColor(CrosshairSettings.GradientColor)
-            else
-                warn("Radial is nil or SetProgressColor is not a function")
             end
+
+            task.delay(CrosshairSettings.ExpandDuration.Value + CrosshairSettings.ShrinkDuration.Value, function()
+                isAnimating = false
+            end)
         end
 
         local hitTime = os.clock()
         lastHitTime = hitTime
-        wait(0.2)
-        if lastHitTime == hitTime then
-            print("Resetting radial color")
-            if radial and radial.SetProgressColor then
-                radial:SetProgressColor(CrosshairSettings.GradientColor)
-            else
-                warn("Radial is nil or SetProgressColor is not a function during reset")
-            end
+        task.wait(0.2)
+        if lastHitTime == hitTime and radial and radial.SetProgressColor then
+            radial:SetProgressColor(CrosshairSettings.GradientColor)
         end
     end
 
     RunService:BindToRenderStep("ProcessHitQueue", Enum.RenderPriority.Input.Value, processHitQueue)
 
     local function updateCrosshairDesign()
-        print("Updating crosshair design - Enabled:", CrosshairSettings.Enabled)
-        print("CrosshairFrame exists:", crosshairFrame ~= nil)
-        if not crosshairFrame or not crosshairFrame.Parent then
-            warn("CrosshairFrame is nil or destroyed during updateCrosshairDesign")
-            return
-        end
-
-        print("CrosshairFrame Visible:", crosshairFrame.Visible)
-        print("CrosshairScreenGui Enabled:", crosshairScreenGui and crosshairScreenGui.Enabled)
+        if not crosshairFrame or not crosshairFrame.Parent then return end
 
         for _, child in pairs(crosshairFrame:GetChildren()) do
             if child.Name ~= "Frame1" and child.Name ~= "Frame2" then
@@ -236,6 +169,9 @@ function HSCR.Init(UI, Core, notify)
             if frame1 then frame1.Visible = CrosshairSettings.OriginalElements.Frame1Visible or true end
             if frame2 then frame2.Visible = CrosshairSettings.OriginalElements.Frame2Visible or true end
             crosshairFrame.Size = CrosshairSettings.OriginalElements.Size or UDim2.fromOffset(18, 18)
+            if bulletsLabel then
+                bulletsLabel.TextColor3 = CrosshairSettings.GradientColor -- Цвет патронов синхронизирован с прицелом
+            end
             return
         end
 
@@ -245,7 +181,9 @@ function HSCR.Init(UI, Core, notify)
         if frame1 then frame1.Visible = false end
         if frame2 then frame2.Visible = false end
 
-        print("Gradient Color in updateCrosshairDesign:", CrosshairSettings.GradientColor)
+        if bulletsLabel then
+            bulletsLabel.TextColor3 = CrosshairSettings.GradientColor -- Цвет патронов синхронизирован с прицелом
+        end
 
         if CrosshairSettings.Style.Value == "Dot" then
             local dot = Instance.new("Frame")
@@ -276,8 +214,6 @@ function HSCR.Init(UI, Core, notify)
             local innerCorner = Instance.new("UICorner")
             innerCorner.CornerRadius = UDim.new(1, 0)
             innerCorner.Parent = innerDot
-
-            print("Dot created:", dot ~= nil, "InnerDot created:", innerDot ~= nil)
         elseif CrosshairSettings.Style.Value == "Default" then
             local gap = CrosshairSettings.Gap.Value
             local length = CrosshairSettings.Length.Value
@@ -290,7 +226,6 @@ function HSCR.Init(UI, Core, notify)
             top.BackgroundColor3 = CrosshairSettings.GradientColor
             top.BorderSizePixel = 0
             top.Parent = crosshairFrame
-            print("Top created:", top ~= nil, "Visible:", top.Visible)
 
             local right = Instance.new("Frame")
             right.Name = "Right"
@@ -299,7 +234,6 @@ function HSCR.Init(UI, Core, notify)
             right.BackgroundColor3 = CrosshairSettings.GradientColor
             right.BorderSizePixel = 0
             right.Parent = crosshairFrame
-            print("Right created:", right ~= nil, "Visible:", right.Visible)
 
             local bottom = Instance.new("Frame")
             bottom.Name = "Bottom"
@@ -308,7 +242,6 @@ function HSCR.Init(UI, Core, notify)
             bottom.BackgroundColor3 = CrosshairSettings.GradientColor
             bottom.BorderSizePixel = 0
             bottom.Parent = crosshairFrame
-            print("Bottom created:", bottom ~= nil, "Visible:", bottom.Visible)
 
             local left = Instance.new("Frame")
             left.Name = "Left"
@@ -317,81 +250,50 @@ function HSCR.Init(UI, Core, notify)
             left.BackgroundColor3 = CrosshairSettings.GradientColor
             left.BorderSizePixel = 0
             left.Parent = crosshairFrame
-            print("Left created:", left ~= nil, "Visible:", left.Visible)
-
-            print("Default style elements created - Top:", top ~= nil, "Right:", right ~= nil, "Bottom:", bottom ~= nil, "Left:", left ~= nil)
-            print("CrosshairFrame Size:", crosshairFrame.Size)
-            print("Top Position:", top.Position, "Right Position:", right.Position, "Bottom Position:", bottom.Position, "Left Position:", left.Position)
-            print("Gradient Color:", CrosshairSettings.GradientColor)
         end
     end
 
     local function pulse(scale)
-        if not CrosshairSettings.Enabled then
-            print("Pulse skipped: Crosshair not enabled")
-            return
-        end
-
-        if not crosshairFrame or not crosshairFrame.Parent then
-            print("Pulse failed: CrosshairFrame is nil or destroyed")
-            return
-        end
+        if not CrosshairSettings.Enabled or not crosshairFrame or not crosshairFrame.Parent then return end
 
         u4.tween(crosshairFrame, TweenInfo.new(0.3, Enum.EasingStyle.Sine), {
             Rotation = crosshairFrame.Rotation + 360
         })
 
         if CrosshairSettings.Style.Value == "Dot" then
-            if not crosshairFrame:FindFirstChild("Dot") or not crosshairFrame.Dot:FindFirstChild("InnerDot") then
-                print("Pulse failed: Dot or InnerDot not found")
-                return
-            end
+            local dot = crosshairFrame:FindFirstChild("Dot")
+            local innerDot = dot and dot:FindFirstChild("InnerDot")
+            if not dot or not innerDot then return end
 
             local newDotSize = CrosshairSettings.DotSize.Value * (1 + scale)
             local newInnerDotSize = CrosshairSettings.DotInnerSize.Value * (1 + scale)
-            print("Animating Dot - New size:", newDotSize, "New inner size:", newInnerDotSize)
 
-            if crosshairFrame.Dot and crosshairFrame.Dot.Parent then
-                u4.tween(crosshairFrame.Dot, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
-                    Size = UDim2.fromOffset(newDotSize, newDotSize),
-                    Position = UDim2.new(0.5, -newDotSize / 2, 0.5, -newDotSize / 2),
-                })
-            else
-                print("Dot is nil or destroyed during expansion animation")
-            end
-            if crosshairFrame.Dot and crosshairFrame.Dot.InnerDot and crosshairFrame.Dot.InnerDot.Parent then
-                u4.tween(crosshairFrame.Dot.InnerDot, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
-                    Size = UDim2.fromOffset(newInnerDotSize, newInnerDotSize),
-                    Position = UDim2.new(0.5, -newInnerDotSize / 2, 0.5, -newInnerDotSize / 2),
-                })
-            else
-                print("InnerDot is nil or destroyed during expansion animation")
-            end
+            u4.tween(dot, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+                Size = UDim2.fromOffset(newDotSize, newDotSize),
+                Position = UDim2.new(0.5, -newDotSize / 2, 0.5, -newDotSize / 2),
+            })
+            u4.tween(innerDot, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+                Size = UDim2.fromOffset(newInnerDotSize, newInnerDotSize),
+                Position = UDim2.new(0.5, -newInnerDotSize / 2, 0.5, -newInnerDotSize / 2),
+            })
 
             task.delay(CrosshairSettings.ExpandDuration.Value, function()
-                if crosshairFrame and crosshairFrame.Parent and crosshairFrame.Dot and crosshairFrame.Dot.Parent then
-                    u4.tween(crosshairFrame.Dot, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
-                        Size = UDim2.fromOffset(CrosshairSettings.DotSize.Value, CrosshairSettings.DotSize.Value),
-                        Position = UDim2.new(0.5, -CrosshairSettings.DotSize.Value / 2, 0.5, -CrosshairSettings.DotSize.Value / 2),
-                    })
-                else
-                    print("Dot is nil or destroyed during shrink animation")
-                end
-                if crosshairFrame and crosshairFrame.Parent and crosshairFrame.Dot and crosshairFrame.Dot.InnerDot and crosshairFrame.Dot.InnerDot.Parent then
-                    u4.tween(crosshairFrame.Dot.InnerDot, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
-                        Size = UDim2.fromOffset(CrosshairSettings.DotInnerSize.Value, CrosshairSettings.DotInnerSize.Value),
-                        Position = UDim2.new(0.5, -CrosshairSettings.DotInnerSize.Value / 2, 0.5, -CrosshairSettings.DotInnerSize.Value / 2),
-                    })
-                else
-                    print("InnerDot is nil or destroyed during shrink animation")
-                end
+                if not crosshairFrame or not crosshairFrame.Parent then return end
+                u4.tween(dot, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
+                    Size = UDim2.fromOffset(CrosshairSettings.DotSize.Value, CrosshairSettings.DotSize.Value),
+                    Position = UDim2.new(0.5, -CrosshairSettings.DotSize.Value / 2, 0.5, -CrosshairSettings.DotSize.Value / 2),
+                })
+                u4.tween(innerDot, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
+                    Size = UDim2.fromOffset(CrosshairSettings.DotInnerSize.Value, CrosshairSettings.DotInnerSize.Value),
+                    Position = UDim2.new(0.5, -CrosshairSettings.DotInnerSize.Value / 2, 0.5, -CrosshairSettings.DotInnerSize.Value / 2),
+                })
             end)
         elseif CrosshairSettings.Style.Value == "Default" then
-            if not crosshairFrame:FindFirstChild("Top") or not crosshairFrame:FindFirstChild("Right") or
-               not crosshairFrame:FindFirstChild("Bottom") or not crosshairFrame:FindFirstChild("Left") then
-                print("Pulse failed: Default style elements (Top, Right, Bottom, Left) not found")
-                return
-            end
+            local top = crosshairFrame:FindFirstChild("Top")
+            local right = crosshairFrame:FindFirstChild("Right")
+            local bottom = crosshairFrame:FindFirstChild("Bottom")
+            local left = crosshairFrame:FindFirstChild("Left")
+            if not top or not right or not bottom or not left then return end
 
             local gap = CrosshairSettings.Gap.Value
             local length = CrosshairSettings.Length.Value
@@ -402,147 +304,90 @@ function HSCR.Init(UI, Core, notify)
                 Size = UDim2.fromOffset(CrosshairSettings.Size.Value * (1 + scale), CrosshairSettings.Size.Value * (1 + scale)),
             })
 
-            if crosshairFrame.Top and crosshairFrame.Top.Parent then
-                u4.tween(crosshairFrame.Top, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
-                    Position = UDim2.new(0.5, -thickness / 2, 0.5, -newGap - length),
-                })
-            end
-            if crosshairFrame.Right and crosshairFrame.Right.Parent then
-                u4.tween(crosshairFrame.Right, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
-                    Position = UDim2.new(0.5, newGap, 0.5, -thickness / 2),
-                })
-            end
-            if crosshairFrame.Bottom and crosshairFrame.Bottom.Parent then
-                u4.tween(crosshairFrame.Bottom, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
-                    Position = UDim2.new(0.5, -thickness / 2, 0.5, newGap),
-                })
-            end
-            if crosshairFrame.Left and crosshairFrame.Left.Parent then
-                u4.tween(crosshairFrame.Left, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
-                    Position = UDim2.new(0.5, -newGap - length, 0.5, -thickness / 2),
-                })
-            end
+            u4.tween(top, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+                Position = UDim2.new(0.5, -thickness / 2, 0.5, -newGap - length),
+            })
+            u4.tween(right, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+                Position = UDim2.new(0.5, newGap, 0.5, -thickness / 2),
+            })
+            u4.tween(bottom, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+                Position = UDim2.new(0.5, -thickness / 2, 0.5, newGap),
+            })
+            u4.tween(left, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+                Position = UDim2.new(0.5, -newGap - length, 0.5, -thickness / 2),
+            })
 
             task.delay(CrosshairSettings.ExpandDuration.Value, function()
-                if not crosshairFrame or not crosshairFrame.Parent then
-                    print("CrosshairFrame is nil or destroyed during shrink animation")
-                    return
-                end
+                if not crosshairFrame or not crosshairFrame.Parent then return end
 
                 u4.tween(crosshairFrame, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
                     Size = UDim2.fromOffset(CrosshairSettings.Size.Value, CrosshairSettings.Size.Value),
                 })
 
-                if crosshairFrame.Top and crosshairFrame.Top.Parent then
-                    u4.tween(crosshairFrame.Top, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
-                        Position = UDim2.new(0.5, -thickness / 2, 0.5, -gap - length),
-                    })
-                end
-                if crosshairFrame.Right and crosshairFrame.Right.Parent then
-                    u4.tween(crosshairFrame.Right, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
-                        Position = UDim2.new(0.5, gap, 0.5, -thickness / 2),
-                    })
-                end
-                if crosshairFrame.Bottom and crosshairFrame.Bottom.Parent then
-                    u4.tween(crosshairFrame.Bottom, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
-                        Position = UDim2.new(0.5, -thickness / 2, 0.5, gap),
-                    })
-                end
-                if crosshairFrame.Left and crosshairFrame.Left.Parent then
-                    u4.tween(crosshairFrame.Left, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
-                        Position = UDim2.new(0.5, -gap - length, 0.5, -thickness / 2),
-                    })
-                end
+                u4.tween(top, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
+                    Position = UDim2.new(0.5, -thickness / 2, 0.5, -gap - length),
+                })
+                u4.tween(right, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
+                    Position = UDim2.new(0.5, gap, 0.5, -thickness / 2),
+                })
+                u4.tween(bottom, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
+                    Position = UDim2.new(0.5, -thickness / 2, 0.5, gap),
+                })
+                u4.tween(left, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
+                    Position = UDim2.new(0.5, -gap - length, 0.5, -thickness / 2),
+                })
             end)
         end
     end
 
     local function pulseRed()
-        if not CrosshairSettings.Enabled then
-            print("PulseRed skipped: Crosshair not enabled")
-            return
-        end
+        if not CrosshairSettings.Enabled or not crosshairFrame or not crosshairFrame.Parent then return end
 
-        if not crosshairFrame or not crosshairFrame.Parent then
-            print("PulseRed failed: CrosshairFrame is nil or destroyed")
-            return
-        end
-
-        local secondaryColor = Color3.fromRGB(255, 0, 0) -- Красный цвет для pulseRed
+        local secondaryColor = Color3.fromRGB(255, 0, 0)
 
         if CrosshairSettings.Style.Value == "Dot" then
-            if not crosshairFrame:FindFirstChild("Dot") or not crosshairFrame.Dot:FindFirstChild("UIStroke") or
-               not crosshairFrame.Dot:FindFirstChild("InnerDot") then
-                print("PulseRed failed: Dot, UIStroke, or InnerDot not found")
-                return
-            end
-            print("Animating Dot color change")
-            if crosshairFrame.Dot and crosshairFrame.Dot.UIStroke and crosshairFrame.Dot.UIStroke.Parent then
-                u4.tween(crosshairFrame.Dot.UIStroke, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
-                    Color = secondaryColor
-                })
-            end
-            if crosshairFrame.Dot and crosshairFrame.Dot.InnerDot and crosshairFrame.Dot.InnerDot.Parent then
-                u4.tween(crosshairFrame.Dot.InnerDot, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
-                    BackgroundColor3 = secondaryColor
-                })
-            end
+            local dot = crosshairFrame:FindFirstChild("Dot")
+            if not dot then return end
+            local stroke = dot:FindFirstChild("UIStroke")
+            local innerDot = dot:FindFirstChild("InnerDot")
+            if not stroke or not innerDot then return end
+
+            u4.tween(stroke, TweenInfo.new(0.08, Enum.EasingStyle.Quad), { Color = secondaryColor })
+            u4.tween(innerDot, TweenInfo.new(0.08, Enum.EasingStyle.Quad), { BackgroundColor3 = secondaryColor })
         elseif CrosshairSettings.Style.Value == "Default" then
-            if not crosshairFrame:FindFirstChild("Top") or not crosshairFrame:FindFirstChild("Right") or
-               not crosshairFrame:FindFirstChild("Bottom") or not crosshairFrame:FindFirstChild("Left") then
-                print("PulseRed failed: Default style elements (Top, Right, Bottom, Left) not found")
-                return
-            end
-            print("Animating Default style color change")
             for _, child in pairs(crosshairFrame:GetChildren()) do
-                if child:IsA("Frame") and child.Name ~= "Frame1" and child.Name ~= "Frame2" and child.Parent then
-                    u4.tween(child, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
-                        BackgroundColor3 = secondaryColor
-                    })
+                if child:IsA("Frame") and child.Name ~= "Frame1" and child.Name ~= "Frame2" then
+                    u4.tween(child, TweenInfo.new(0.08, Enum.EasingStyle.Quad), { BackgroundColor3 = secondaryColor })
                 end
             end
         end
 
-        if not bulletsLabel or not bulletsLabel.Parent then
-            print("PulseRed failed: bulletsLabel not found or destroyed")
-            return
+        if bulletsLabel and bulletsLabel.Parent then
+            u4.tween(bulletsLabel, TweenInfo.new(0.08, Enum.EasingStyle.Quad), { TextColor3 = secondaryColor })
         end
-        print("Animating bulletsLabel color change")
-        u4.tween(bulletsLabel, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
-            TextColor3 = secondaryColor
-        })
 
         task.delay(0.08, function()
-            if not crosshairFrame or not crosshairFrame.Parent then
-                print("CrosshairFrame is nil or destroyed during pulseRed reverse animation")
-                return
-            end
+            if not crosshairFrame or not crosshairFrame.Parent then return end
 
             if CrosshairSettings.Style.Value == "Dot" then
-                if crosshairFrame.Dot and crosshairFrame.Dot.UIStroke and crosshairFrame.Dot.UIStroke.Parent then
-                    u4.tween(crosshairFrame.Dot.UIStroke, TweenInfo.new(0.05, Enum.EasingStyle.Quad), {
-                        Color = CrosshairSettings.GradientColor
-                    })
-                end
-                if crosshairFrame.Dot and crosshairFrame.Dot.InnerDot and crosshairFrame.Dot.InnerDot.Parent then
-                    u4.tween(crosshairFrame.Dot.InnerDot, TweenInfo.new(0.05, Enum.EasingStyle.Quad), {
-                        BackgroundColor3 = CrosshairSettings.GradientColor
-                    })
-                end
+                local dot = crosshairFrame:FindFirstChild("Dot")
+                if not dot then return end
+                local stroke = dot:FindFirstChild("UIStroke")
+                local innerDot = dot:FindFirstChild("InnerDot")
+                if not stroke or not innerDot then return end
+
+                u4.tween(stroke, TweenInfo.new(0.05, Enum.EasingStyle.Quad), { Color = CrosshairSettings.GradientColor })
+                u4.tween(innerDot, TweenInfo.new(0.05, Enum.EasingStyle.Quad), { BackgroundColor3 = CrosshairSettings.GradientColor })
             elseif CrosshairSettings.Style.Value == "Default" then
                 for _, child in pairs(crosshairFrame:GetChildren()) do
-                    if child:IsA("Frame") and child.Name ~= "Frame1" and child.Name ~= "Frame2" and child.Parent then
-                        u4.tween(child, TweenInfo.new(0.05, Enum.EasingStyle.Quad), {
-                            BackgroundColor3 = CrosshairSettings.GradientColor
-                        })
+                    if child:IsA("Frame") and child.Name ~= "Frame1" and child.Name ~= "Frame2" then
+                        u4.tween(child, TweenInfo.new(0.05, Enum.EasingStyle.Quad), { BackgroundColor3 = CrosshairSettings.GradientColor })
                     end
                 end
             end
 
             if bulletsLabel and bulletsLabel.Parent then
-                u4.tween(bulletsLabel, TweenInfo.new(0.05, Enum.EasingStyle.Quad), {
-                    TextColor3 = CrosshairSettings.GradientColor
-                })
+                u4.tween(bulletsLabel, TweenInfo.new(0.05, Enum.EasingStyle.Quad), { TextColor3 = CrosshairSettings.GradientColor })
             end
         end)
     end
@@ -569,59 +414,45 @@ function HSCR.Init(UI, Core, notify)
             radial:Init()
             radial:SetProgress(100)
             radial:SetProgressColor(CrosshairSettings.GradientColor)
-        else
-            warn("Radial is nil or Init is not a function")
         end
 
-        u27.is_reloading.hook(function(isReloading)
+        u27.is_reloading:hook(function(isReloading)
             if not CrosshairSettings.Enabled then return end
             if isReloading then
-                local length = u27.reloading_length.get()
+                local length = u27.reloading_length:get()
                 if radial and radial.SetProgress and radial.TweenProgress then
                     radial:SetProgress(0)
                     radial:TweenProgress(100, length)
                 end
-            else
-                if radial and radial.StopAnimating then
-                    radial:StopAnimating(true)
-                end
+            elseif radial and radial.StopAnimating then
+                radial:StopAnimating(true)
             end
         end)
 
         u27.hitmarker = function(isHeadshot, isKill)
-            print("Hitmarker called - isHeadshot:", isHeadshot, "isKill:", isKill)
-
             if isKill then
                 local selectedSoundId = CrosshairSettings.SoundIds[CrosshairSettings.SelectedSound.Value] or CrosshairSettings.OriginalSounds.headshotSound
-                headshotSound.SoundId = CrosshairSettings.HeadshotSoundEnabled and selectedSoundId or CrosshairSettings.OriginalSounds.headshotSound
-                print("Playing headshotSound (Kill):", headshotSound.SoundId)
+                headshotSound.SoundId = CrosshairSettings.HeadshotSoundEnabled and selectedSoundId or "rbxassetid://138464116325809"
                 headshotSound:Play()
             elseif isHeadshot then
                 headshotNormalSound.SoundId = CrosshairSettings.OriginalSounds.headshotNormalSound
-                print("Playing headshotNormalSound:", headshotNormalSound.SoundId)
                 headshotNormalSound:Play()
             else
                 hitSound.SoundId = CrosshairSettings.OriginalSounds.hitSound
-                print("Playing hitSound:", hitSound.SoundId)
                 hitSound:Play()
             end
 
             table.insert(hitQueue, { isHeadshot = isHeadshot, isKill = isKill })
         end
 
-        u6.hook("hit_confirmed", function(isHeadshot, isKill)
-            print("hit_confirmed event fired - isHeadshot:", isHeadshot, "isKill:", isKill)
-            u27.hitmarker(isHeadshot, isKill)
-        end)
+        u6.hook("hit_confirmed", u27.hitmarker)
     end
 
     initiate()
 
     task.defer(function()
-        print("Starting UI creation in main thread")
         local section = UI.Tabs.Visuals:Section({ Name = "Custom Crosshair & Hitsound", Side = "Right" })
         section:Header({ Name = "Crosshair Settings" })
-        print("Adding Toggle: Enabled")
         section:Toggle({
             Name = "Enabled",
             Default = CrosshairSettings.Enabled,
@@ -631,7 +462,6 @@ function HSCR.Init(UI, Core, notify)
             end
         }, "CustomCrosshairEnabled")
 
-        print("Adding Dropdown: Style")
         section:Dropdown({
             Name = "Style",
             Options = {"Dot", "Default"},
@@ -642,7 +472,6 @@ function HSCR.Init(UI, Core, notify)
             end
         }, "CrosshairStyle")
 
-        print("Adding Slider: Size")
         section:Slider({
             Name = "Size",
             Minimum = 10,
@@ -655,7 +484,6 @@ function HSCR.Init(UI, Core, notify)
             end
         }, "CrosshairSize")
 
-        print("Adding Slider: Gap (Default Style)")
         section:Slider({
             Name = "Gap (Default Style)",
             Minimum = 2,
@@ -668,7 +496,6 @@ function HSCR.Init(UI, Core, notify)
             end
         }, "CrosshairGap")
 
-        print("Adding Slider: Length (Default Style)")
         section:Slider({
             Name = "Length (Default Style)",
             Minimum = 4,
@@ -681,7 +508,6 @@ function HSCR.Init(UI, Core, notify)
             end
         }, "CrosshairLength")
 
-        print("Adding Slider: Dot Size (Dot Style)")
         section:Slider({
             Name = "Dot Size (Dot Style)",
             Minimum = 10,
@@ -694,7 +520,6 @@ function HSCR.Init(UI, Core, notify)
             end
         }, "CrosshairDotSize")
 
-        print("Adding Slider: Dot Inner Size (Dot Style)")
         section:Slider({
             Name = "Dot Inner Size (Dot Style)",
             Minimum = 2,
@@ -707,7 +532,6 @@ function HSCR.Init(UI, Core, notify)
             end
         }, "CrosshairDotInnerSize")
 
-        print("Adding Slider: Dot Outline Thickness (Dot Style)")
         section:Slider({
             Name = "Dot Outline Thickness (Dot Style)",
             Minimum = 1,
@@ -720,7 +544,6 @@ function HSCR.Init(UI, Core, notify)
             end
         }, "CrosshairDotOutlineThickness")
 
-        print("Adding Slider: Expand Distance")
         section:Slider({
             Name = "Expand Distance",
             Minimum = 0.1,
@@ -732,7 +555,6 @@ function HSCR.Init(UI, Core, notify)
             end
         }, "CrosshairExpandDistance")
 
-        print("Adding Slider: Expand Duration")
         section:Slider({
             Name = "Expand Duration",
             Minimum = 0.05,
@@ -744,7 +566,6 @@ function HSCR.Init(UI, Core, notify)
             end
         }, "CrosshairExpandDuration")
 
-        print("Adding Slider: Shrink Duration")
         section:Slider({
             Name = "Shrink Duration",
             Minimum = 0.05,
@@ -756,21 +577,17 @@ function HSCR.Init(UI, Core, notify)
             end
         }, "CrosshairShrinkDuration")
 
-        print("Adding Colorpicker: Crosshair Color")
         section:Colorpicker({
             Name = "Crosshair Color",
             Default = CrosshairSettings.GradientColor,
             Callback = function(value)
-                print("Crosshair Color updated to:", value)
                 CrosshairSettings.GradientColor = value
                 AnimationFunctions.updateCrosshairDesign()
             end
         }, "GradientColor")
 
-        print("Adding Header: Hitsound Settings")
         section:Header({ Name = "Hitsound Settings" })
 
-        print("Adding Toggle: Enable Hitsound")
         section:Toggle({
             Name = "Enable Hitsound",
             Default = CrosshairSettings.HeadshotSoundEnabled,
@@ -784,36 +601,22 @@ function HSCR.Init(UI, Core, notify)
             table.insert(soundOptions, sound.Label)
         end
 
-        print("Adding Dropdown: Sound")
         section:Dropdown({
             Name = "Sound",
             Options = soundOptions,
             Default = CrosshairSettings.SelectedSound.Default,
             Callback = function(value)
-                print("Dropdown callback triggered with value:", value)
-
                 if value and type(value) == "string" then
-                    local soundFound = false
                     for _, sound in ipairs(CrosshairSettings.SoundData) do
                         if sound.Label == value then
-                            soundFound = true
                             CrosshairSettings.SelectedSound.Value = value
                             CrosshairSettings.SoundIds[value] = sound.SoundId
                             break
                         end
                     end
-                    if soundFound then
-                        print("Selected sound:", value, "SoundId:", CrosshairSettings.SoundIds[value])
-                    else
-                        warn("Selected sound not found in SoundData:", value)
-                    end
-                else
-                    warn("Invalid value from dropdown:", value)
                 end
             end
         }, "HeadshotSound")
-
-        print("UI creation completed")
     end)
 end
 
