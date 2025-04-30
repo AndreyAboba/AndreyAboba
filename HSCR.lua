@@ -466,9 +466,10 @@ function HSCR.Init(UI, Core, notify)
 
     initiate()
 
-    task.defer(function()
-        local uiElements = {}
+    local uiElements = {}
 
+    task.defer(function()
+        -- Секция в табе Visuals
         local section = UI.Tabs.Visuals:Section({ Name = "Custom Crosshair & Hitsound", Side = "Right" })
         section:Header({ Name = "Crosshair Settings" })
 
@@ -674,46 +675,6 @@ function HSCR.Init(UI, Core, notify)
             end
         }
 
-        -- Добавляем кнопку Sync Config
-        section:Button({
-            Name = "Sync Config",
-            Callback = function()
-                -- Синхронизация всех элементов
-                uiElements.Enabled.callback(uiElements.Enabled.element:GetState())
-
-                local styleOptions = uiElements.Style.element:GetOptions()
-                for option, selected in pairs(styleOptions) do
-                    if selected then
-                        uiElements.Style.callback(option)
-                        break
-                    end
-                end
-
-                uiElements.Size.callback(uiElements.Size.element:GetValue())
-                uiElements.Gap.callback(uiElements.Gap.element:GetValue())
-                uiElements.Length.callback(uiElements.Length.element:GetValue())
-                uiElements.DotSize.callback(uiElements.DotSize.element:GetValue())
-                uiElements.DotInnerSize.callback(uiElements.DotInnerSize.element:GetValue())
-                uiElements.DotOutlineThickness.callback(uiElements.DotOutlineThickness.element:GetValue())
-                uiElements.ExpandDistance.callback(uiElements.ExpandDistance.element:GetValue())
-                uiElements.ExpandDuration.callback(uiElements.ExpandDuration.element:GetValue())
-                uiElements.ShrinkDuration.callback(uiElements.ShrinkDuration.element:GetValue())
-                uiElements.GradientColor.callback(uiElements.GradientColor.element:GetValue())
-
-                uiElements.HeadshotSoundEnabled.callback(uiElements.HeadshotSoundEnabled.element:GetState())
-
-                local soundOptions = uiElements.SelectedSound.element:GetOptions()
-                for option, selected in pairs(soundOptions) do
-                    if selected then
-                        uiElements.SelectedSound.callback(option)
-                        break
-                    end
-                end
-
-                notify("Crosshair", "Settings synchronized with UI!", true)
-            end
-        }, "SyncConfig")
-
         section:Header({ Name = "Hitsound Settings" })
 
         uiElements.HeadshotSoundEnabled = {
@@ -763,6 +724,48 @@ function HSCR.Init(UI, Core, notify)
                 end
             end
         }
+
+        -- Новая секция в табе Config
+        local configSection = UI.Tabs.Config:Section({ Name = "Crosshair Config", Side = "Right" })
+        configSection:Header({ Name = "Crosshair Settings Sync" })
+        configSection:Button({
+            Name = "Sync Config",
+            Callback = function()
+                -- Синхронизация через вызов коллбэков с текущими значениями UI
+                uiElements.Enabled.callback(uiElements.Enabled.element:GetState())
+
+                local styleOptions = uiElements.Style.element:GetOptions()
+                for option, selected in pairs(styleOptions) do
+                    if selected then
+                        uiElements.Style.callback(option)
+                        break
+                    end
+                end
+
+                uiElements.Size.callback(uiElements.Size.element:GetValue())
+                uiElements.Gap.callback(uiElements.Gap.element:GetValue())
+                uiElements.Length.callback(uiElements.Length.element:GetValue())
+                uiElements.DotSize.callback(uiElements.DotSize.element:GetValue())
+                uiElements.DotInnerSize.callback(uiElements.DotInnerSize.element:GetValue())
+                uiElements.DotOutlineThickness.callback(uiElements.DotOutlineThickness.element:GetValue())
+                uiElements.ExpandDistance.callback(uiElements.ExpandDistance.element:GetValue())
+                uiElements.ExpandDuration.callback(uiElements.ExpandDuration.element:GetValue())
+                uiElements.ShrinkDuration.callback(uiElements.ShrinkDuration.element:GetValue())
+                uiElements.GradientColor.callback(uiElements.GradientColor.element:GetValue())
+
+                uiElements.HeadshotSoundEnabled.callback(uiElements.HeadshotSoundEnabled.element:GetState())
+
+                local soundOptions = uiElements.SelectedSound.element:GetOptions()
+                for option, selected in pairs(soundOptions) do
+                    if selected then
+                        uiElements.SelectedSound.callback(option)
+                        break
+                    end
+                end
+
+                notify("Crosshair", "Settings synchronized with UI!", true)
+            end
+        }, "SyncConfig")
     end)
 end
 
