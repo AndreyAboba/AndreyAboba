@@ -702,8 +702,7 @@ local function SetupUI(UI)
             end
         }, "FastAttackEnabled")
     end
-    if UI.Tabs.Config then
-        local localconfigSection = UI.Tabs.Config:Section({ Name = "LocalPlayerSettings", Side = "Right" })
+    local localconfigSection = UI.Tabs.Config:Section({ Name = "Local Player Sync", Side = "Right" })
         localconfigSection:Header({ Name = "Local Player Settings" })
         localconfigSection:Button({
             Name = "Sync Config",
@@ -808,7 +807,6 @@ local function SetupUI(UI)
             end
         })
     end
-end
 
 -- Инициализация модуля
 function LocalPlayer.Init(UI, core, notifyFunc)
