@@ -777,53 +777,31 @@ function HSCR.Init(UI, Core, notify)
         end
 
         print("Adding Dropdown: Sound")
-        local soundDropdown = section:Dropdown({
+        section:Dropdown({
             Name = "Sound",
             Options = soundOptions,
             Default = CrosshairSettings.SelectedSound.Default,
             Callback = function(value)
                 print("Dropdown callback triggered with value:", value)
 
-                -- Проверяем, что возвращает value
+                -- Проверяем, что value — это строка и соответствует одной из опций
                 if value and type(value) == "string" then
-                    CrosshairSettings.SelectedSound.Value = value
-                    -- Находим соответствующий SoundId
+                    local soundFound = false
                     for _, sound in ipairs(CrosshairSettings.SoundData) do
                         if sound.Label == value then
+                            soundFound = true
+                            CrosshairSettings.SelectedSound.Value = value
                             CrosshairSettings.SoundIds[value] = sound.SoundId
                             break
                         end
                     end
-                    print("Selected sound:", value, "SoundId:", CrosshairSettings.SoundIds[value])
+                    if soundFound then
+                        print("Selected sound:", value, "SoundId:", CrosshairSettings.SoundIds[value])
+                    else
+                        warn("Selected sound not found in SoundData:", value)
+                    end
                 else
                     warn("Invalid value from dropdown:", value)
-                end
-
-                -- Попытка вызвать GetOptions на дропдауне (если метод доступен)
-                if soundDropdown.GetOptions then
-                    local options = soundDropdown:GetOptions()
-                    print("Dropdown GetOptions result:", options)
-                    local selectedSound = nil
-                    for option, isSelected in pairs(options) do
-                        if isSelected then
-                            selectedSound = option
-                            break
-                        end
-                    end
-                    if selectedSound then
-                        CrosshairSettings.SelectedSound.Value = selectedSound
-                        for _, sound in ipairs(CrosshairSettings.SoundData) do
-                            if sound.Label == selectedSound then
-                                CrosshairSettings.SoundIds[selectedSound] = sound.SoundId
-                                break
-                            end
-                        end
-                        print("Selected sound from GetOptions:", selectedSound, "SoundId:", CrosshairSettings.SoundIds[selectedSound])
-                    else
-                        warn("No sound selected in dropdown (GetOptions)!")
-                    end
-                else
-                    warn("GetOptions method not available on dropdown")
                 end
             end
         }, "HeadshotSound")
