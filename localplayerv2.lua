@@ -113,7 +113,9 @@ local NoStaminaStatus = {
     Enabled = LocalPlayer.Config.NoStamina.Enabled,
     Connection = nil,
     Key = LocalPlayer.Config.NoStamina.ToggleKey,
-    Path = nil
+    Path = nil,
+    LastComputeTime = 0,
+    ComputeInterval = 0.1 -- Интервал пересчёта пути
 }
 
 -- Вспомогательные функции
@@ -156,18 +158,35 @@ NoStamina.Start = function()
 
     NoStaminaStatus.Path = path
 
-    NoStaminaStatus.Connection = Services.RunService.Heartbeat:Connect(function()
+    NoStaminaStatus.Connection = Services.RunService.Heartbeat:Connect(function(deltaTime)
         if not NoStaminaStatus.Enabled then return end
-        local _, rootPart = getCharacterData()
-        if not rootPart then return end
+        local humanoid, rootPart = getCharacterData()
+        if not humanoid or not rootPart then return end
 
-        -- Имитация работы pathfinding: создаём путь к текущей позиции игрока
+        -- Проверяем интервал пересчёта пути
+        local currentTime = tick()
+        if currentTime - NoStaminaStatus.LastComputeTime < NoStaminaStatus.ComputeInterval then return end
+        NoStaminaStatus.LastComputeTime = currentTime
+
+        -- Определяем недостижимую точку (например, точку на высоте 1000 единиц над игроком)
+        local startPos = rootPart.Position
+        local unreachablePos = startPos + Vector3.new(0, 1000, 0) -- Точка высоко в воздухе
+
+        -- Пытаемся вычислить путь к недостижимой точке
         local success, errorMessage = pcall(function()
-            NoStaminaStatus.Path:ComputeAsync(rootPart.Position, rootPart.Position + Vector3.new(0, 0, 0.1))
+            NoStaminaStatus.Path:ComputeAsync(startPos, unreachablePos)
         end)
 
-        if not success then
-            notify("NoStamina", "Pathfinding simulation failed: " .. (errorMessage or "Unknown error"), true)
+        if success then
+            -- Проверяем статус пути
+            local status = NoStaminaStatus.Path.Status
+            if status == Enum.PathStatus.NoPath then
+                notify("NoStamina", "Pathfinding: No path found (expected, stamina bypass active)", false)
+            else
+                notify("NoStamina", "Pathfinding: Path status: " .. tostring(status), false)
+            end
+        else
+            notify("NoStamina", "Pathfinding failed: " .. (errorMessage or "Unknown error"), true)
         end
     end)
 
@@ -180,6 +199,7 @@ NoStamina.Stop = function()
         NoStaminaStatus.Connection = nil
     end
     NoStaminaStatus.Path = nil
+    NoStaminaStatus.LastComputeTime = 0
     notify("NoStamina", "Stopped", true)
 end
 
@@ -980,7 +1000,7 @@ local function SetupUI(UI)
         }, "FastAttackEnabled")
     end
 
-    -- NoStamina UI (в LocalPlayer, т.е. в UI.Tabs.Main)
+    -- NoStamina UI
     if UI.Sections.NoStamina then
         UI.Sections.NoStamina:Header({ Name = "NoStamina" })
         uiElements.NoStaminaEnabled = UI.Sections.NoStamina:Toggle({
