@@ -751,7 +751,6 @@ function HSCR.Init(UI, Core, notify)
                 uiElements.ExpandDistance.callback(uiElements.ExpandDistance.element:GetValue())
                 uiElements.ExpandDuration.callback(uiElements.ExpandDuration.element:GetValue())
                 uiElements.ShrinkDuration.callback(uiElements.ShrinkDuration.element:GetValue())
-                uiElements.GradientColor.callback(uiElements.GradientColor.element:GetValue())
 
                 uiElements.HeadshotSoundEnabled.callback(uiElements.HeadshotSoundEnabled.element:GetState())
 
