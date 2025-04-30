@@ -1,4 +1,4 @@
--- Модуль LocalPlayer: Timer, Disabler, Speed, HighJump, NoRagdoll, FastAttack, TickSpeed
+-- Модуль LocalPlayer: Timer, Disabler, Speed, TickSpeed, HighJump, NoRagdoll, FastAttack, NoStamina
 local LocalPlayer = {}
 
 -- Кэшированные сервисы и данные
@@ -50,6 +50,11 @@ LocalPlayer.Config = {
     },
     FastAttack = {
         Enabled = false
+    },
+    NoStamina = {
+        Enabled = false,
+        ToggleKey = nil,
+        TargetPosition = nil
     }
 }
 
@@ -105,6 +110,16 @@ local FastAttackStatus = {
     LastCheckTime = 0,
     CheckInterval = 0.1
 }
+local NoStaminaStatus = {
+    Enabled = LocalPlayer.Config.NoStamina.Enabled,
+    Connection = nil,
+    Key = LocalPlayer.Config.NoStamina.ToggleKey,
+    Path = nil,
+    Waypoints = nil,
+    CurrentWaypointIndex = 1,
+    TargetPosition = nil,
+    LastPosition = nil
+}
 
 -- Вспомогательные функции
 local function getCharacterData()
@@ -113,6 +128,90 @@ local function getCharacterData()
     local humanoid = character:FindFirstChild("Humanoid")
     local rootPart = character:FindFirstChild("HumanoidRootPart")
     return humanoid, rootPart
+end
+
+-- Проверка, активно ли UI (например, чат)
+local function isUserInputFocused()
+    return Services.UserInputService:GetFocusedTextBox() ~= nil
+end
+
+-- NoStamina Functions
+local NoStamina = {}
+NoStamina.Start = function()
+    if NoStaminaStatus.Connection then
+        NoStaminaStatus.Connection:Disconnect()
+        NoStaminaStatus.Connection = nil
+    end
+
+    local pathfindingService = Services.PathfindingService
+    NoStaminaStatus.Path = pathfindingService:CreatePath()
+
+    NoStaminaStatus.Connection = Services.RunService.Heartbeat:Connect(function()
+        if not NoStaminaStatus.Enabled then return end
+        local humanoid, rootPart = getCharacterData()
+        if not humanoid or not rootPart then return end
+
+        -- Проверяем, если игрок вручную двигается, отключаем pathfinding
+        if humanoid.MoveDirection.Magnitude > 0 then
+            NoStaminaStatus.Path = pathfindingService:CreatePath()
+            NoStaminaStatus.Waypoints = nil
+            NoStaminaStatus.CurrentWaypointIndex = 1
+            NoStaminaStatus.TargetPosition = nil
+            NoStaminaStatus.LastPosition = rootPart.Position
+            return
+        end
+
+        -- Если есть целевая позиция, создаём путь
+        if NoStaminaStatus.TargetPosition then
+            local success, errorMessage = pcall(function()
+                NoStaminaStatus.Path:ComputeAsync(rootPart.Position, NoStaminaStatus.TargetPosition)
+            end)
+
+            if success and NoStaminaStatus.Path.Status == Enum.PathStatus.Success then
+                NoStaminaStatus.Waypoints = NoStaminaStatus.Path:GetWaypoints()
+                NoStaminaStatus.CurrentWaypointIndex = 1
+            else
+                notify("NoStamina", "Failed to compute path: " .. (errorMessage or "Unknown error"), true)
+                NoStaminaStatus.TargetPosition = nil
+                return
+            end
+        end
+
+        -- Если есть путь, следуем по нему
+        if NoStaminaStatus.Waypoints and NoStaminaStatus.CurrentWaypointIndex <= #NoStaminaStatus.Waypoints then
+            local waypoint = NoStaminaStatus.Waypoints[NoStaminaStatus.CurrentWaypointIndex]
+            local distance = (rootPart.Position - waypoint.Position).Magnitude
+
+            if distance < 3 then
+                NoStaminaStatus.CurrentWaypointIndex = NoStaminaStatus.CurrentWaypointIndex + 1
+            else
+                humanoid:MoveTo(waypoint.Position)
+            end
+        else
+            NoStaminaStatus.TargetPosition = nil
+            NoStaminaStatus.Waypoints = nil
+            NoStaminaStatus.CurrentWaypointIndex = 1
+        end
+    end)
+
+    notify("NoStamina", "Started", true)
+end
+
+NoStamina.Stop = function()
+    if NoStaminaStatus.Connection then
+        NoStaminaStatus.Connection:Disconnect()
+        NoStaminaStatus.Connection = nil
+    end
+    NoStaminaStatus.Path = nil
+    NoStaminaStatus.Waypoints = nil
+    NoStaminaStatus.CurrentWaypointIndex = 1
+    NoStaminaStatus.TargetPosition = nil
+    notify("NoStamina", "Stopped", true)
+end
+
+NoStamina.SetTarget = function(position)
+    NoStaminaStatus.TargetPosition = position
+    notify("NoStamina", "Target position set", true)
 end
 
 -- TickSpeed Functions
@@ -484,6 +583,7 @@ HighJump.Trigger = function()
         notify("HighJump", humanoid:GetState() ~= Enum.HumanoidStateType.Running and "You must be on the ground to high jump!" or "HighJump is on cooldown!", true)
         return
     end
+    -- Устанавливаем JumpHeight только на момент прыжка
     humanoid.JumpHeight = HighJumpStatus.JumpPower
     humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
     if HighJumpStatus.Method == "Velocity" then
@@ -495,6 +595,8 @@ HighJump.Trigger = function()
         rootPart.CFrame = newCFrame
     end
     HighJumpStatus.LastJumpTime = currentTime
+    -- Сразу восстанавливаем стандартную высоту прыжка
+    humanoid.JumpHeight = LocalPlayer.Config.HighJump.DefaultJumpHeight
     notify("HighJump", "Performed HighJump with method: " .. HighJumpStatus.Method, true)
 end
 
@@ -614,6 +716,7 @@ local function SetupUI(UI)
             Callback = function(value)
                 TimerStatus.Key = value
                 LocalPlayer.Config.Timer.ToggleKey = value
+                if isUserInputFocused() then return end
                 if TimerStatus.Enabled then
                     if TimerStatus.Running then Timer.Stop() else Timer.Start() end
                 else
@@ -641,6 +744,7 @@ local function SetupUI(UI)
             Callback = function(value)
                 DisablerStatus.Key = value
                 LocalPlayer.Config.Disabler.ToggleKey = value
+                if isUserInputFocused() then return end
                 if DisablerStatus.Enabled then
                     if DisablerStatus.Running then Disabler.Stop() else Disabler.Start() end
                 else
@@ -750,6 +854,7 @@ local function SetupUI(UI)
             Callback = function(value)
                 SpeedStatus.Key = value
                 LocalPlayer.Config.Speed.ToggleKey = value
+                if isUserInputFocused() then return end
                 if SpeedStatus.Enabled then
                     if SpeedStatus.Running then Speed.Stop() else Speed.Start() end
                 else
@@ -758,7 +863,7 @@ local function SetupUI(UI)
             end
         }, "SpeedKey")
 
-        -- TickSpeed UI
+        -- TickSpeed UI с отдельным заголовком
         UI.Sections.Speed:Header({ Name = "TickSpeed" })
         uiElements.TickSpeedEnabled = UI.Sections.Speed:Toggle({
             Name = "Enabled",
@@ -819,6 +924,7 @@ local function SetupUI(UI)
             Callback = function(value)
                 TickSpeedStatus.Key = value
                 LocalPlayer.Config.TickSpeed.ToggleKey = value
+                if isUserInputFocused() then return end
                 if TickSpeedStatus.Enabled then
                     if TickSpeedStatus.Running then TickSpeed.Stop() else TickSpeed.Start() end
                 else
@@ -869,6 +975,7 @@ local function SetupUI(UI)
             Callback = function(value)
                 HighJumpStatus.Key = value
                 LocalPlayer.Config.HighJump.JumpKey = value
+                if isUserInputFocused() then return end
                 HighJump.Trigger()
             end
         }, "HighJumpKey")
@@ -900,6 +1007,45 @@ local function SetupUI(UI)
                 if value then FastAttack.Start() else FastAttack.Stop() end
             end
         }, "FastAttackEnabled")
+    end
+
+    -- NoStamina UI
+    if UI.Sections.NoStamina then
+        UI.Sections.NoStamina:Header({ Name = "NoStamina" })
+        uiElements.NoStaminaEnabled = UI.Sections.NoStamina:Toggle({
+            Name = "Enabled",
+            Default = LocalPlayer.Config.NoStamina.Enabled,
+            Callback = function(value)
+                NoStaminaStatus.Enabled = value
+                LocalPlayer.Config.NoStamina.Enabled = value
+                if value then NoStamina.Start() else NoStamina.Stop() end
+            end
+        }, "NoStaminaEnabled")
+        uiElements.NoStaminaKey = UI.Sections.NoStamina:Keybind({
+            Name = "Toggle Key",
+            Default = LocalPlayer.Config.NoStamina.ToggleKey,
+            Callback = function(value)
+                NoStaminaStatus.Key = value
+                LocalPlayer.Config.NoStamina.ToggleKey = value
+                if isUserInputFocused() then return end
+                if NoStaminaStatus.Enabled then
+                    if NoStaminaStatus.TargetPosition then
+                        NoStaminaStatus.TargetPosition = nil
+                        notify("NoStamina", "Pathfinding stopped", true)
+                    else
+                        local humanoid, rootPart = getCharacterData()
+                        if rootPart then
+                            -- Устанавливаем цель на 50 единиц впереди по направлению взгляда
+                            local lookDirection = rootPart.CFrame.LookVector
+                            local targetPos = rootPart.Position + (lookDirection * 50)
+                            NoStamina.SetTarget(targetPos)
+                        end
+                    end
+                else
+                    notify("NoStamina", "Enable NoStamina to use keybind.", true)
+                end
+            end
+        }, "NoStaminaKey")
     end
 
     -- LocalPlayer Sync UI
@@ -954,6 +1100,9 @@ local function SetupUI(UI)
             LocalPlayer.Config.NoRagdoll.Enabled = uiElements.NoRagdollEnabled:GetState()
 
             LocalPlayer.Config.FastAttack.Enabled = uiElements.FastAttackEnabled:GetState()
+
+            LocalPlayer.Config.NoStamina.Enabled = uiElements.NoStaminaEnabled:GetState()
+            LocalPlayer.Config.NoStamina.ToggleKey = uiElements.NoStaminaKey:GetBind()
 
             -- Синхронизируем внутренние состояния с обновлённым LocalPlayer.Config
             TimerStatus.Enabled = LocalPlayer.Config.Timer.Enabled
@@ -1023,6 +1172,14 @@ local function SetupUI(UI)
                 FastAttack.Stop()
             end
 
+            NoStaminaStatus.Enabled = LocalPlayer.Config.NoStamina.Enabled
+            NoStaminaStatus.Key = LocalPlayer.Config.NoStamina.ToggleKey
+            if NoStaminaStatus.Enabled then
+                if not NoStaminaStatus.Connection then NoStamina.Start() end
+            else
+                if NoStaminaStatus.Connection then NoStamina.Stop() end
+            end
+
             notify("LocalPlayer", "Config synchronized!", true)
         end
     })
@@ -1044,6 +1201,9 @@ function LocalPlayer.Init(UI, core, notifyFunc)
         end
         if TickSpeedStatus.Enabled then
             TickSpeed.Start()
+        end
+        if NoStaminaStatus.Enabled then
+            NoStamina.Start()
         end
         if not HighJumpStatus.Enabled then
             HighJump.RestoreJumpHeight()
