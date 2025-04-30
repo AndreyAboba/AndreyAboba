@@ -138,8 +138,23 @@ NoStamina.Start = function()
         NoStaminaStatus.Connection = nil
     end
 
+    -- Проверяем наличие PathfindingService
+    if not Services.PathfindingService then
+        notify("NoStamina", "PathfindingService is not available.", true)
+        return
+    end
+
     local pathfindingService = Services.PathfindingService
-    NoStaminaStatus.Path = pathfindingService:CreatePath()
+    local success, path = pcall(function()
+        return pathfindingService:CreatePath()
+    end)
+
+    if not success or not path then
+        notify("NoStamina", "Failed to create path: " .. (path or "Unknown error"), true)
+        return
+    end
+
+    NoStaminaStatus.Path = path
 
     NoStaminaStatus.Connection = Services.RunService.Heartbeat:Connect(function()
         if not NoStaminaStatus.Enabled then return end
@@ -818,10 +833,7 @@ local function SetupUI(UI)
         }, "SpeedKey")
     end
 
-    -- TickSpeed UI (отдельная секция)
-    if UI.Sections.TickSpeed then
-        UI.Sections.TickSpeed = UI.Tabs.LocalPlayer:Section({ Name = "TickSpeed", Side = "Left" })
-    end
+    -- TickSpeed UI
     if UI.Sections.TickSpeed then
         UI.Sections.TickSpeed:Header({ Name = "TickSpeed" })
         uiElements.TickSpeedEnabled = UI.Sections.TickSpeed:Toggle({
