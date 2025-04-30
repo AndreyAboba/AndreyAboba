@@ -27,7 +27,10 @@ LocalPlayer.Config = {
         JumpPower = 50,
         JumpInterval = 0.3,
         PulseTPDist = 5,
-        Pulse artyku: {
+        PulseTPDelay = 0.2,
+        ToggleKey = nil
+    },
+    TickSpeed = {
         Enabled = false,
         HighSpeedMultiplier = 1.4,
         NormalSpeedMultiplier = 0.1,
@@ -140,17 +143,21 @@ NoStamina.Start = function()
 
     NoStaminaStatus.Connection = Services.RunService.Heartbeat:Connect(function()
         if not NoStaminaStatus.Enabled then return end
-        local _, rootPart = getCharacterData()
-        if not rootPart then return end
+        local humanoid, rootPart = getCharacterData()
+        if not humanoid or not rootPart then return end
 
-        -- Вызываем ComputeAsync, чтобы активировать pathfinding, но не используем результат
-        -- Целевая точка — текущая позиция игрока, чтобы не инициировать движение
-        pcall(function()
-            NoStaminaStatus.Path:ComputeAsync(rootPart.Position, rootPart.Position + Vector3.new(0, 0, 0.1))
+        -- Выполняем ComputeAsync, чтобы сервер "думал", что pathfinding активен, но не двигаем игрока
+        local dummyPosition = rootPart.Position + Vector3.new(10, 0, 10) -- Произвольная точка
+        local success, errorMessage = pcall(function()
+            NoStaminaStatus.Path:ComputeAsync(rootPart.Position, dummyPosition)
         end)
+
+        if not success then
+            notify("NoStamina", "Pathfinding computation failed: " .. (errorMessage or "Unknown error"), true)
+        end
     end)
 
-    notify("NoStamina", "Started (Pathfinding active to bypass stamina)", true)
+    notify("NoStamina", "Started (Stamina bypass active)", true)
 end
 
 NoStamina.Stop = function()
@@ -429,7 +436,7 @@ end
 
 Speed.UpdateJumps = function(humanoid, rootPart, currentTime)
     if SpeedStatus.AutoJump and currentTime - SpeedStatus.LastJumpTime >= SpeedStatus.JumpInterval then
-        if humanoid:GetState() ~= Enum.HumanoidStateType.Jumping and humanoid:GetState() != Enum.HumanoidStateType.Freefall then
+        if humanoid:GetState() ~= Enum.HumanoidStateType.Jumping and humanoid:GetState() ~= Enum.HumanoidStateType.Freefall then
             rootPart.Velocity = Vector3.new(rootPart.Velocity.X, SpeedStatus.JumpPower, rootPart.Velocity.Z)
             humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
             SpeedStatus.LastJumpTime = currentTime
@@ -437,7 +444,7 @@ Speed.UpdateJumps = function(humanoid, rootPart, currentTime)
     end
     if SpeedStatus.FakeJump and currentTime - SpeedStatus.LastJumpTime >= SpeedStatus.JumpInterval then
         if humanoid.Health > 0 then
-            local newCFrame = rootPart.CFrame + Vector3.new(0, SpeedStatus.JumpPower / 20, 0)
+            local newCFrame = rootPart.CFrame + Vector3.new(כם, SpeedStatus.JumpPower / 20, 0)
             rootPart.CFrame = newCFrame
             SpeedStatus.LastJumpTime = currentTime
         end
@@ -957,7 +964,10 @@ local function SetupUI(UI)
         }, "FastAttackEnabled")
     end
 
-    -- NoStamina UI
+    -- NoStamina UI (Добавляем новую секцию, если её нет)
+    if not UI.Sections.NoStamina then
+        UI.Sections.NoStamina = UI.Tabs.Main:Section({ Name = "NoStamina", Side = "Left" })
+    end
     if UI.Sections.NoStamina then
         UI.Sections.NoStamina:Header({ Name = "NoStamina" })
         uiElements.NoStaminaEnabled = UI.Sections.NoStamina:Toggle({
@@ -976,14 +986,17 @@ local function SetupUI(UI)
                 NoStaminaStatus.Key = value
                 LocalPlayer.Config.NoStamina.ToggleKey = value
                 if isUserInputFocused() then return end
-                NoStaminaStatus.Enabled = not NoStaminaStatus.Enabled
-                LocalPlayer.Config.NoStamina.Enabled = NoStaminaStatus.Enabled
                 if NoStaminaStatus.Enabled then
-                    NoStamina.Start()
-                else
+                    NoStaminaStatus.Enabled = false
+                    LocalPlayer.Config.NoStamina.Enabled = false
                     NoStamina.Stop()
+                    uiElements.NoStaminaEnabled:SetState(false)
+                else
+                    NoStaminaStatus.Enabled = true
+                    LocalPlayer.Config.NoStamina.Enabled = true
+                    NoStamina.Start()
+                    uiElements.NoStaminaEnabled:SetState(true)
                 end
-                notify("NoStamina", NoStaminaStatus.Enabled and "Enabled" or "Disabled", true)
             end
         }, "NoStaminaKey")
     end
