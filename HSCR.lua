@@ -33,7 +33,7 @@ local HeadshotSound = {
         "TF2 HS", "CriminalityHS", "neverlose", "bameware", "fatality",
         "csgoHS", "PopHS", "BubblePop", "NiggaHS", "IdkHS"
     },
-    SoundIds = {}, -- Будет заполняться из dropdown
+    SoundIds = {},
     OriginalSounds = {},
 }
 
@@ -374,39 +374,45 @@ function HSCR.Init(UI, Core, notify)
 
     -- Инициализация HeadshotSound
     local function initiateHeadshotSound(u27)
-        HeadshotSound.OriginalSounds.headshotSound = "rbxassetid://115982072912004" -- Оригинальный звук для isKill
-        HeadshotSound.OriginalSounds.headshotNormalSound = "rbxassetid://135358980250767" -- Оригинальный звук для хэдшота
-        HeadshotSound.OriginalSounds.hitSound = "rbxassetid://100758444127105" -- Оригинальный звук для попадания
+        HeadshotSound.OriginalSounds.headshotSound = "rbxassetid://115982072912004"
+        HeadshotSound.OriginalSounds.headshotNormalSound = "rbxassetid://135358980250767"
+        HeadshotSound.OriginalSounds.hitSound = "rbxassetid://100758444127105"
 
         local lastHitTime
         u27.hitmarker = function(isHeadshot, isKill)
-            local u7 = require(game.ReplicatedStorage.Modules.Game.UI.RadialModule)
-            local radial = u7.new(crosshairFrame)
-            radial:SetProgressColor(Core.GlobalConfigs.GradientColors["Gradient Color 2"])
+            -- Переносим действия с Instance в главный поток
+            task.defer(function()
+                local u7 = require(game.ReplicatedStorage.Modules.Game.UI.RadialModule)
+                local radial = u7.new(crosshairFrame)
+                radial:SetProgressColor(Core.GlobalConfigs.GradientColors["Gradient Color 2"])
 
-            if isKill then
-                headshotSound.SoundId = HeadshotSound.Enabled and HeadshotSound.SoundIds[HeadshotSound.Settings.SelectedSound.Value] or HeadshotSound.OriginalSounds.headshotSound
-                headshotSound:Play()
-            elseif isHeadshot then
-                headshotNormalSound.SoundId = HeadshotSound.Enabled and HeadshotSound.SoundIds[HeadshotSound.Settings.SelectedSound.Value] or HeadshotSound.OriginalSounds.headshotNormalSound
-                headshotNormalSound:Play()
-            else
-                hitSound.SoundId = HeadshotSound.OriginalSounds.hitSound
-                hitSound:Play()
-            end
-
-            local hitTime = os.clock()
-            lastHitTime = hitTime
-            task.delay(0.2, function()
-                if lastHitTime == hitTime then
-                    radial:SetProgressColor(Core.GlobalConfigs.GradientColors["Gradient Color 1"])
+                if isKill then
+                    headshotSound.SoundId = HeadshotSound.Enabled and HeadshotSound.SoundIds[HeadshotSound.Settings.SelectedSound.Value] or HeadshotSound.OriginalSounds.headshotSound
+                    headshotSound:Play()
+                elseif isHeadshot then
+                    headshotNormalSound.SoundId = HeadshotSound.Enabled and HeadshotSound.SoundIds[HeadshotSound.Settings.SelectedSound.Value] or HeadshotSound.OriginalSounds.headshotNormalSound
+                    headshotNormalSound:Play()
+                else
+                    hitSound.SoundId = HeadshotSound.OriginalSounds.hitSound
+                    hitSound:Play()
                 end
+
+                local hitTime = os.clock()
+                lastHitTime = hitTime
+                task.delay(0.2, function()
+                    if lastHitTime == hitTime then
+                        radial:SetProgressColor(Core.GlobalConfigs.GradientColors["Gradient Color 1"])
+                    end
+                end)
             end)
         end
 
         local u6 = require(game.ReplicatedStorage.Modules.Core.Net)
         u6.hook("hit_confirmed", function(isHeadshot, isKill)
-            u27.hitmarker(isHeadshot, isKill)
+            -- Убедимся, что hitmarker вызывается в главном потоке
+            task.defer(function()
+                u27.hitmarker(isHeadshot, isKill)
+            end)
         end)
     end
 
@@ -508,7 +514,7 @@ function HSCR.Init(UI, Core, notify)
         },
         Callback = function(value, selectedIndex)
             HeadshotSound.Settings.SelectedSound.Value = value
-            HeadshotSound.SoundIds[value] = HeadshotSound.SoundIds[value] or HeadshotSound.SoundOptions[selectedIndex]
+            HeadshotSound.SoundIds[value] = HeadshotSound.SoundOptions[selectedIndex]
             notify("Headshot Sound", "Selected: " .. value)
         end
     }, "HeadshotSound")
