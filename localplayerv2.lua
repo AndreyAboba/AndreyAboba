@@ -1,4 +1,4 @@
--- Модуль LocalPlayer: Timer, Disabler, Speed, HighJump, NoRagdoll, FastAttack
+-- Модуль LocalPlayer: Timer, Disabler, Speed, HighJump, NoRagdoll, FastAttack, TickSpeed
 local LocalPlayer = {}
 
 -- Кэшированные сервисы и данные
@@ -28,6 +28,14 @@ LocalPlayer.Config = {
         JumpInterval = 0.3,
         PulseTPDist = 5,
         PulseTPDelay = 0.2,
+        ToggleKey = nil
+    },
+    TickSpeed = {
+        Enabled = false,
+        HighSpeedMultiplier = 1.4,
+        NormalSpeedMultiplier = 0.1,
+        OnDuration = 0.1,
+        OffDuration = 0.22,
         ToggleKey = nil
     },
     HighJump = {
@@ -65,6 +73,18 @@ local SpeedStatus = {
     PulseTPFrequency = LocalPlayer.Config.Speed.PulseTPDelay,
     LastPulseTPTime = 0
 }
+local TickSpeedStatus = {
+    Running = false,
+    Connection = nil,
+    Key = LocalPlayer.Config.TickSpeed.ToggleKey,
+    Enabled = LocalPlayer.Config.TickSpeed.Enabled,
+    HighSpeedMultiplier = LocalPlayer.Config.TickSpeed.HighSpeedMultiplier,
+    NormalSpeedMultiplier = LocalPlayer.Config.TickSpeed.NormalSpeedMultiplier,
+    OnDuration = LocalPlayer.Config.TickSpeed.OnDuration,
+    OffDuration = LocalPlayer.Config.TickSpeed.OffDuration,
+    Timer = 0,
+    LastServerPosition = nil
+}
 local HighJumpStatus = {
     Enabled = LocalPlayer.Config.HighJump.Enabled,
     Method = LocalPlayer.Config.HighJump.Method,
@@ -93,6 +113,116 @@ local function getCharacterData()
     local humanoid = character:FindFirstChild("Humanoid")
     local rootPart = character:FindFirstChild("HumanoidRootPart")
     return humanoid, rootPart
+end
+
+-- TickSpeed Functions
+local TickSpeed = {}
+TickSpeed.Start = function()
+    if TickSpeedStatus.Running then return end
+    local _, rootPart = getCharacterData()
+    if not rootPart then return end
+
+    -- Устанавливаем приоритет клиента
+    local success, err = pcall(function()
+        setsimulationradius(10000)
+    end)
+    if not success then
+        warn("TickSpeed: setsimulationradius failed: " .. tostring(err))
+        notify("TickSpeed", "Failed to set simulation radius.", true)
+        return
+    end
+
+    TickSpeedStatus.Running = true
+    TickSpeedStatus.LastServerPosition = rootPart.Position
+
+    TickSpeedStatus.Connection = Services.RunService.Heartbeat:Connect(function(deltaTime)
+        if not TickSpeedStatus.Enabled or not TickSpeedStatus.Running then return end
+        local humanoid, rootPart = getCharacterData()
+        if not humanoid or not rootPart then return end
+
+        -- Обновляем таймер
+        local cycleTime = TickSpeedStatus.OnDuration + TickSpeedStatus.OffDuration
+        TickSpeedStatus.Timer = (TickSpeedStatus.Timer + deltaTime) % cycleTime
+
+        -- Определяем текущий множитель скорости
+        local currentMultiplier = (TickSpeedStatus.Timer < TickSpeedStatus.OnDuration) and TickSpeedStatus.HighSpeedMultiplier or TickSpeedStatus.NormalSpeedMultiplier
+
+        -- Получаем направление движения
+        local moveDirection = humanoid.MoveDirection
+        if moveDirection.Magnitude > 0 then
+            moveDirection = moveDirection.Unit
+
+            -- Вычисляем смещение
+            local speed = 16 * currentMultiplier -- 16 — стандартная скорость
+            local offset = moveDirection * speed * deltaTime
+
+            -- Применяем новую позицию
+            local currentCFrame = rootPart.CFrame
+            rootPart.CFrame = currentCFrame + offset
+
+            -- Ограничиваем отклонение от серверной позиции
+            local currentPos = rootPart.Position
+            local deviation = (currentPos - TickSpeedStatus.LastServerPosition).Magnitude
+            if deviation > 5 then
+                local correction = (currentPos - TickSpeedStatus.LastServerPosition).Unit * (deviation - 5)
+                rootPart.CFrame = CFrame.new(currentPos - correction)
+            end
+        end
+    end)
+
+    -- Отслеживание сброса позиции сервером
+    TickSpeedStatus.ServerConnection = Services.RunService.Stepped:Connect(function()
+        local _, rootPart = getCharacterData()
+        if not rootPart then return end
+        local serverPos = rootPart.Position
+        if (serverPos - TickSpeedStatus.LastServerPosition).Magnitude > 1 then
+            TickSpeedStatus.LastServerPosition = serverPos
+        end
+    end)
+
+    notify("TickSpeed", "Started", true)
+end
+
+TickSpeed.Stop = function()
+    if TickSpeedStatus.Connection then
+        TickSpeedStatus.Connection:Disconnect()
+        TickSpeedStatus.Connection = nil
+    end
+    if TickSpeedStatus.ServerConnection then
+        TickSpeedStatus.ServerConnection:Disconnect()
+        TickSpeedStatus.ServerConnection = nil
+    end
+    TickSpeedStatus.Running = false
+    TickSpeedStatus.Timer = 0
+    local _, rootPart = getCharacterData()
+    if rootPart and TickSpeedStatus.LastServerPosition then
+        rootPart.CFrame = CFrame.new(TickSpeedStatus.LastServerPosition)
+    end
+    notify("TickSpeed", "Stopped", true)
+end
+
+TickSpeed.SetHighSpeedMultiplier = function(value)
+    TickSpeedStatus.HighSpeedMultiplier = value
+    LocalPlayer.Config.TickSpeed.HighSpeedMultiplier = value
+    notify("TickSpeed", "HighSpeedMultiplier set to: " .. value, false)
+end
+
+TickSpeed.SetNormalSpeedMultiplier = function(value)
+    TickSpeedStatus.NormalSpeedMultiplier = value
+    LocalPlayer.Config.TickSpeed.NormalSpeedMultiplier = value
+    notify("TickSpeed", "NormalSpeedMultiplier set to: " .. value, false)
+end
+
+TickSpeed.SetOnDuration = function(value)
+    TickSpeedStatus.OnDuration = value
+    LocalPlayer.Config.TickSpeed.OnDuration = value
+    notify("TickSpeed", "OnDuration set to: " .. value, false)
+end
+
+TickSpeed.SetOffDuration = function(value)
+    TickSpeedStatus.OffDuration = value
+    LocalPlayer.Config.TickSpeed.OffDuration = value
+    notify("TickSpeed", "OffDuration set to: " .. value, false)
 end
 
 -- FastAttack Functions
@@ -627,6 +757,75 @@ local function SetupUI(UI)
                 end
             end
         }, "SpeedKey")
+
+        -- TickSpeed UI
+        UI.Sections.Speed:Header({ Name = "TickSpeed" })
+        uiElements.TickSpeedEnabled = UI.Sections.Speed:Toggle({
+            Name = "Enabled",
+            Default = LocalPlayer.Config.TickSpeed.Enabled,
+            Callback = function(value)
+                TickSpeedStatus.Enabled = value
+                LocalPlayer.Config.TickSpeed.Enabled = value
+                if value then TickSpeed.Start() else TickSpeed.Stop() end
+            end
+        }, "TickSpeedEnabled")
+        uiElements.TickSpeedHighMultiplier = UI.Sections.Speed:Slider({
+            Name = "High Speed Multiplier",
+            Minimum = 1,
+            Maximum = 3,
+            Default = LocalPlayer.Config.TickSpeed.HighSpeedMultiplier,
+            Precision = 1,
+            Callback = function(value)
+                TickSpeed.SetHighSpeedMultiplier(value)
+                LocalPlayer.Config.TickSpeed.HighSpeedMultiplier = value
+            end
+        }, "TickSpeedHighMultiplier")
+        uiElements.TickSpeedNormalMultiplier = UI.Sections.Speed:Slider({
+            Name = "Normal Speed Multiplier",
+            Minimum = 0.1,
+            Maximum = 1,
+            Default = LocalPlayer.Config.TickSpeed.NormalSpeedMultiplier,
+            Precision = 1,
+            Callback = function(value)
+                TickSpeed.SetNormalSpeedMultiplier(value)
+                LocalPlayer.Config.TickSpeed.NormalSpeedMultiplier = value
+            end
+        }, "TickSpeedNormalMultiplier")
+        uiElements.TickSpeedOnDuration = UI.Sections.Speed:Slider({
+            Name = "On Duration",
+            Minimum = 0.05,
+            Maximum = 0.5,
+            Default = LocalPlayer.Config.TickSpeed.OnDuration,
+            Precision = 2,
+            Callback = function(value)
+                TickSpeed.SetOnDuration(value)
+                LocalPlayer.Config.TickSpeed.OnDuration = value
+            end
+        }, "TickSpeedOnDuration")
+        uiElements.TickSpeedOffDuration = UI.Sections.Speed:Slider({
+            Name = "Off Duration",
+            Minimum = 0.1,
+            Maximum = 0.5,
+            Default = LocalPlayer.Config.TickSpeed.OffDuration,
+            Precision = 2,
+            Callback = function(value)
+                TickSpeed.SetOffDuration(value)
+                LocalPlayer.Config.TickSpeed.OffDuration = value
+            end
+        }, "TickSpeedOffDuration")
+        uiElements.TickSpeedKey = UI.Sections.Speed:Keybind({
+            Name = "Toggle Key",
+            Default = LocalPlayer.Config.TickSpeed.ToggleKey,
+            Callback = function(value)
+                TickSpeedStatus.Key = value
+                LocalPlayer.Config.TickSpeed.ToggleKey = value
+                if TickSpeedStatus.Enabled then
+                    if TickSpeedStatus.Running then TickSpeed.Stop() else TickSpeed.Start() end
+                else
+                    notify("TickSpeed", "Enable TickSpeed to use keybind.", true)
+                end
+            end
+        }, "TickSpeedKey")
     end
 
     -- HighJump UI
@@ -702,111 +901,132 @@ local function SetupUI(UI)
             end
         }, "FastAttackEnabled")
     end
+
+    -- LocalPlayer Sync UI
     local localconfigSection = UI.Tabs.Config:Section({ Name = "Local Player Sync", Side = "Right" })
-        localconfigSection:Header({ Name = "LocalPlayer Settings Sync" })
-        localconfigSection:Button({
-            Name = "Sync Config",
-            Callback = function()
-                -- Обновляем LocalPlayer.Config на основе текущих значений UI
-                LocalPlayer.Config.Timer.Enabled = uiElements.TimerEnabled:GetState()
-                LocalPlayer.Config.Timer.Speed = uiElements.TimerSpeed:GetValue()
-                LocalPlayer.Config.Timer.ToggleKey = uiElements.TimerKey:GetBind()
+    localconfigSection:Header({ Name = "LocalPlayer Settings Sync" })
+    localconfigSection:Button({
+        Name = "Sync Config",
+        Callback = function()
+            -- Обновляем LocalPlayer.Config на основе текущих значений UI
+            LocalPlayer.Config.Timer.Enabled = uiElements.TimerEnabled:GetState()
+            LocalPlayer.Config.Timer.Speed = uiElements.TimerSpeed:GetValue()
+            LocalPlayer.Config.Timer.ToggleKey = uiElements.TimerKey:GetBind()
 
-                LocalPlayer.Config.Disabler.Enabled = uiElements.DisablerEnabled:GetState()
-                LocalPlayer.Config.Disabler.ToggleKey = uiElements.DisablerKey:GetBind()
+            LocalPlayer.Config.Disabler.Enabled = uiElements.DisablerEnabled:GetState()
+            LocalPlayer.Config.Disabler.ToggleKey = uiElements.DisablerKey:GetBind()
 
-                LocalPlayer.Config.Speed.Enabled = uiElements.SpeedEnabled:GetState()
-                LocalPlayer.Config.Speed.AutoJump = uiElements.SpeedAutoJump:GetState()
-                LocalPlayer.Config.Speed.FakeJump = uiElements.SpeedFakeJump:GetState()
-                local speedMethodOptions = uiElements.SpeedMethod:GetOptions()
-                for option, selected in pairs(speedMethodOptions) do
-                    if selected then
-                        LocalPlayer.Config.Speed.Method = option
-                        break
-                    end
+            LocalPlayer.Config.Speed.Enabled = uiElements.SpeedEnabled:GetState()
+            LocalPlayer.Config.Speed.AutoJump = uiElements.SpeedAutoJump:GetState()
+            LocalPlayer.Config.Speed.FakeJump = uiElements.SpeedFakeJump:GetState()
+            local speedMethodOptions = uiElements.SpeedMethod:GetOptions()
+            for option, selected in pairs(speedMethodOptions) do
+                if selected then
+                    LocalPlayer.Config.Speed.Method = option
+                    break
                 end
-                LocalPlayer.Config.Speed.Speed = uiElements.Speed:GetValue()
-                LocalPlayer.Config.Speed.JumpPower = uiElements.SpeedJumpPower:GetValue()
-                LocalPlayer.Config.Speed.JumpInterval = uiElements.SpeedJumpInterval:GetValue()
-                LocalPlayer.Config.Speed.PulseTPDist = uiElements.SpeedPulseTPDistance:GetValue()
-                LocalPlayer.Config.Speed.PulseTPDelay = uiElements.SpeedPulseTPFrequency:GetValue()
-                LocalPlayer.Config.Speed.ToggleKey = uiElements.SpeedKey:GetBind()
-
-                LocalPlayer.Config.HighJump.Enabled = uiElements.HighJumpEnabled:GetState()
-                local highJumpMethodOptions = uiElements.HighJumpMethod:GetOptions()
-                for option, selected in pairs(highJumpMethodOptions) do
-                    if selected then
-                        LocalPlayer.Config.HighJump.Method = option
-                        break
-                    end
-                end
-                LocalPlayer.Config.HighJump.JumpPower = uiElements.HighJumpPower:GetValue()
-                LocalPlayer.Config.HighJump.JumpKey = uiElements.HighJumpKey:GetBind()
-
-                LocalPlayer.Config.NoRagdoll.Enabled = uiElements.NoRagdollEnabled:GetState()
-
-                LocalPlayer.Config.FastAttack.Enabled = uiElements.FastAttackEnabled:GetState()
-
-                -- Синхронизируем внутренние состояния с обновлённым LocalPlayer.Config
-                TimerStatus.Enabled = LocalPlayer.Config.Timer.Enabled
-                TimerStatus.Speed = LocalPlayer.Config.Timer.Speed
-                TimerStatus.Key = LocalPlayer.Config.Timer.ToggleKey
-                if TimerStatus.Enabled then
-                    if not TimerStatus.Running then Timer.Start() end
-                else
-                    if TimerStatus.Running then Timer.Stop() end
-                end
-
-                DisablerStatus.Enabled = LocalPlayer.Config.Disabler.Enabled
-                DisablerStatus.Key = LocalPlayer.Config.Disabler.ToggleKey
-                if DisablerStatus.Enabled then
-                    if not DisablerStatus.Running then Disabler.Start() end
-                else
-                    if DisablerStatus.Running then Disabler.Stop() end
-                end
-
-                SpeedStatus.Enabled = LocalPlayer.Config.Speed.Enabled
-                SpeedStatus.AutoJump = LocalPlayer.Config.Speed.AutoJump
-                SpeedStatus.FakeJump = LocalPlayer.Config.Speed.FakeJump
-                SpeedStatus.Method = LocalPlayer.Config.Speed.Method
-                SpeedStatus.Speed = LocalPlayer.Config.Speed.Speed
-                SpeedStatus.JumpPower = LocalPlayer.Config.Speed.JumpPower
-                SpeedStatus.JumpInterval = LocalPlayer.Config.Speed.JumpInterval
-                SpeedStatus.PulseTPDistance = LocalPlayer.Config.Speed.PulseTPDist
-                SpeedStatus.PulseTPFrequency = LocalPlayer.Config.Speed.PulseTPDelay
-                SpeedStatus.Key = LocalPlayer.Config.Speed.ToggleKey
-                if SpeedStatus.Enabled then
-                    if not SpeedStatus.Running then Speed.Start() end
-                else
-                    if SpeedStatus.Running then Speed.Stop() end
-                end
-
-                HighJumpStatus.Enabled = LocalPlayer.Config.HighJump.Enabled
-                HighJumpStatus.Method = LocalPlayer.Config.HighJump.Method
-                HighJumpStatus.JumpPower = LocalPlayer.Config.HighJump.JumpPower
-                HighJumpStatus.Key = LocalPlayer.Config.HighJump.JumpKey
-                if not HighJumpStatus.Enabled then
-                    HighJump.RestoreJumpHeight()
-                end
-
-                NoRagdollStatus.Enabled = LocalPlayer.Config.NoRagdoll.Enabled
-                if NoRagdollStatus.Enabled then
-                    NoRagdoll.Start(LocalPlayerObj.Character)
-                else
-                    NoRagdoll.Stop()
-                end
-
-                FastAttackStatus.Enabled = LocalPlayer.Config.FastAttack.Enabled
-                if FastAttackStatus.Enabled then
-                    FastAttack.Start()
-                else
-                    FastAttack.Stop()
-                end
-
-                notify("LocalPlayer", "Config synchronized!", true)
             end
-        })
-    end
+            LocalPlayer.Config.Speed.Speed = uiElements.Speed:GetValue()
+            LocalPlayer.Config.Speed.JumpPower = uiElements.SpeedJumpPower:GetValue()
+            LocalPlayer.Config.Speed.JumpInterval = uiElements.SpeedJumpInterval:GetValue()
+            LocalPlayer.Config.Speed.PulseTPDist = uiElements.SpeedPulseTPDistance:GetValue()
+            LocalPlayer.Config.Speed.PulseTPDelay = uiElements.SpeedPulseTPFrequency:GetValue()
+            LocalPlayer.Config.Speed.ToggleKey = uiElements.SpeedKey:GetBind()
+
+            LocalPlayer.Config.TickSpeed.Enabled = uiElements.TickSpeedEnabled:GetState()
+            LocalPlayer.Config.TickSpeed.HighSpeedMultiplier = uiElements.TickSpeedHighMultiplier:GetValue()
+            LocalPlayer.Config.TickSpeed.NormalSpeedMultiplier = uiElements.TickSpeedNormalMultiplier:GetValue()
+            LocalPlayer.Config.TickSpeed.OnDuration = uiElements.TickSpeedOnDuration:GetValue()
+            LocalPlayer.Config.TickSpeed.OffDuration = uiElements.TickSpeedOffDuration:GetValue()
+            LocalPlayer.Config.TickSpeed.ToggleKey = uiElements.TickSpeedKey:GetBind()
+
+            LocalPlayer.Config.HighJump.Enabled = uiElements.HighJumpEnabled:GetState()
+            local highJumpMethodOptions = uiElements.HighJumpMethod:GetOptions()
+            for option, selected in pairs(highJumpMethodOptions) do
+                if selected then
+                    LocalPlayer.Config.HighJump.Method = option
+                    break
+                end
+            end
+            LocalPlayer.Config.HighJump.JumpPower = uiElements.HighJumpPower:GetValue()
+            LocalPlayer.Config.HighJump.JumpKey = uiElements.HighJumpKey:GetBind()
+
+            LocalPlayer.Config.NoRagdoll.Enabled = uiElements.NoRagdollEnabled:GetState()
+
+            LocalPlayer.Config.FastAttack.Enabled = uiElements.FastAttackEnabled:GetState()
+
+            -- Синхронизируем внутренние состояния с обновлённым LocalPlayer.Config
+            TimerStatus.Enabled = LocalPlayer.Config.Timer.Enabled
+            TimerStatus.Speed = LocalPlayer.Config.Timer.Speed
+            TimerStatus.Key = LocalPlayer.Config.Timer.ToggleKey
+            if TimerStatus.Enabled then
+                if not TimerStatus.Running then Timer.Start() end
+            else
+                if TimerStatus.Running then Timer.Stop() end
+            end
+
+            DisablerStatus.Enabled = LocalPlayer.Config.Disabler.Enabled
+            DisablerStatus.Key = LocalPlayer.Config.Disabler.ToggleKey
+            if DisablerStatus.Enabled then
+                if not DisablerStatus.Running then Disabler.Start() end
+            else
+                if DisablerStatus.Running then Disabler.Stop() end
+            end
+
+            SpeedStatus.Enabled = LocalPlayer.Config.Speed.Enabled
+            SpeedStatus.AutoJump = LocalPlayer.Config.Speed.AutoJump
+            SpeedStatus.FakeJump = LocalPlayer.Config.Speed.FakeJump
+            SpeedStatus.Method = LocalPlayer.Config.Speed.Method
+            SpeedStatus.Speed = LocalPlayer.Config.Speed.Speed
+            SpeedStatus.JumpPower = LocalPlayer.Config.Speed.JumpPower
+            SpeedStatus.JumpInterval = LocalPlayer.Config.Speed.JumpInterval
+            SpeedStatus.PulseTPDistance = LocalPlayer.Config.Speed.PulseTPDist
+            SpeedStatus.PulseTPFrequency = LocalPlayer.Config.Speed.PulseTPDelay
+            SpeedStatus.Key = LocalPlayer.Config.Speed.ToggleKey
+            if SpeedStatus.Enabled then
+                if not SpeedStatus.Running then Speed.Start() end
+            else
+                if SpeedStatus.Running then Speed.Stop() end
+            end
+
+            TickSpeedStatus.Enabled = LocalPlayer.Config.TickSpeed.Enabled
+            TickSpeedStatus.HighSpeedMultiplier = LocalPlayer.Config.TickSpeed.HighSpeedMultiplier
+            TickSpeedStatus.NormalSpeedMultiplier = LocalPlayer.Config.TickSpeed.NormalSpeedMultiplier
+            TickSpeedStatus.OnDuration = LocalPlayer.Config.TickSpeed.OnDuration
+            TickSpeedStatus.OffDuration = LocalPlayer.Config.TickSpeed.OffDuration
+            TickSpeedStatus.Key = LocalPlayer.Config.TickSpeed.ToggleKey
+            if TickSpeedStatus.Enabled then
+                if not TickSpeedStatus.Running then TickSpeed.Start() end
+            else
+                if TickSpeedStatus.Running then TickSpeed.Stop() end
+            end
+
+            HighJumpStatus.Enabled = LocalPlayer.Config.HighJump.Enabled
+            HighJumpStatus.Method = LocalPlayer.Config.HighJump.Method
+            HighJumpStatus.JumpPower = LocalPlayer.Config.HighJump.JumpPower
+            HighJumpStatus.Key = LocalPlayer.Config.HighJump.JumpKey
+            if not HighJumpStatus.Enabled then
+                HighJump.RestoreJumpHeight()
+            end
+
+            NoRagdollStatus.Enabled = LocalPlayer.Config.NoRagdoll.Enabled
+            if NoRagdollStatus.Enabled then
+                NoRagdoll.Start(LocalPlayerObj.Character)
+            else
+                NoRagdoll.Stop()
+            end
+
+            FastAttackStatus.Enabled = LocalPlayer.Config.FastAttack.Enabled
+            if FastAttackStatus.Enabled then
+                FastAttack.Start()
+            else
+                FastAttack.Stop()
+            end
+
+            notify("LocalPlayer", "Config synchronized!", true)
+        end
+    })
+end
 
 -- Инициализация модуля
 function LocalPlayer.Init(UI, core, notifyFunc)
@@ -821,6 +1041,9 @@ function LocalPlayer.Init(UI, core, notifyFunc)
     LocalPlayerObj.CharacterAdded:Connect(function(newChar)
         if NoRagdollStatus.Enabled then
             NoRagdoll.Start(newChar)
+        end
+        if TickSpeedStatus.Enabled then
+            TickSpeed.Start()
         end
         if not HighJumpStatus.Enabled then
             HighJump.RestoreJumpHeight()
