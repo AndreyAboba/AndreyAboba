@@ -739,7 +739,7 @@ function HSCR.Init(UI, Core, notify)
         }, "CrosshairShrinkDuration")
 
         print("Adding Colorpicker: Base Color")
-        section:Colorpicker({
+        section:Color picker({
             Name = "Base Color",
             Default = CrosshairSettings.BaseColor.Default,
             Callback = function(value)
@@ -777,20 +777,37 @@ function HSCR.Init(UI, Core, notify)
         end
 
         print("Adding Dropdown: Sound")
-        section:Dropdown({
+        local soundDropdown = section:Dropdown({
             Name = "Sound",
             Options = soundOptions,
             Default = CrosshairSettings.SelectedSound.Default,
             Callback = function(value)
-                CrosshairSettings.SelectedSound.Value = value
-                -- Находим соответствующий SoundId
-                for _, sound in ipairs(CrosshairSettings.SoundData) do
-                    if sound.Label == value then
-                        CrosshairSettings.SoundIds[value] = sound.SoundId
+                -- Получаем текущие опции с помощью :GetOptions()
+                local options = soundDropdown:GetOptions()
+                print("Dropdown options:", options)
+
+                -- Находим выбранный звук (где значение true)
+                local selectedSound = nil
+                for option, isSelected in pairs(options) do
+                    if isSelected then
+                        selectedSound = option
                         break
                     end
                 end
-                print("Selected sound:", value, "SoundId:", CrosshairSettings.SoundIds[value])
+
+                if selectedSound then
+                    CrosshairSettings.SelectedSound.Value = selectedSound
+                    -- Находим соответствующий SoundId
+                    for _, sound in ipairs(CrosshairSettings.SoundData) do
+                        if sound.Label == selectedSound then
+                            CrosshairSettings.SoundIds[selectedSound] = sound.SoundId
+                            break
+                        end
+                    end
+                    print("Selected sound:", selectedSound, "SoundId:", CrosshairSettings.SoundIds[selectedSound])
+                else
+                    warn("No sound selected in dropdown")
+                end
             end
         }, "HeadshotSound")
 
