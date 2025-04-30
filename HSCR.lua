@@ -83,17 +83,17 @@ function HSCR.Init(UI, Core, notify)
         -- Вызов анимаций
         if CrosshairSettings.Enabled then
             print("Attempting to call pulse and pulseRed")
-            pcall(function()
-                pulse(CrosshairSettings.ExpandDistance.Value)
-                pulseRed()
-                radial:SetProgressColor(CrosshairSettings.HitColor.Value)
-            end)
+            print("CrosshairFrame exists:", crosshairFrame ~= nil)
+            pulse(CrosshairSettings.ExpandDistance.Value)
+            pulseRed()
+            radial:SetProgressColor(CrosshairSettings.HitColor.Value)
         end
 
         -- Воспроизведение звука
         if isKill then
-            headshotSound.SoundId = CrosshairSettings.HeadshotSoundEnabled and CrosshairSettings.SoundIds[CrosshairSettings.SelectedSound.Value] or CrosshairSettings.OriginalSounds.headshotSound
-            print("Playing headshotSound:", headshotSound.SoundId)
+            local selectedSoundId = CrosshairSettings.SoundIds[CrosshairSettings.SelectedSound.Value]
+            headshotSound.SoundId = CrosshairSettings.HeadshotSoundEnabled and selectedSoundId or CrosshairSettings.OriginalSounds.headshotSound
+            print("Playing headshotSound (Kill):", headshotSound.SoundId)
             headshotSound:Play()
         elseif isHeadshot then
             headshotNormalSound.SoundId = CrosshairSettings.OriginalSounds.headshotNormalSound
@@ -120,6 +120,7 @@ function HSCR.Init(UI, Core, notify)
     -- Функция для обновления дизайна прицела
     local function updateCrosshairDesign()
         print("Updating crosshair design - Enabled:", CrosshairSettings.Enabled)
+        print("CrosshairFrame exists:", crosshairFrame ~= nil)
         for _, child in pairs(crosshairFrame:GetChildren()) do
             if child.Name ~= "Frame1" and child.Name ~= "Frame2" then
                 child:Destroy()
@@ -186,6 +187,8 @@ function HSCR.Init(UI, Core, notify)
             )
             local tween = TweenService:Create(gradient, tweenInfo, { Offset = Vector2.new(0.5, 0) })
             tween:Play()
+
+            print("Dot created:", dot ~= nil, "InnerDot created:", innerDot ~= nil)
         elseif CrosshairSettings.Style.Value == "Default" then
             local gap = CrosshairSettings.Gap.Value
             local length = CrosshairSettings.Length.Value
@@ -270,6 +273,8 @@ function HSCR.Init(UI, Core, notify)
             bottomTween:Play()
             rightTween:Play()
             leftTween:Play()
+
+            print("Default style elements created - Top:", top ~= nil, "Right:", right ~= nil, "Bottom:", bottom ~= nil, "Left:", left ~= nil)
         end
     end
 
@@ -287,6 +292,7 @@ function HSCR.Init(UI, Core, notify)
             end
             local newDotSize = CrosshairSettings.DotSize.Value * (1 + scale)
             local newInnerDotSize = CrosshairSettings.DotInnerSize.Value * (1 + scale)
+            print("Animating Dot - New size:", newDotSize, "New inner size:", newInnerDotSize)
             u4.tween(crosshairFrame.Dot, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Quad), {
                 Size = UDim2.fromOffset(newDotSize, newDotSize),
                 Position = UDim2.new(0.5, -newDotSize / 2, 0.5, -newDotSize / 2),
@@ -313,6 +319,7 @@ function HSCR.Init(UI, Core, notify)
             local length = CrosshairSettings.Length.Value
             local thickness = 2
             local newGap = gap * (1 + scale)
+            print("Animating Default style - New gap:", newGap)
 
             u4.tween(crosshairFrame, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Quad), {
                 Size = UDim2.fromOffset(CrosshairSettings.Size.Value * (1 + scale), CrosshairSettings.Size.Value * (1 + scale)),
@@ -350,7 +357,7 @@ function HSCR.Init(UI, Core, notify)
         end
     end
 
-    -- Функция для изменения цвета прицела (pulse_red)
+    -- Функция для изменения цвета прицела (pulseRed)
     local function pulseRed()
         if not CrosshairSettings.Enabled then
             print("PulseRed skipped: Crosshair not enabled")
@@ -363,6 +370,7 @@ function HSCR.Init(UI, Core, notify)
                 print("PulseRed failed: Dot, UIStroke, or InnerDot not found")
                 return
             end
+            print("Animating Dot color change")
             u4.tween(crosshairFrame.Dot.UIStroke, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
                 Color = CrosshairSettings.HitColor.Value
             })
@@ -370,6 +378,12 @@ function HSCR.Init(UI, Core, notify)
                 BackgroundColor3 = CrosshairSettings.BaseColor.Value
             })
         elseif CrosshairSettings.Style.Value == "Default" then
+            if not crosshairFrame:FindFirstChild("Top") or not crosshairFrame:FindFirstChild("Right") or
+               not crosshairFrame:FindFirstChild("Bottom") or not crosshairFrame:FindFirstChild("Left") then
+                print("PulseRed failed: Default style elements (Top, Right, Bottom, Left) not found")
+                return
+            end
+            print("Animating Default style color change")
             for _, child in pairs(crosshairFrame:GetChildren()) do
                 if child:IsA("Frame") and child.Name ~= "Frame1" and child.Name ~= "Frame2" then
                     u4.tween(child, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
@@ -383,6 +397,7 @@ function HSCR.Init(UI, Core, notify)
             print("PulseRed failed: bulletsLabel not found")
             return
         end
+        print("Animating bulletsLabel color change")
         u4.tween(bulletsLabel, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {
             TextColor3 = CrosshairSettings.HitColor.Value
         }).Completed:Wait()
@@ -656,7 +671,8 @@ function HSCR.Init(UI, Core, notify)
             },
             Callback = function(value, selectedIndex)
                 CrosshairSettings.SelectedSound.Value = value
-                CrosshairSettings.SoundIds[value] = CrosshairSettings.SoundOptions[selectedIndex]
+                CrosshairSettings.SoundIds[value] = section:DropdownGet("HeadshotSound").Values[selectedIndex]
+                print("Selected sound:", value, "SoundId:", CrosshairSettings.SoundIds[value])
             end
         }, "HeadshotSound")
 
