@@ -12,9 +12,9 @@ local CrosshairSettings = {
     DotOutlineThickness = { Value = 2, Default = 2 },
     BaseColor = { Value = Color3.fromRGB(255, 255, 255), Default = Color3.fromRGB(255, 255, 255) },
     HitColor = { Value = Color3.fromRGB(255, 0, 0), Default = Color3.fromRGB(255, 0, 0) },
-    ExpandDistance = { Value = 0.5, Default = 0.5 },
-    ExpandDuration = { Value = 0.15, Default = 0.15 },
-    ShrinkDuration = { Value = 0.1, Default = 0.1 },
+    ExpandDistance = { Value = 0.8, Default = 0.8 }, -- Обновлено с 0.5 до 0.8
+    ExpandDuration = { Value = 0.3, Default = 0.3 }, -- Обновлено с 0.15 до 0.3
+    ShrinkDuration = { Value = 0.2, Default = 0.2 }, -- Обновлено с 0.1 до 0.2
     GradientSpeed = { Value = 2, Default = 2 },
     HeadshotSoundEnabled = false,
     SelectedSound = { Value = "Default", Default = "Default" },
@@ -364,7 +364,7 @@ function HSCR.Init(UI, Core, notify)
         end
     end
 
-    -- Функция для анимации прицела (pulse)
+    -- Функция для анимации прицела (pulse) — обновлена для соответствия hitAnimation
     local function pulse(scale)
         if not CrosshairSettings.Enabled then
             print("Pulse skipped: Crosshair not enabled")
@@ -376,6 +376,11 @@ function HSCR.Init(UI, Core, notify)
             return
         end
 
+        -- Добавляем вращение прицела
+        u4.tween(crosshairFrame, TweenInfo.new(0.3, Enum.EasingStyle.Sine), {
+            Rotation = crosshairFrame.Rotation + 360
+        })
+
         if CrosshairSettings.Style.Value == "Dot" then
             if not crosshairFrame:FindFirstChild("Dot") or not crosshairFrame.Dot:FindFirstChild("InnerDot") then
                 print("Pulse failed: Dot or InnerDot not found")
@@ -385,7 +390,7 @@ function HSCR.Init(UI, Core, notify)
             local newInnerDotSize = CrosshairSettings.DotInnerSize.Value * (1 + scale)
             print("Animating Dot - New size:", newDotSize, "New inner size:", newInnerDotSize)
             if crosshairFrame.Dot and crosshairFrame.Dot.Parent then
-                u4.tween(crosshairFrame.Dot, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Quad), {
+                u4.tween(crosshairFrame.Dot, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
                     Size = UDim2.fromOffset(newDotSize, newDotSize),
                     Position = UDim2.new(0.5, -newDotSize / 2, 0.5, -newDotSize / 2),
                 })
@@ -393,7 +398,7 @@ function HSCR.Init(UI, Core, notify)
                 print("Dot is nil or destroyed during animation")
             end
             if crosshairFrame.Dot and crosshairFrame.Dot.InnerDot and crosshairFrame.Dot.InnerDot.Parent then
-                u4.tween(crosshairFrame.Dot.InnerDot, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Quad), {
+                u4.tween(crosshairFrame.Dot.InnerDot, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
                     Size = UDim2.fromOffset(newInnerDotSize, newInnerDotSize),
                     Position = UDim2.new(0.5, -newInnerDotSize / 2, 0.5, -newInnerDotSize / 2),
                 }).Completed:Wait()
@@ -401,13 +406,13 @@ function HSCR.Init(UI, Core, notify)
                 print("InnerDot is nil or destroyed during animation")
             end
             if crosshairFrame.Dot and crosshairFrame.Dot.Parent then
-                u4.tween(crosshairFrame.Dot, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Quad), {
+                u4.tween(crosshairFrame.Dot, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
                     Size = UDim2.fromOffset(CrosshairSettings.DotSize.Value, CrosshairSettings.DotSize.Value),
                     Position = UDim2.new(0.5, -CrosshairSettings.DotSize.Value / 2, 0.5, -CrosshairSettings.DotSize.Value / 2),
                 })
             end
             if crosshairFrame.Dot and crosshairFrame.Dot.InnerDot and crosshairFrame.Dot.InnerDot.Parent then
-                u4.tween(crosshairFrame.Dot.InnerDot, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Quad), {
+                u4.tween(crosshairFrame.Dot.InnerDot, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
                     Size = UDim2.fromOffset(CrosshairSettings.DotInnerSize.Value, CrosshairSettings.DotInnerSize.Value),
                     Position = UDim2.new(0.5, -CrosshairSettings.DotInnerSize.Value / 2, 0.5, -CrosshairSettings.DotInnerSize.Value / 2),
                 })
@@ -424,52 +429,52 @@ function HSCR.Init(UI, Core, notify)
             local newGap = gap * (1 + scale)
             print("Animating Default style - New gap:", newGap)
 
-            u4.tween(crosshairFrame, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Quad), {
+            u4.tween(crosshairFrame, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
                 Size = UDim2.fromOffset(CrosshairSettings.Size.Value * (1 + scale), CrosshairSettings.Size.Value * (1 + scale)),
             }).Completed:Wait()
 
             if crosshairFrame.Top and crosshairFrame.Top.Parent then
-                u4.tween(crosshairFrame.Top, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Quad), {
+                u4.tween(crosshairFrame.Top, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
                     Position = UDim2.new(0.5, -thickness / 2, 0.5, -newGap - length),
                 })
             end
             if crosshairFrame.Right and crosshairFrame.Right.Parent then
-                u4.tween(crosshairFrame.Right, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Quad), {
+                u4.tween(crosshairFrame.Right, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
                     Position = UDim2.new(0.5, newGap, 0.5, -thickness / 2),
                 })
             end
             if crosshairFrame.Bottom and crosshairFrame.Bottom.Parent then
-                u4.tween(crosshairFrame.Bottom, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Quad), {
+                u4.tween(crosshairFrame.Bottom, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
                     Position = UDim2.new(0.5, -thickness / 2, 0.5, newGap),
                 })
             end
             if crosshairFrame.Left and crosshairFrame.Left.Parent then
-                u4.tween(crosshairFrame.Left, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Quad), {
+                u4.tween(crosshairFrame.Left, TweenInfo.new(CrosshairSettings.ExpandDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
                     Position = UDim2.new(0.5, -newGap - length, 0.5, -thickness / 2),
                 })
             end
 
-            u4.tween(crosshairFrame, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Quad), {
+            u4.tween(crosshairFrame, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
                 Size = UDim2.fromOffset(CrosshairSettings.Size.Value, CrosshairSettings.Size.Value),
             }).Completed:Wait()
 
             if crosshairFrame.Top and crosshairFrame.Top.Parent then
-                u4.tween(crosshairFrame.Top, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Quad), {
+                u4.tween(crosshairFrame.Top, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
                     Position = UDim2.new(0.5, -thickness / 2, 0.5, -gap - length),
                 })
             end
             if crosshairFrame.Right and crosshairFrame.Right.Parent then
-                u4.tween(crosshairFrame.Right, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Quad), {
+                u4.tween(crosshairFrame.Right, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
                     Position = UDim2.new(0.5, gap, 0.5, -thickness / 2),
                 })
             end
             if crosshairFrame.Bottom and crosshairFrame.Bottom.Parent then
-                u4.tween(crosshairFrame.Bottom, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Quad), {
+                u4.tween(crosshairFrame.Bottom, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
                     Position = UDim2.new(0.5, -thickness / 2, 0.5, gap),
                 })
             end
             if crosshairFrame.Left and crosshairFrame.Left.Parent then
-                u4.tween(crosshairFrame.Left, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Quad), {
+                u4.tween(crosshairFrame.Left, TweenInfo.new(CrosshairSettings.ShrinkDuration.Value, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
                     Position = UDim2.new(0.5, -gap - length, 0.5, -thickness / 2),
                 })
             end
