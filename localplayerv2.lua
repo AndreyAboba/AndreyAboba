@@ -819,8 +819,8 @@ local function SetupUI(UI)
     end
 
     -- TickSpeed UI (отдельная секция)
-    if not UI.Sections.TickSpeed then
-        UI.Sections.TickSpeed = UI.Tabs.Main:Section({ Name = "TickSpeed", Side = "Left" })
+    if UI.Sections.TickSpeed then
+        UI.Sections.TickSpeed = UI.Tabs.LocalPlayer:Section({ Name = "TickSpeed", Side = "Left" })
     end
     if UI.Sections.TickSpeed then
         UI.Sections.TickSpeed:Header({ Name = "TickSpeed" })
