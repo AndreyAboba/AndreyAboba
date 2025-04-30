@@ -101,6 +101,13 @@ function HSCR.Init(UI, Core, notify)
     hitSound.Volume = 1
     hitSound.Parent = SoundService
 
+    -- Хранилище для функций анимации
+    local AnimationFunctions = {
+        pulse = nil,
+        pulseRed = nil,
+        updateCrosshairDesign = nil
+    }
+
     -- Очередь для обработки hitmarker в главном потоке
     local hitQueue = {}
     local radial = u7.new(crosshairFrame)
@@ -130,10 +137,28 @@ function HSCR.Init(UI, Core, notify)
         if CrosshairSettings.Enabled then
             print("CrosshairFrame exists:", crosshairFrame ~= nil)
             print("Attempting to call updateCrosshairDesign before animations")
-            updateCrosshairDesign() -- Гарантируем, что элементы прицела созданы
+            if AnimationFunctions.updateCrosshairDesign then
+                AnimationFunctions.updateCrosshairDesign() -- Гарантируем, что элементы прицела созданы
+            else
+                warn("updateCrosshairDesign is nil")
+                return
+            end
+
             print("Attempting to call pulse and pulseRed")
-            pulse(CrosshairSettings.ExpandDistance.Value)
-            pulseRed()
+            if AnimationFunctions.pulse then
+                AnimationFunctions.pulse(CrosshairSettings.ExpandDistance.Value)
+            else
+                warn("pulse is nil")
+                return
+            end
+
+            if AnimationFunctions.pulseRed then
+                AnimationFunctions.pulseRed()
+            else
+                warn("pulseRed is nil")
+                return
+            end
+
             if radial and radial.SetProgressColor then
                 print("Setting radial progress color")
                 radial:SetProgressColor(CrosshairSettings.HitColor.Value)
@@ -531,17 +556,22 @@ function HSCR.Init(UI, Core, notify)
         })
     end
 
+    -- Сохраняем функции в AnimationFunctions
+    AnimationFunctions.updateCrosshairDesign = updateCrosshairDesign
+    AnimationFunctions.pulse = pulse
+    AnimationFunctions.pulseRed = pulseRed
+
     -- Инициализация прицела и хитсаунда
     local function initiate()
         CrosshairSettings.OriginalElements.Size = crosshairFrame.Size
         CrosshairSettings.OriginalElements.Frame1Visible = frame1 and frame1.Visible
         CrosshairSettings.OriginalElements.Frame2Visible = frame2 and frame2.Visible
 
-        updateCrosshairDesign()
+        AnimationFunctions.updateCrosshairDesign()
 
         local u27 = {
-            pulse = pulse,
-            pulse_red = pulseRed,
+            pulse = AnimationFunctions.pulse,
+            pulse_red = AnimationFunctions.pulseRed,
             is_reloading = v3.new(false),
             reloading_length = v3.new(0),
         }
@@ -596,7 +626,7 @@ function HSCR.Init(UI, Core, notify)
             Default = CrosshairSettings.Enabled,
             Callback = function(value)
                 CrosshairSettings.Enabled = value
-                updateCrosshairDesign()
+                AnimationFunctions.updateCrosshairDesign()
             end
         }, "CustomCrosshairEnabled")
 
@@ -607,7 +637,7 @@ function HSCR.Init(UI, Core, notify)
             Default = CrosshairSettings.Style.Default,
             Callback = function(value)
                 CrosshairSettings.Style.Value = value
-                updateCrosshairDesign()
+                AnimationFunctions.updateCrosshairDesign()
             end
         }, "CrosshairStyle")
 
@@ -620,7 +650,7 @@ function HSCR.Init(UI, Core, notify)
             Precision = 0,
             Callback = function(value)
                 CrosshairSettings.Size.Value = value
-                updateCrosshairDesign()
+                AnimationFunctions.updateCrosshairDesign()
             end
         }, "CrosshairSize")
 
@@ -633,7 +663,7 @@ function HSCR.Init(UI, Core, notify)
             Precision = 0,
             Callback = function(value)
                 CrosshairSettings.Gap.Value = value
-                updateCrosshairDesign()
+                AnimationFunctions.updateCrosshairDesign()
             end
         }, "CrosshairGap")
 
@@ -646,7 +676,7 @@ function HSCR.Init(UI, Core, notify)
             Precision = 0,
             Callback = function(value)
                 CrosshairSettings.Length.Value = value
-                updateCrosshairDesign()
+                AnimationFunctions.updateCrosshairDesign()
             end
         }, "CrosshairLength")
 
@@ -659,7 +689,7 @@ function HSCR.Init(UI, Core, notify)
             Precision = 0,
             Callback = function(value)
                 CrosshairSettings.DotSize.Value = value
-                updateCrosshairDesign()
+                AnimationFunctions.updateCrosshairDesign()
             end
         }, "CrosshairDotSize")
 
@@ -672,7 +702,7 @@ function HSCR.Init(UI, Core, notify)
             Precision = 0,
             Callback = function(value)
                 CrosshairSettings.DotInnerSize.Value = value
-                updateCrosshairDesign()
+                AnimationFunctions.updateCrosshairDesign()
             end
         }, "CrosshairDotInnerSize")
 
@@ -685,7 +715,7 @@ function HSCR.Init(UI, Core, notify)
             Precision = 0,
             Callback = function(value)
                 CrosshairSettings.DotOutlineThickness.Value = value
-                updateCrosshairDesign()
+                AnimationFunctions.updateCrosshairDesign()
             end
         }, "CrosshairDotOutlineThickness")
 
@@ -698,7 +728,7 @@ function HSCR.Init(UI, Core, notify)
             Precision = 1,
             Callback = function(value)
                 CrosshairSettings.GradientSpeed.Value = value
-                updateCrosshairDesign()
+                AnimationFunctions.updateCrosshairDesign()
             end
         }, "CrosshairGradientSpeed")
 
@@ -744,7 +774,7 @@ function HSCR.Init(UI, Core, notify)
             Default = CrosshairSettings.BaseColor.Default,
             Callback = function(value)
                 CrosshairSettings.BaseColor.Value = value
-                updateCrosshairDesign()
+                AnimationFunctions.updateCrosshairDesign()
             end
         }, "CrosshairBaseColor")
 
@@ -754,7 +784,7 @@ function HSCR.Init(UI, Core, notify)
             Default = CrosshairSettings.HitColor.Default,
             Callback = function(value)
                 CrosshairSettings.HitColor.Value = value
-                updateCrosshairDesign()
+                AnimationFunctions.updateCrosshairDesign()
             end
         }, "CrosshairHitColor")
 
