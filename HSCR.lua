@@ -9,12 +9,12 @@ local CrosshairSettings = {
     DotSize = { Value = 20, Default = 20 },
     DotInnerSize = { Value = 4, Default = 4 },
     DotOutlineThickness = { Value = 2, Default = 2 },
-    GradientColor = Color3.fromRGB(0, 0, 255),
+    GradientColor = Color3.fromRGB(0, 0, 255), -- Один фиксированный цвет
     ExpandDistance = { Value = 0.8, Default = 0.8 },
     ExpandDuration = { Value = 0.3, Default = 0.3 },
     ShrinkDuration = { Value = 0.2, Default = 0.2 },
     HeadshotSoundEnabled = false,
-    SelectedSound = { Value = "fatality", Default = "fatality" }, -- Исправлено на "fatality" по умолчанию
+    SelectedSound = { Value = "Default", Default = "Default" },
     SoundData = {
         { Label = "Default", SoundId = "rbxassetid://10476301420" },
         { Label = "KillSound", SoundId = "rbxassetid://132390332380260" },
@@ -43,8 +43,7 @@ local CrosshairSettings = {
         headshotNormalSound = "rbxassetid://135358980250767",
         hitSound = "rbxassetid://100758444127105"
     },
-    OriginalElements = {},
-    OriginalBulletsColor = nil -- Для хранения исходного цвета bulletsLabel
+    OriginalElements = {}
 }
 
 function HSCR.Init(UI, Core, notify)
@@ -112,14 +111,6 @@ function HSCR.Init(UI, Core, notify)
     end
     ContentProvider:PreloadAsync(soundsToPreload)
     print("All sounds preloaded")
-
-    -- Сохраняем исходный цвет bulletsLabel
-    if bulletsLabel then
-        CrosshairSettings.OriginalBulletsColor = bulletsLabel.TextColor3
-        print("Original bulletsLabel color saved:", CrosshairSettings.OriginalBulletsColor)
-    else
-        warn("bulletsLabel not found during initialization")
-    end
 
     local AnimationFunctions = {
         pulse = nil,
@@ -245,10 +236,6 @@ function HSCR.Init(UI, Core, notify)
             if frame1 then frame1.Visible = CrosshairSettings.OriginalElements.Frame1Visible or true end
             if frame2 then frame2.Visible = CrosshairSettings.OriginalElements.Frame2Visible or true end
             crosshairFrame.Size = CrosshairSettings.OriginalElements.Size or UDim2.fromOffset(18, 18)
-            -- Возвращаем исходный цвет bulletsLabel при выключении
-            if bulletsLabel and CrosshairSettings.OriginalBulletsColor then
-                bulletsLabel.TextColor3 = CrosshairSettings.OriginalBulletsColor
-            end
             return
         end
 
@@ -257,11 +244,6 @@ function HSCR.Init(UI, Core, notify)
 
         if frame1 then frame1.Visible = false end
         if frame2 then frame2.Visible = false end
-
-        -- Устанавливаем цвет bulletsLabel сразу при включении
-        if bulletsLabel then
-            bulletsLabel.TextColor3 = CrosshairSettings.GradientColor
-        end
 
         print("Gradient Color in updateCrosshairDesign:", CrosshairSettings.GradientColor)
 
@@ -486,7 +468,7 @@ function HSCR.Init(UI, Core, notify)
             return
         end
 
-        local secondaryColor = Color3.fromRGB(255, 0, 0)
+        local secondaryColor = Color3.fromRGB(255, 0, 0) -- Красный цвет для pulseRed
 
         if CrosshairSettings.Style.Value == "Dot" then
             if not crosshairFrame:FindFirstChild("Dot") or not crosshairFrame.Dot:FindFirstChild("UIStroke") or
@@ -570,10 +552,11 @@ function HSCR.Init(UI, Core, notify)
     AnimationFunctions.pulseRed = pulseRed
 
     local function initiate()
-        -- Инициализация теперь вызывается только при включении toggle
         CrosshairSettings.OriginalElements.Size = crosshairFrame.Size
         CrosshairSettings.OriginalElements.Frame1Visible = frame1 and frame1.Visible
         CrosshairSettings.OriginalElements.Frame2Visible = frame2 and frame2.Visible
+
+        AnimationFunctions.updateCrosshairDesign()
 
         local u27 = {
             pulse = AnimationFunctions.pulse,
@@ -585,9 +568,7 @@ function HSCR.Init(UI, Core, notify)
         if radial and radial.Init then
             radial:Init()
             radial:SetProgress(100)
-            if CrosshairSettings.Enabled then
-                radial:SetProgressColor(CrosshairSettings.GradientColor)
-            end
+            radial:SetProgressColor(CrosshairSettings.GradientColor)
         else
             warn("Radial is nil or Init is not a function")
         end
@@ -612,7 +593,7 @@ function HSCR.Init(UI, Core, notify)
 
             if isKill then
                 local selectedSoundId = CrosshairSettings.SoundIds[CrosshairSettings.SelectedSound.Value] or CrosshairSettings.OriginalSounds.headshotSound
-                headshotSound.SoundId = selectedSoundId
+                headshotSound.SoundId = CrosshairSettings.HeadshotSoundEnabled and selectedSoundId or CrosshairSettings.OriginalSounds.headshotSound
                 print("Playing headshotSound (Kill):", headshotSound.SoundId)
                 headshotSound:Play()
             elseif isHeadshot then
@@ -634,6 +615,8 @@ function HSCR.Init(UI, Core, notify)
         end)
     end
 
+    initiate()
+
     task.defer(function()
         print("Starting UI creation in main thread")
         local section = UI.Tabs.Visuals:Section({ Name = "Custom Crosshair & Hitsound", Side = "Right" })
@@ -644,9 +627,6 @@ function HSCR.Init(UI, Core, notify)
             Default = CrosshairSettings.Enabled,
             Callback = function(value)
                 CrosshairSettings.Enabled = value
-                if value then
-                    initiate() -- Инициализация только при включении
-                end
                 AnimationFunctions.updateCrosshairDesign()
             end
         }, "CustomCrosshairEnabled")
@@ -796,10 +776,6 @@ function HSCR.Init(UI, Core, notify)
             Default = CrosshairSettings.HeadshotSoundEnabled,
             Callback = function(value)
                 CrosshairSettings.HeadshotSoundEnabled = value
-                if not value then
-                    -- Сбрасываем на значение по умолчанию при выключении
-                    CrosshairSettings.SelectedSound.Value = CrosshairSettings.SelectedSound.Default
-                end
             end
         }, "HeadshotSoundEnabled")
 
