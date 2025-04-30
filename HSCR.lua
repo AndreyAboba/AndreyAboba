@@ -24,6 +24,15 @@ local CrosshairSettings = {
         "TF2 HS", "CriminalityHS", "neverlose", "bameware", "fatality",
         "csgoHS", "PopHS", "BubblePop", "NiggaHS", "IdkHS"
     },
+    SoundValues = {
+        "rbxassetid://10476301420", "rbxassetid://132390332380260", "rbxassetid://9086370184",
+        "rbxassetid://121311089745141", "rbxassetid://104467173440576", "rbxassetid://7246809481",
+        "rbxassetid://5622443597", "rbxassetid://105190141089785", "rbxassetid://1053296915",
+        "rbxassetid://135478009117226", "rbxassetid://90342360691837", "rbxassetid://83773429281082",
+        "rbxassetid://97643101798871", "rbxassetid://92614567965693", "rbxassetid://115982072912004",
+        "rbxassetid://6937353691", "rbxassetid://105543133746827", "rbxassetid://119697580657161",
+        "rbxassetid://4868633804", "rbxassetid://102911066745395"
+    },
     SoundIds = {},
     OriginalSounds = {
         headshotSound = "rbxassetid://115982072912004",
@@ -128,7 +137,7 @@ function HSCR.Init(UI, Core, notify)
 
         -- Воспроизведение звука
         if isKill then
-            local selectedSoundId = CrosshairSettings.SoundIds[CrosshairSettings.SelectedSound.Value]
+            local selectedSoundId = CrosshairSettings.SoundIds[CrosshairSettings.SelectedSound.Value] or CrosshairSettings.OriginalSounds.headshotSound
             headshotSound.SoundId = CrosshairSettings.HeadshotSoundEnabled and selectedSoundId or CrosshairSettings.OriginalSounds.headshotSound
             print("Playing headshotSound (Kill):", headshotSound.SoundId)
             headshotSound:Play()
@@ -759,18 +768,10 @@ function HSCR.Init(UI, Core, notify)
             Name = "Sound",
             Options = CrosshairSettings.SoundOptions,
             Default = CrosshairSettings.SelectedSound.Default,
-            Values = {
-                "rbxassetid://10476301420", "rbxassetid://132390332380260", "rbxassetid://9086370184",
-                "rbxassetid://121311089745141", "rbxassetid://104467173440576", "rbxassetid://7246809481",
-                "rbxassetid://5622443597", "rbxassetid://105190141089785", "rbxassetid://1053296915",
-                "rbxassetid://135478009117226", "rbxassetid://90342360691837", "rbxassetid://83773429281082",
-                "rbxassetid://97643101798871", "rbxassetid://92614567965693", "rbxassetid://115982072912004",
-                "rbxassetid://6937353691", "rbxassetid://105543133746827", "rbxassetid://119697580657161",
-                "rbxassetid://4868633804", "rbxassetid://102911066745395"
-            },
+            Values = CrosshairSettings.SoundValues, -- Сохраняем Values для доступа в callback
             Callback = function(value, selectedIndex)
                 CrosshairSettings.SelectedSound.Value = value
-                CrosshairSettings.SoundIds[value] = section:DropdownGet("HeadshotSound").Values[selectedIndex]
+                CrosshairSettings.SoundIds[value] = CrosshairSettings.SoundValues[selectedIndex]
                 print("Selected sound:", value, "SoundId:", CrosshairSettings.SoundIds[value])
             end
         }, "HeadshotSound")
