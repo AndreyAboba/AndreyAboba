@@ -29,16 +29,22 @@ function AutoV2.Init(UI, Core, notify)
         return
     end
 
-    -- Кэшируем DroppedItems и HumanoidRootPart
+    -- Кэшируем DroppedItems
     local droppedItems = Workspace:FindFirstChild("DroppedItems")
     if not droppedItems then
         return
     end
 
-    local character = LocalPlayer.Character
-    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+    -- Функция для получения текущего rootPart
+    local function getRootPart()
+        local character = LocalPlayer.Character
+        if not character then
+            character = LocalPlayer.CharacterAdded:Wait()
+        end
+        return character:WaitForChild("HumanoidRootPart")
+    end
 
-    -- Обновление rootPart при респавне
+    local rootPart = getRootPart()
     LocalPlayer.CharacterAdded:Connect(function(newCharacter)
         rootPart = newCharacter:WaitForChild("HumanoidRootPart")
     end)
@@ -75,11 +81,12 @@ function AutoV2.Init(UI, Core, notify)
 
     -- Функция для поиска ближайшего предмета
     local function findNearestDroppedItem()
-        if not rootPart then return nil end -- Проверка на наличие rootPart
+        local currentRootPart = getRootPart() -- Динамическая проверка rootPart
+        if not currentRootPart then return nil end
 
         local nearestItem = nil
         local minDistance = AutoV2.Config.MinDistance
-        local rootPosition = rootPart.Position
+        local rootPosition = currentRootPart.Position
 
         for _, item in ipairs(droppedItems:GetChildren()) do
             if item.ClassName == "Model" and itemNames[item.Name] then
@@ -150,8 +157,8 @@ function AutoV2.Init(UI, Core, notify)
         UI.Sections.AutoInteract:Slider({
             Name = "Pickup Radius",
             Default = AutoV2.Config.MinDistance,
-            Min = 5,
-            Max = 50,
+            Minimum = 5,
+            Maximum = 50,
             Callback = function(value)
                 AutoV2.Config.MinDistance = value
                 notify("Auto Pickup", "Радиус подбора установлен на " .. value .. " метров!", false)
