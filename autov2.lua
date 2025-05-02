@@ -11,7 +11,7 @@ AutoV2.Config = {
     DropEnabled = false,    -- Toggle for enabling/disabling AutoDrop
     UseKeybind = false,     -- Toggle for using keybind for AutoDrop
     DropKeybind = Enum.KeyCode.F, -- Default keybind for AutoDrop
-    ItemsToDrop = {         -- Default items to drop (empty by default)
+    ItemsToDrop = {         -- Default items to drop
         ["Shiesty"] = true,
         ["HackToolBasic"] = true,
         ["Bottle"] = true,
@@ -190,17 +190,15 @@ function AutoV2.Init(UI, Core, notify)
                 itemCount = tonumber(itemCountObj.Text:match("%d+")) or 1
             end
 
-            if guid then
+            if guid and AutoV2.Config.ItemsToDrop[itemName] then
                 table.insert(guids, guid)
-                if AutoV2.Config.ItemsToDrop[itemName] then
-                    table.insert(itemsToDrop, {GUID = guid, Item = item, Name = itemName, Count = itemCount})
-                    -- Reset properties to prevent highlighting
-                    if item:IsA("GuiObject") then
-                        item.BackgroundTransparency = 1
-                        item.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-                        item.BorderSizePixel = 0
-                        item.BorderColor3 = Color3.fromRGB(0, 0, 0)
-                    end
+                table.insert(itemsToDrop, {GUID = guid, Item = item, Name = itemName, Count = itemCount})
+                -- Reset properties to prevent highlighting
+                if item:IsA("GuiObject") then
+                    item.BackgroundTransparency = 1
+                    item.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                    item.BorderSizePixel = 0
+                    item.BorderColor3 = Color3.fromRGB(0, 0, 0)
                 end
             end
         end
@@ -211,7 +209,7 @@ function AutoV2.Init(UI, Core, notify)
     -- Function to drop items via RemoteEvent (for AutoDrop)
     local function dropItems(itemsToDrop)
         if not itemsToDrop or #itemsToDrop == 0 then
-            return
+            return false
         end
 
         for _, itemData in ipairs(itemsToDrop) do
@@ -227,14 +225,17 @@ function AutoV2.Init(UI, Core, notify)
                 Send:FireServer(unpack(args))
             end)
         end
+        return true
     end
 
     -- Function to execute dropping items (for AutoDrop)
     local function executeDrop()
         local guids, itemsToDrop = parseInventoryData()
         if not guids or not itemsToDrop then return end
-        dropItems(itemsToDrop)
-        notify("Auto Drop", "Items dropped successfully!", true)
+        local success = dropItems(itemsToDrop)
+        if success then
+            notify("Auto Drop", "Items dropped successfully!", true)
+        end
     end
 
     -- Auto-drop function (runs continuously if not using keybind)
@@ -247,7 +248,7 @@ function AutoV2.Init(UI, Core, notify)
                 if not AutoV2.Config.UseKeybind then
                     executeDrop()
                 end
-                task.wait(1) -- Check every second to avoid excessive calls
+                task.wait(1)
             end
         end)
     end
@@ -296,7 +297,7 @@ function AutoV2.Init(UI, Core, notify)
         })
 
         -- Section for AutoDrop
-        local autoDropSection = UI.Tabs.Auto:Section({ Name = "AutoDrop", Side = "Left" })
+        local autoDropSection = UI.Tabs.Auto:Section({ Name = "AutoDrop", Side = "Right" })
         autoDropSection:Header({ Name = "AutoDrop" })
 
         autoDropSection:Toggle({
@@ -352,9 +353,11 @@ function AutoV2.Init(UI, Core, notify)
                 for key in pairs(AutoV2.Config.ItemsToDrop) do
                     AutoV2.Config.ItemsToDrop[key] = nil
                 end
-                -- Update with selected items
-                for _, item in ipairs(value) do
-                    AutoV2.Config.ItemsToDrop[item] = true
+                -- Update with selected items (value is a table of {item = true})
+                for item, enabled in pairs(value) do
+                    if enabled then
+                        AutoV2.Config.ItemsToDrop[item] = true
+                    end
                 end
                 notify("Auto Drop", "Items to drop updated!", true)
             end
