@@ -11,13 +11,13 @@ AutoV2.Config = {
     DropEnabled = false,    -- Toggle for enabling/disabling AutoDrop
     UseKeybind = false,     -- Toggle for using keybind for AutoDrop
     DropKeybind = Enum.KeyCode.F, -- Default keybind for AutoDrop
-    ItemsToDrop = {         -- Default items to drop
-        ["Shiesty"] = true,
-        ["HackToolBasic"] = true,
-        ["Bottle"] = true,
-        ["Spray Can"] = true,
-        ["Jar"] = true,
-        ["Bowling pin"] = true
+    ItemsToDrop = {         -- Default items to drop (lowercase)
+        ["shiesty"] = true,
+        ["hacktoolbasic"] = true,
+        ["bottle"] = true,
+        ["spray can"] = true,
+        ["jar"] = true,
+        ["bowling pin"] = true
     }
 }
 
@@ -181,6 +181,8 @@ function AutoV2.Init(UI, Core, notify)
             if not itemNameObj then continue end
 
             local itemName = itemNameObj:IsA("TextLabel") and (itemNameObj.Text or "Unknown") or "Unknown"
+            itemName = string.lower(itemName) -- Convert to lowercase for matching
+
             local guid = item.Name
 
             -- Extract item count
@@ -333,7 +335,6 @@ function AutoV2.Init(UI, Core, notify)
             Default = AutoV2.Config.DropKeybind,
             Callback = function(value)
                 AutoV2.Config.DropKeybind = value
-                -- Убрано уведомление
             end
         })
 
@@ -341,21 +342,21 @@ function AutoV2.Init(UI, Core, notify)
             Name = "Items to Drop",
             Multi = true,
             Options = {
-                "Shiesty", "HackToolBasic", "Bottle", "Spray Can", "Jar", "Bowling pin",
-                "Bike lock", "Bronze Mop", "Chair leg", "Metal Pipe", "Mop", "Pool Cue",
-                "Rolling Pin", "Shank", "Silver Mop", "Taser", "Wooden Board", "Bandage",
-                "Bull Energy", "Lockpick", "Dice", "Brick", "Cinder Block", "Dumbbel Plate",
-                "Glass", "Milkshake", "Rock", "Soda Can"
+                "shiesty", "hacktoolbasic", "bottle", "spray can", "jar", "bowling pin",
+                "bike lock", "bronze mop", "chair leg", "metal pipe", "mop", "pool cue",
+                "rolling pin", "shank", "silver mop", "taser", "wooden board", "bandage",
+                "bull energy", "lockpick", "dice", "brick", "cinder block", "dumbbel plate",
+                "glass", "milkshake", "rock", "soda can"
             },
-            Default = { "Shiesty", "HackToolBasic", "Bottle", "Spray Can", "Jar", "Bowling pin" },
+            Default = { "shiesty", "hacktoolbasic", "bottle", "spray can", "jar", "bowling pin" },
             Callback = function(value)
                 -- Clear current selection
                 for key in pairs(AutoV2.Config.ItemsToDrop) do
                     AutoV2.Config.ItemsToDrop[key] = nil
                 end
-                -- Update with selected items
-                for item, enabled in pairs(value) do
-                    if enabled then
+                -- Update with selected items (value is a table of {item = true/false})
+                for item, isSelected in pairs(value) do
+                    if isSelected then
                         AutoV2.Config.ItemsToDrop[item] = true
                     end
                 end
