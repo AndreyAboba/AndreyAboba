@@ -81,7 +81,7 @@ function AutoV2.Init(UI, Core, notify)
 
     -- Функция для поиска ближайшего предмета
     local function findNearestDroppedItem()
-        local currentRootPart = getRootPart() -- Динамическая проверка rootPart
+        local currentRootPart = getRootPart()
         if not currentRootPart then return nil end
 
         local nearestItem = nil
@@ -138,8 +138,11 @@ function AutoV2.Init(UI, Core, notify)
     end
 
     -- Настройка UI
-    if UI and UI.Sections.AutoInteract then
-        UI.Sections.AutoInteract:Toggle({
+    if UI and UI.Tabs.Auto then
+        -- Создаём отдельную секцию AutoPickup
+        local autoPickupSection = UI.Tabs.Auto:Section({ Name = "AutoPickup", Side = "Right" })
+
+        autoPickupSection:Toggle({
             Name = "Auto Pickup",
             Default = AutoV2.Config.Enabled,
             Callback = function(value)
@@ -154,7 +157,7 @@ function AutoV2.Init(UI, Core, notify)
             end
         })
 
-        UI.Sections.AutoInteract:Slider({
+        autoPickupSection:Slider({
             Name = "Pickup Radius",
             Default = AutoV2.Config.MinDistance,
             Minimum = 5,
