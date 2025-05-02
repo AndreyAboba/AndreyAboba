@@ -1,13 +1,13 @@
 -- AutoV2.lua
 local AutoV2 = {}
 
--- Module configuration
+-- Конфигурация модуля
 AutoV2.Config = {
-    MinDistance = 20, -- Default pickup radius
-    Enabled = false -- Toggle for enabling/disabling
+    MinDistance = 20, -- Радиус подбора по умолчанию
+    Enabled = false -- Флаг включения/выключения
 }
 
--- Module initialization
+-- Инициализация модуля
 function AutoV2.Init(UI, Core, notify)
     local Players = Core.Services.Players
     local Workspace = Core.Services.Workspace
@@ -16,7 +16,7 @@ function AutoV2.Init(UI, Core, notify)
     local Remotes = ReplicatedStorage:WaitForChild("Remotes")
     local Get = Remotes:WaitForChild("Get")
 
-    -- Cache v_u_4 for func
+    -- Кэшируем v_u_4 для func
     local v_u_4
     for _, obj in pairs(getgc(true)) do
         if type(obj) == "table" and not getmetatable(obj) and obj.event and obj.func and type(obj.event) == "number" and type(obj.func) == "number" then
@@ -29,7 +29,7 @@ function AutoV2.Init(UI, Core, notify)
         return
     end
 
-    -- Cache DroppedItems and HumanoidRootPart
+    -- Кэшируем DroppedItems и HumanoidRootPart
     local droppedItems = Workspace:FindFirstChild("DroppedItems")
     if not droppedItems then
         return
@@ -37,16 +37,13 @@ function AutoV2.Init(UI, Core, notify)
 
     local character = LocalPlayer.Character
     local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-    if not rootPart then
-        return
-    end
 
-    -- Update rootPart on character respawn
+    -- Обновление rootPart при респавне
     LocalPlayer.CharacterAdded:Connect(function(newCharacter)
         rootPart = newCharacter:WaitForChild("HumanoidRootPart")
     end)
 
-    -- Function to retrieve item names from ReplicatedStorage.Items
+    -- Функция для получения списка названий предметов из ReplicatedStorage.Items
     local function getItemNames()
         local itemsFolder = ReplicatedStorage:FindFirstChild("Items")
         if not itemsFolder then
@@ -70,14 +67,16 @@ function AutoV2.Init(UI, Core, notify)
         return itemNames
     end
 
-    -- Cache item names
+    -- Кэшируем имена предметов
     local itemNames = getItemNames()
     if next(itemNames) == nil then
         return
     end
 
-    -- Function to find the nearest dropped item
+    -- Функция для поиска ближайшего предмета
     local function findNearestDroppedItem()
+        if not rootPart then return nil end -- Проверка на наличие rootPart
+
         local nearestItem = nil
         local minDistance = AutoV2.Config.MinDistance
         local rootPosition = rootPart.Position
@@ -97,7 +96,7 @@ function AutoV2.Init(UI, Core, notify)
         return nearestItem
     end
 
-    -- Function to send pickup request
+    -- Функция для отправки запроса на подбор предмета
     local function pickupDroppedItem(item)
         v_u_4.func = v_u_4.func + 1
         local args = {
@@ -111,7 +110,7 @@ function AutoV2.Init(UI, Core, notify)
         end)
     end
 
-    -- Auto-pickup function
+    -- Функция автоматического подбора
     local running = false
     local function startAutoPickup()
         if running then return end
@@ -131,7 +130,7 @@ function AutoV2.Init(UI, Core, notify)
         running = false
     end
 
-    -- UI setup
+    -- Настройка UI
     if UI and UI.Sections.AutoInteract then
         UI.Sections.AutoInteract:Toggle({
             Name = "Auto Pickup",
@@ -140,10 +139,10 @@ function AutoV2.Init(UI, Core, notify)
                 AutoV2.Config.Enabled = value
                 if value then
                     startAutoPickup()
-                    notify("Auto Pickup", "Enabled auto-pickup of items!", false)
+                    notify("Auto Pickup", "Включён автоматический подбор предметов!", false)
                 else
                     stopAutoPickup()
-                    notify("Auto Pickup", "Disabled auto-pickup of items!", false)
+                    notify("Auto Pickup", "Выключён автоматический подбор предметов!", false)
                 end
             end
         })
@@ -155,7 +154,7 @@ function AutoV2.Init(UI, Core, notify)
             Max = 50,
             Callback = function(value)
                 AutoV2.Config.MinDistance = value
-                notify("Auto Pickup", "Pickup radius set to " .. value .. " meters!", false)
+                notify("Auto Pickup", "Радиус подбора установлен на " .. value .. " метров!", false)
             end
         })
     end
