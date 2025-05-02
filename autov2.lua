@@ -297,7 +297,7 @@ function AutoV2.Init(UI, Core, notify)
         })
 
         -- Section for AutoDrop
-        local autoDropSection = UI.Tabs.Auto:Section({ Name = "AutoDrop", Side = "Right" })
+        local autoDropSection = UI.Tabs.Auto:Section({ Name = "AutoDrop", Side = "Left" })
         autoDropSection:Header({ Name = "AutoDrop" })
 
         autoDropSection:Toggle({
@@ -333,7 +333,7 @@ function AutoV2.Init(UI, Core, notify)
             Default = AutoV2.Config.DropKeybind,
             Callback = function(value)
                 AutoV2.Config.DropKeybind = value
-                notify("Auto Drop", "Drop keybind set to " .. tostring(value) .. "!", true)
+                -- Убрано уведомление
             end
         })
 
@@ -353,7 +353,7 @@ function AutoV2.Init(UI, Core, notify)
                 for key in pairs(AutoV2.Config.ItemsToDrop) do
                     AutoV2.Config.ItemsToDrop[key] = nil
                 end
-                -- Update with selected items (value is a table of {item = true})
+                -- Update with selected items
                 for item, enabled in pairs(value) do
                     if enabled then
                         AutoV2.Config.ItemsToDrop[item] = true
