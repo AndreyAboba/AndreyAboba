@@ -3,8 +3,22 @@ local AutoV2 = {}
 
 -- Module configuration
 AutoV2.Config = {
-    MinDistance = 20, -- Default pickup radius
-    Enabled = false   -- Toggle for enabling/disabling
+    -- AutoPickup settings
+    PickupMinDistance = 20, -- Default pickup radius
+    PickupEnabled = false,  -- Toggle for enabling/disabling AutoPickup
+
+    -- AutoDrop settings
+    DropEnabled = false,    -- Toggle for enabling/disabling AutoDrop
+    UseKeybind = false,     -- Toggle for using keybind for AutoDrop
+    DropKeybind = Enum.KeyCode.F, -- Default keybind for AutoDrop
+    ItemsToDrop = {         -- Default items to drop (empty by default)
+        ["Shiesty"] = true,
+        ["HackToolBasic"] = true,
+        ["Bottle"] = true,
+        ["Spray Can"] = true,
+        ["Jar"] = true,
+        ["Bowling pin"] = true
+    }
 }
 
 -- Module initialization
@@ -12,9 +26,12 @@ function AutoV2.Init(UI, Core, notify)
     local Players = Core.Services.Players
     local Workspace = Core.Services.Workspace
     local ReplicatedStorage = Core.Services.ReplicatedStorage
+    local UserInputService = Core.Services.UserInputService
     local LocalPlayer = Core.PlayerData.LocalPlayer
+    local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
     local Remotes = ReplicatedStorage:WaitForChild("Remotes")
     local Get = Remotes:WaitForChild("Get")
+    local Send = Remotes:WaitForChild("Send")
 
     -- Cache v_u_4 for function increment
     local v_u_4
@@ -29,7 +46,7 @@ function AutoV2.Init(UI, Core, notify)
         return
     end
 
-    -- Cache DroppedItems
+    -- Cache DroppedItems for AutoPickup
     local droppedItems = Workspace:FindFirstChild("DroppedItems")
     if not droppedItems then
         return
@@ -49,7 +66,7 @@ function AutoV2.Init(UI, Core, notify)
         rootPart = newCharacter:WaitForChild("HumanoidRootPart")
     end)
 
-    -- Function to retrieve item names from ReplicatedStorage.Items
+    -- Function to retrieve item names from ReplicatedStorage.Items (for AutoPickup)
     local function getItemNames()
         local itemsFolder = ReplicatedStorage:FindFirstChild("Items")
         if not itemsFolder then
@@ -73,19 +90,19 @@ function AutoV2.Init(UI, Core, notify)
         return itemNames
     end
 
-    -- Cache item names
+    -- Cache item names for AutoPickup
     local itemNames = getItemNames()
     if next(itemNames) == nil then
         return
     end
 
-    -- Function to find the nearest dropped item
+    -- Function to find the nearest dropped item (for AutoPickup)
     local function findNearestDroppedItem()
         local currentRootPart = getRootPart()
         if not currentRootPart then return nil end
 
         local nearestItem = nil
-        local minDistance = AutoV2.Config.MinDistance
+        local minDistance = AutoV2.Config.PickupMinDistance
         local rootPosition = currentRootPart.Position
 
         for _, item in ipairs(droppedItems:GetChildren()) do
@@ -103,7 +120,7 @@ function AutoV2.Init(UI, Core, notify)
         return nearestItem
     end
 
-    -- Function to send pickup request
+    -- Function to send pickup request (for AutoPickup)
     local function pickupDroppedItem(item)
         v_u_4.func = v_u_4.func + 1
         local args = {
@@ -118,12 +135,12 @@ function AutoV2.Init(UI, Core, notify)
     end
 
     -- Auto-pickup function
-    local running = false
+    local pickupRunning = false
     local function startAutoPickup()
-        if running then return end
-        running = true
+        if pickupRunning then return end
+        pickupRunning = true
         spawn(function()
-            while running do
+            while pickupRunning do
                 local nearestItem = findNearestDroppedItem()
                 if nearestItem then
                     pickupDroppedItem(nearestItem)
@@ -134,42 +151,212 @@ function AutoV2.Init(UI, Core, notify)
     end
 
     local function stopAutoPickup()
-        running = false
+        pickupRunning = false
     end
+
+    -- Function to find the inventory (for AutoDrop)
+    local function findInventory()
+        local itemsFrame = PlayerGui:FindFirstChild("Items")
+        if not itemsFrame then return nil end
+
+        local itemsHolder = itemsFrame:FindFirstChild("ItemsHolder")
+        if not itemsHolder then return nil end
+
+        local itemsScrollingFrame = itemsHolder:FindFirstChild("ItemsScrollingFrame")
+        if not itemsScrollingFrame then return nil end
+
+        return itemsScrollingFrame
+    end
+
+    -- Function to parse inventory data (for AutoDrop)
+    local function parseInventoryData()
+        local inventory = findInventory()
+        if not inventory then return nil, nil end
+
+        local guids = {}
+        local itemsToDrop = {}
+
+        for _, item in ipairs(inventory:GetChildren()) do
+            local itemNameObj = item:FindFirstChild("ItemName")
+            if not itemNameObj then continue end
+
+            local itemName = itemNameObj:IsA("TextLabel") and (itemNameObj.Text or "Unknown") or "Unknown"
+            local guid = item.Name
+
+            -- Extract item count
+            local itemCountObj = item:FindFirstChild("ItemCount")
+            local itemCount = 1
+            if itemCountObj and itemCountObj:IsA("TextLabel") then
+                itemCount = tonumber(itemCountObj.Text:match("%d+")) or 1
+            end
+
+            if guid then
+                table.insert(guids, guid)
+                if AutoV2.Config.ItemsToDrop[itemName] then
+                    table.insert(itemsToDrop, {GUID = guid, Item = item, Name = itemName, Count = itemCount})
+                    -- Reset properties to prevent highlighting
+                    if item:IsA("GuiObject") then
+                        item.BackgroundTransparency = 1
+                        item.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                        item.BorderSizePixel = 0
+                        item.BorderColor3 = Color3.fromRGB(0, 0, 0)
+                    end
+                end
+            end
+        end
+
+        return guids, itemsToDrop
+    end
+
+    -- Function to drop items via RemoteEvent (for AutoDrop)
+    local function dropItems(itemsToDrop)
+        if not itemsToDrop or #itemsToDrop == 0 then
+            return
+        end
+
+        for _, itemData in ipairs(itemsToDrop) do
+            v_u_4.event = v_u_4.event + 1
+            local args = {
+                [1] = v_u_4.event,
+                [2] = "drop_item",
+                [3] = itemData.GUID,
+                [4] = itemData.Count
+            }
+
+            pcall(function()
+                Send:FireServer(unpack(args))
+            end)
+        end
+    end
+
+    -- Function to execute dropping items (for AutoDrop)
+    local function executeDrop()
+        local guids, itemsToDrop = parseInventoryData()
+        if not guids or not itemsToDrop then return end
+        dropItems(itemsToDrop)
+        notify("Auto Drop", "Items dropped successfully!", true)
+    end
+
+    -- Auto-drop function (runs continuously if not using keybind)
+    local dropRunning = false
+    local function startAutoDrop()
+        if dropRunning then return end
+        dropRunning = true
+        spawn(function()
+            while dropRunning do
+                if not AutoV2.Config.UseKeybind then
+                    executeDrop()
+                end
+                task.wait(1) -- Check every second to avoid excessive calls
+            end
+        end)
+    end
+
+    local function stopAutoDrop()
+        dropRunning = false
+    end
+
+    -- Keybind handler for AutoDrop
+    UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
+        if input.KeyCode == AutoV2.Config.DropKeybind and not gameProcessedEvent and AutoV2.Config.UseKeybind and AutoV2.Config.DropEnabled then
+            task.spawn(executeDrop)
+        end
+    end)
 
     -- UI setup
     if UI and UI.Tabs.Auto then
-        -- Create a dedicated AutoPickup section
+        -- Section for AutoPickup
         local autoPickupSection = UI.Tabs.Auto:Section({ Name = "AutoPickup", Side = "Right" })
-
-        -- Add Header for section
         autoPickupSection:Header({ Name = "AutoPickup" })
 
-        -- Toggle for enabling/disabling auto-pickup
         autoPickupSection:Toggle({
             Name = "Enabled",
-            Default = AutoV2.Config.Enabled,
+            Default = AutoV2.Config.PickupEnabled,
             Callback = function(value)
-                AutoV2.Config.Enabled = value
+                AutoV2.Config.PickupEnabled = value
                 if value then
                     startAutoPickup()
-                    notify("Auto Pickup", "Autopickup enabled", true)
+                    notify("Auto Pickup", "Auto-pickup enabled!", true)
                 else
                     stopAutoPickup()
-                    notify("Auto Pickup", "Autopickup disabled", true)
+                    notify("Auto Pickup", "Auto-pickup disabled!", true)
                 end
             end
         })
 
-        -- Slider for pickup radius
         autoPickupSection:Slider({
             Name = "Pickup Radius",
-            Default = AutoV2.Config.MinDistance,
+            Default = AutoV2.Config.PickupMinDistance,
             Minimum = 5,
             Maximum = 50,
             Callback = function(value)
-                AutoV2.Config.MinDistance = value
-                notify("Auto Pickup", "Pickup radius set to " .. value .. " meters!", false)
+                AutoV2.Config.PickupMinDistance = value
+                notify("Auto Pickup", "Pickup radius set to " .. value .. " meters!", true)
+            end
+        })
+
+        -- Section for AutoDrop
+        local autoDropSection = UI.Tabs.Auto:Section({ Name = "AutoDrop", Side = "Left" })
+        autoDropSection:Header({ Name = "AutoDrop" })
+
+        autoDropSection:Toggle({
+            Name = "Enabled",
+            Default = AutoV2.Config.DropEnabled,
+            Callback = function(value)
+                AutoV2.Config.DropEnabled = value
+                if value then
+                    startAutoDrop()
+                    notify("Auto Drop", "Auto-drop enabled!", true)
+                else
+                    stopAutoDrop()
+                    notify("Auto Drop", "Auto-drop disabled!", true)
+                end
+            end
+        })
+
+        autoDropSection:Toggle({
+            Name = "Use Keybind",
+            Default = AutoV2.Config.UseKeybind,
+            Callback = function(value)
+                AutoV2.Config.UseKeybind = value
+                if value then
+                    notify("Auto Drop", "Keybind mode enabled!", true)
+                else
+                    notify("Auto Drop", "Keybind mode disabled!", true)
+                end
+            end
+        })
+
+        autoDropSection:Keybind({
+            Name = "Drop Keybind",
+            Default = AutoV2.Config.DropKeybind,
+            Callback = function(value)
+                AutoV2.Config.DropKeybind = value
+                notify("Auto Drop", "Drop keybind set to " .. tostring(value) .. "!", true)
+            end
+        })
+
+        autoDropSection:Dropdown({
+            Name = "Items to Drop",
+            Multi = true,
+            Options = {
+                "Shiesty", "HackToolBasic", "Bottle", "Spray Can", "Jar", "Bowling pin",
+                "Bike lock", "Bronze Mop", "Chair leg", "Metal Pipe", "Mop", "Pool Cue",
+                "Rolling Pin", "Shank", "Silver Mop", "Taser", "Wooden Board", "Bandage",
+                "Bull Energy", "Lockpick", "Dice", "Brick", "Cinder Block", "Dumbbel Plate",
+                "Glass", "Milkshake", "Rock", "Soda Can"
+            },
+            Default = { "Shiesty", "HackToolBasic", "Bottle", "Spray Can", "Jar", "Bowling pin" },
+            Callback = function(value)
+                -- Clear current selection
+                for key in pairs(AutoV2.Config.ItemsToDrop) do
+                    AutoV2.Config.ItemsToDrop[key] = nil
+                end
+                -- Update with selected items
+                for _, item in ipairs(value) do
+                    AutoV2.Config.ItemsToDrop[item] = true
+                end
+                notify("Auto Drop", "Items to drop updated!", true)
             end
         })
     end
