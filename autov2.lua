@@ -18,7 +18,10 @@ AutoV2.Config = {
         ["spray can"] = true,
         ["jar"] = true,
         ["bowling pin"] = true
-    }
+    },
+
+    -- AutoReload settings
+    ReloadEnabled = false   -- Toggle for enabling/disabling AutoReload
 }
 
 -- Module initialization
@@ -266,6 +269,133 @@ function AutoV2.Init(UI, Core, notify)
         end
     end)
 
+    -- Function to update the current weapon (for AutoReload)
+    local function updateCurrentWeapon()
+        local character = LocalPlayer.Character
+        if not character then return end
+        local maxAttempts = 3
+        local attempt = 1
+        while attempt <= maxAttempts do
+            currentWeapon = nil
+            for _, child in ipairs(character:GetChildren()) do
+                if child.ClassName == "Tool" then
+                    currentWeapon = child
+                    print("[AutoReload] Updated weapon:", child.Name)
+                    return
+                end
+            end
+            if not currentWeapon and attempt < maxAttempts then
+                print("[AutoReload] Weapon not found, retrying... (Attempt", attempt, "of", maxAttempts, ")")
+                task.wait(0.2)
+                attempt = attempt + 1
+            else
+                break
+            end
+        end
+        if not currentWeapon then
+            warn("[AutoReload] Failed to find weapon after", maxAttempts, "attempts")
+        end
+    end
+
+    -- Function to check if the weapon is a firearm (for AutoReload)
+    local function isFirearm(weapon)
+        if not weapon then return false end
+        local gunItems = ReplicatedStorage:WaitForChild("Items"):WaitForChild("gun")
+        return gunItems:FindFirstChild(weapon.Name) ~= nil
+    end
+
+    -- Function to get the current ammo count from UI (for AutoReload)
+    local function getCurrentAmmoFromUI()
+        local bulletsLabel = UI.get("Bullets")
+        if bulletsLabel then
+            local text = bulletsLabel.Text
+            local current = tonumber(text:match("^(%d+)/"))
+            if current then
+                print("[AutoReload] Current ammo from UI:", current)
+                return current
+            end
+        end
+        warn("[AutoReload] Failed to get current ammo from UI")
+        return nil
+    end
+
+    -- Function to send the reload RemoteFunction and update UI (for AutoReload)
+    local function sendReloadEvent(weapon)
+        v_u_4.func = v_u_4.func + 1
+        local args = {
+            [1] = v_u_4.func,
+            [2] = "reload_gun",
+            [3] = weapon
+        }
+
+        print("[AutoReload] Sending reload event for", weapon.Name, "with event_id:", v_u_4.func)
+        local success, newAmmo = pcall(function()
+            return Get:InvokeServer(unpack(args))
+        end)
+
+        if success and newAmmo then
+            print("[AutoReload] Reload successful, new ammo count:", newAmmo)
+            local bulletsLabel = UI.get("Bullets")
+            if bulletsLabel then
+                local magSize = weapon:GetAttribute("MagSize") or 0
+                bulletsLabel.Text = string.format("%d/%d", newAmmo, magSize)
+                print("[AutoReload] Updated Bullets UI to:", bulletsLabel.Text)
+
+                -- Update the ItemUtils ammo_amount
+                local ItemUtils = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Game"):WaitForChild("Inventory"):WaitForChild("ItemUtils"))
+                local Data = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Core"):WaitForChild("Data"))
+                local itemInfo = ItemUtils.get_item_info(Data, weapon:GetAttribute("ItemGUID"))
+                if itemInfo then
+                    itemInfo.ammo_amount = newAmmo
+                end
+            else
+                warn("[AutoReload] Bullets UI element not found")
+            end
+        else
+            warn("[AutoReload] Failed to reload or get new ammo count")
+        end
+    end
+
+    -- Auto-reload function
+    local reloadRunning = false
+    local function startAutoReload()
+        if reloadRunning then return end
+        reloadRunning = true
+        spawn(function()
+            while reloadRunning do
+                if currentWeapon and isFirearm(currentWeapon) then
+                    local currentAmmo = getCurrentAmmoFromUI()
+                    if currentAmmo and currentAmmo <= 0 then
+                        sendReloadEvent(currentWeapon)
+                    end
+                else
+                    updateCurrentWeapon()
+                end
+                task.wait(0.5)
+            end
+        end)
+    end
+
+    local function stopAutoReload()
+        reloadRunning = false
+    end
+
+    -- Initialize character handling for AutoReload
+    LocalPlayer.CharacterAdded:Connect(function(newCharacter)
+        currentWeapon = nil
+        updateCurrentWeapon()
+        if AutoV2.Config.ReloadEnabled then
+            startAutoReload()
+        end
+    end)
+
+    if LocalPlayer.Character then
+        updateCurrentWeapon()
+        if AutoV2.Config.ReloadEnabled then
+            startAutoReload()
+        end
+    end
+
     -- UI setup
     if UI and UI.Tabs.Auto then
         -- Section for AutoPickup
@@ -354,13 +484,32 @@ function AutoV2.Init(UI, Core, notify)
                 for key in pairs(AutoV2.Config.ItemsToDrop) do
                     AutoV2.Config.ItemsToDrop[key] = nil
                 end
-                -- Update with selected items (value is a table of {item = true/false})
+                -- Update with selected items
                 for item, isSelected in pairs(value) do
                     if isSelected then
                         AutoV2.Config.ItemsToDrop[item] = true
                     end
                 end
                 notify("Auto Drop", "Items to drop updated!", true)
+            end
+        })
+
+        -- Section for AutoReload
+        local autoReloadSection = UI.Tabs.Auto:Section({ Name = "AutoReload", Side = "Right" })
+        autoReloadSection:Header({ Name = "AutoReload" })
+
+        autoReloadSection:Toggle({
+            Name = "Enabled",
+            Default = AutoV2.Config.ReloadEnabled,
+            Callback = function(value)
+                AutoV2.Config.ReloadEnabled = value
+                if value then
+                    startAutoReload()
+                    notify("Auto Reload", "Auto-reload enabled!", true)
+                else
+                    stopAutoReload()
+                    notify("Auto Reload", "Auto-reload disabled!", true)
+                end
             end
         })
     end
