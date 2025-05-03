@@ -305,7 +305,7 @@ function Vehicles.Init(UI, Core, notify)
         if not vehicle or not seat or not VehicleFly.State.IsFlying or not VehicleFly.State.FlyBodyVelocity then return end
 
         local humanoid = Core.PlayerData.LocalPlayer.Character and Core.PlayerData.LocalPlayer.Character:FindFirstChild("Humanoid")
-        if not humanoid or humanoid.SeatPart ~= seat then
+        if not humanoid or humanoid.SeatPart != seat then
             VehicleFly.EnableFlight(vehicle, seat, false)
             return
         end
@@ -543,6 +543,45 @@ function Vehicles.Init(UI, Core, notify)
         restoreVehicle()
     end
 
+    local function sitInVehicle(vehicleSeat)
+        if not vehicleSeat then
+            print("No vehicle selected!")
+            return
+        end
+        
+        local vehicle = vehicleSeat.Parent
+        local vehicleState = u11.class.get(vehicle)
+        if vehicleState and vehicleState.states.locked.get() then
+            vehicleState.states.locked.set(false)
+            print("Bypassed vehicle lock!")
+        end
+        
+        local drivePrompt = vehicleSeat:FindFirstChild("DrivePrompt", true)
+        if drivePrompt then
+            drivePrompt.Enabled = true
+            print("Enabled DrivePrompt!")
+        end
+        
+        local restoreVehicle = stabilizeVehicle(vehicleSeat.Parent)
+        
+        vehicleSeat:Sit(Humanoid)
+        
+        if Humanoid.SeatPart == vehicleSeat then
+            print("Successfully sat in vehicle:", vehicleSeat:GetFullName())
+        else
+            print("Failed to sit, retrying...")
+            wait(0.5)
+            vehicleSeat:Sit(Humanoid)
+            if Humanoid.SeatPart == vehicleSeat then
+                print("Successfully sat in vehicle after retry:", vehicleSeat:GetFullName())
+            else
+                print("Failed to sit in vehicle:", vehicleSeat:GetFullName())
+            end
+        end
+        
+        restoreVehicle()
+    end
+
     VehicleExploit.RefreshVehicles = function()
         local vehicles = updateVehicleList()
         notify("Vehicle Exploit", "Refreshed vehicle list. Found " .. #vehicles .. " vehicles.", true)
@@ -554,7 +593,7 @@ function Vehicles.Init(UI, Core, notify)
         end
     end
 
-    VehicleExploit.ControlCar = function()
+    VehicleExploit.ControlVehicle = function()
         local vehicleName = VehicleExploit.Settings.SelectedVehicle.Value
         if not vehicleName then
             notify("Vehicle Exploit", "No vehicle selected!", true)
@@ -565,7 +604,11 @@ function Vehicles.Init(UI, Core, notify)
             notify("Vehicle Exploit", "Vehicle not found: " .. vehicleName, true)
             return
         end
-        sitAsPassenger(vehicleSeat)
+        u5.send("initiate_lockpicking", vehicleSeat.Parent)
+        wait(0.1)
+        u5.send("lockpick_success", vehicleSeat.Parent)
+        wait(0.1)
+        sitInVehicle(vehicleSeat)
     end
 
     -- Настройка UI для VehicleExploit
@@ -600,9 +643,9 @@ function Vehicles.Init(UI, Core, notify)
             Callback = VehicleExploit.RefreshVehicles
         }, "RefreshVehicles")
         UI.Sections.VehicleExploit:Button({
-            Name = "Control Car",
-            Callback = VehicleExploit.ControlCar
-        }, "ControlCar")
+            Name = "Control Vehicle",
+            Callback = VehicleExploit.ControlVehicle
+        }, "ControlVehicle")
     end
 
     -- Обработка посадки/высадки из транспорта
@@ -656,7 +699,7 @@ function Vehicles.Init(UI, Core, notify)
             Name = "Hold Keybind",
             Default = VehicleSpeed.Settings.HoldKeybind.Default,
             Callback = function(value)
-                if value ~= VehicleSpeed.Settings.HoldKeybind.Value then
+                if value != VehicleSpeed.Settings.HoldKeybind.Value then
                     VehicleSpeed.Settings.HoldKeybind.Value = value
                     notify("VehicleSpeed", "Hold Keybind set to: " .. tostring(value), true)
                 end
