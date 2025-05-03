@@ -7,7 +7,7 @@ AutoV2.Config = {
     PickupEnabled = false,
 
     DropEnabled = false,
-    UseKeybind = false,
+    UseKeybind = false, -- Changed default to false (no keybind by default)
     DropKeybind = Enum.KeyCode.F,
     ItemsToDrop = {
         ["shiesty"] = true,
@@ -147,7 +147,7 @@ function AutoV2.Init(MacLib, Core, notify)
                         sendReloadEvent(weapon)
                     end
                 end
-                task.wait(1) -- Increased interval to reduce FPS impact
+                task.wait(1)
             end
             reloadCoroutine = nil
         end)
@@ -194,7 +194,7 @@ function AutoV2.Init(MacLib, Core, notify)
                 if nearestItem then
                     pickupDroppedItem(nearestItem)
                 end
-                task.wait(0.1) -- Increased interval to reduce FPS impact
+                task.wait(0.1)
             end
             pickupCoroutine = nil
         end)
@@ -268,7 +268,7 @@ function AutoV2.Init(MacLib, Core, notify)
                 if not AutoV2.Config.UseKeybind then
                     executeDrop()
                 end
-                task.wait(1.5) -- Increased interval to reduce FPS impact
+                task.wait(1.5)
             end
             dropCoroutine = nil
         end)
@@ -360,12 +360,13 @@ function AutoV2.Init(MacLib, Core, notify)
         autoDropSection:Dropdown({
             Name = "Items to Drop",
             Multi = true,
+            Search = true, -- Added Search = true for the dropdown
             Options = {
                 "shiesty", "hacktoolbasic", "bottle", "spray can", "jar", "bowling pin",
                 "bike lock", "bronze mop", "chair leg", "metal pipe", "mop", "pool cue",
                 "rolling pin", "shank", "silver mop", "taser", "wooden board", "bandage",
                 "bull energy", "lockpick", "dice", "brick", "cinder block", "dumbbel plate",
-                "glass", "milkshake", "rock", "soda can"
+                "glass", "milkshake", "rock", "soda can", "mug" -- Added "mug" to the options
             },
             Default = { "shiesty", "hacktoolbasic", "bottle", "spray can", "jar", "bowling pin" },
             Callback = function(value)
