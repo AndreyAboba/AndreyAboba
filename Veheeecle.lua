@@ -699,7 +699,7 @@ function Vehicles.Init(UI, Core, notify)
             Name = "Hold Keybind",
             Default = VehicleSpeed.Settings.HoldKeybind.Default,
             Callback = function(value)
-                if value != VehicleSpeed.Settings.HoldKeybind.Value then
+                if value ~= VehicleSpeed.Settings.HoldKeybind.Value then
                     VehicleSpeed.Settings.HoldKeybind.Value = value
                     notify("VehicleSpeed", "Hold Keybind set to: " .. tostring(value), true)
                 end
