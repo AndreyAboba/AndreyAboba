@@ -104,7 +104,7 @@ function AutoV2.Init(MacLib, Core, notify)
         return
     end
 
-    -- AutoReload functions (based on autoReload.lua)
+    -- AutoReload functions
     local currentWeapon = nil
     local character = nil
 
@@ -177,6 +177,30 @@ function AutoV2.Init(MacLib, Core, notify)
                 local itemInfo = ItemUtils.get_item_info(Data, weapon:GetAttribute("ItemGUID"))
                 if itemInfo then
                     itemInfo.ammo_amount = newAmmo
+                end
+
+                -- Attempt to sync client-side weapon state
+                if weapon then
+                    -- Update local attributes if they exist
+                    if weapon:GetAttribute("Ammo") then
+                        weapon:SetAttribute("Ammo", newAmmo)
+                    end
+                    -- Look for a local script or module that might manage ammo
+                    local weaponScripts = weapon:GetDescendants()
+                    for _, script in ipairs(weaponScripts) do
+                        if script:IsA("LocalScript") or script:IsA("ModuleScript") then
+                            local module = script:IsA("ModuleScript") and require(script) or nil
+                            if module and type(module) == "table" then
+                                if module.ammo then
+                                    module.ammo = newAmmo
+                                    print("[AutoReload] Updated local module ammo to:", newAmmo)
+                                elseif module.currentAmmo then
+                                    module.currentAmmo = newAmmo
+                                    print("[AutoReload] Updated local module currentAmmo to:", newAmmo)
+                                end
+                            end
+                        end
+                    end
                 end
             else
                 warn("[AutoReload] Bullets UI element not found")
@@ -391,6 +415,7 @@ function AutoV2.Init(MacLib, Core, notify)
             Default = AutoV2.Config.PickupMinDistance,
             Minimum = 5,
             Maximum = 50,
+            Precision = 0, -- Ensure integer values
             Callback = function(value)
                 AutoV2.Config.PickupMinDistance = value
                 notify("Auto Pickup", "Pickup radius set to " .. value .. " meters!", true)
