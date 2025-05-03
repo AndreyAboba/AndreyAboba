@@ -405,6 +405,8 @@ function Vehicles.Init(UI, Core, notify)
     end
 
     -- Функции VehicleExploit
+    local vehicleDropdown -- Переменная для хранения dropdown
+
     local function updateVehicleList()
         local vehiclesFolder = Core.Services.Workspace:FindFirstChild("Vehicles")
         if not vehiclesFolder then
@@ -580,28 +582,63 @@ function Vehicles.Init(UI, Core, notify)
         restoreVehicle()
     end
 
-    VehicleExploit.RefreshVehicles = function()
-        local vehicles = updateVehicleList()
-        notify("Vehicle Exploit", "Refreshed vehicle list. Found " .. #vehicles .. " vehicles.", true)
-        if UI.Sections.VehicleExploit then
+    local function updateVehicleDropdownOptions()
+        if not vehicleDropdown then
+            print("Vehicle dropdown not initialized!")
+            return
+        end
+
+        local newOptions = updateVehicleList()
+        notify("Vehicle Exploit", "Refreshed vehicle list. Found " .. #newOptions .. " vehicles.", true)
+
+        -- Проверяем, изменился ли список опций
+        local currentOptions = vehicleDropdown:GetOptions() or {}
+        local optionsChanged = #newOptions ~= table.getn(currentOptions)
+        if not optionsChanged then
+            for i, opt in ipairs(newOptions) do
+                local found = false
+                for k, v in pairs(currentOptions) do
+                    if k == opt then
+                        found = true
+                        break
+                    end
+                end
+                if not found then
+                    optionsChanged = true
+                    break
+                end
+            end
+        end
+
+        if optionsChanged then
             local successClear, errClear = pcall(function()
-                UI.Sections.VehicleExploit:ClearOptions()
-                print("Cleared options successfully")
+                vehicleDropdown:ClearOptions()
+                print("Cleared vehicle dropdown options successfully")
             end)
             if not successClear then
-                print("Error clearing options:", errClear)
+                print("Error clearing vehicle dropdown options:", errClear)
             end
 
             local successInsert, errInsert = pcall(function()
-                UI.Sections.VehicleExploit:InsertOptions(vehicles)
-                print("Inserted", #vehicles, "options:", table.concat(vehicles, ", "))
+                vehicleDropdown:InsertOptions(newOptions)
+                print("Inserted", #newOptions, "options into vehicle dropdown:", table.concat(newOptions, ", "))
             end)
             if not successInsert then
-                print("Error inserting options:", errInsert)
+                print("Error inserting options into vehicle dropdown:", errInsert)
             end
-        else
-            print("VehicleExploit section not found!")
         end
+
+        -- Обновляем выбор, сохраняя текущий, если он всё ещё существует
+        local currentSelection = VehicleExploit.Settings.SelectedVehicle.Value
+        if currentSelection and vehicleDropdown:IsOption(currentSelection) then
+            vehicleDropdown:UpdateSelection(currentSelection)
+        else
+            vehicleDropdown:UpdateSelection("")
+        end
+    end
+
+    VehicleExploit.RefreshVehicles = function()
+        updateVehicleDropdownOptions()
     end
 
     VehicleExploit.ControlVehicle = function()
@@ -628,7 +665,7 @@ function Vehicles.Init(UI, Core, notify)
     end
     if UI.Sections.VehicleExploit then
         UI.Sections.VehicleExploit:Header({ Name = "Vehicle Exploit Settings" })
-        UI.Sections.VehicleExploit:Dropdown({
+        vehicleDropdown = UI.Sections.VehicleExploit:Dropdown({
             Name = "Vehicle Select",
             Default = "",
             Options = updateVehicleList(),
