@@ -3,12 +3,15 @@ local AutoV2 = {}
 
 -- Module configuration
 AutoV2.Config = {
+    -- AutoPickup settings
     PickupMinDistance = 20, -- Default pickup radius
-    PickupEnabled = false,
-    DropEnabled = false,
-    UseKeybind = false,
-    DropKeybind = Enum.KeyCode.F,
-    ItemsToDrop = {
+    PickupEnabled = false,  -- Toggle for enabling/disabling AutoPickup
+
+    -- AutoDrop settings
+    DropEnabled = false,    -- Toggle for enabling/disabling AutoDrop
+    UseKeybind = false,     -- Toggle for using keybind for AutoDrop
+    DropKeybind = Enum.KeyCode.F, -- Default keybind for AutoDrop
+    ItemsToDrop = {         -- Default items to drop (lowercase)
         ["shiesty"] = true,
         ["hacktoolbasic"] = true,
         ["bottle"] = true,
@@ -16,12 +19,15 @@ AutoV2.Config = {
         ["jar"] = true,
         ["bowling pin"] = true
     },
-    ReloadEnabled = false
+
+    -- AutoReload settings
+    ReloadEnabled = false   -- Toggle for enabling/disabling AutoReload
 }
 
 -- Module initialization
-function AutoV2.Init(UI, Core, notify)
+function AutoV2.Init(MacLib, Core, notify)
     local Players = Core.Services.Players
+    local Workspace = Core.Services.Workspace
     local ReplicatedStorage = Core.Services.ReplicatedStorage
     local UserInputService = Core.Services.UserInputService
     local LocalPlayer = Core.PlayerData.LocalPlayer
@@ -30,15 +36,8 @@ function AutoV2.Init(UI, Core, notify)
     local Get = Remotes:WaitForChild("Get")
     local Send = Remotes:WaitForChild("Send")
 
-    -- Debug: Check the passed UI
-    print("[AutoV2] UI passed to Init:", UI)
-    if UI and UI.get then
-        print("[AutoV2] UI.get exists:", UI.get)
-    else
-        warn("[AutoV2] UI or UI.get is unavailable, loading UI directly")
-        -- Fallback: Load UI directly as in autoReload.lua
-        UI = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Core"):WaitForChild("UI"))
-    end
+    -- Load GameUI for AutoReload (separate from MacLib)
+    local GameUI = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Core"):WaitForChild("UI"))
 
     -- Cache v_u_4 for function increment
     local v_u_4
@@ -53,76 +52,105 @@ function AutoV2.Init(UI, Core, notify)
         return
     end
 
-    -- Cache gun items and item names
-    local gunItems = ReplicatedStorage:WaitForChild("Items"):WaitForChild("gun")
-    local itemNames = {}
-    for _, categoryName in pairs({"ammo", "gun", "melee", "money"}) do
-        local category = ReplicatedStorage:WaitForChild("Items"):FindFirstChild(categoryName)
-        if category then
-            for _, item in pairs(category:GetChildren()) do
-                itemNames[item.Name] = true
+    -- Cache DroppedItems for AutoPickup
+    local droppedItems = Workspace:FindFirstChild("DroppedItems")
+    if not droppedItems then
+        warn("[AutoV2] DroppedItems not found in Workspace")
+        return
+    end
+
+    -- Function to get the current rootPart
+    local function getRootPart()
+        local character = LocalPlayer.Character
+        if not character then
+            character = LocalPlayer.CharacterAdded:Wait()
+        end
+        return character:WaitForChild("HumanoidRootPart")
+    end
+
+    local rootPart = getRootPart()
+    LocalPlayer.CharacterAdded:Connect(function(newCharacter)
+        rootPart = newCharacter:WaitForChild("HumanoidRootPart")
+    end)
+
+    -- Function to retrieve item names from ReplicatedStorage.Items (for AutoPickup)
+    local function getItemNames()
+        local itemsFolder = ReplicatedStorage:FindFirstChild("Items")
+        if not itemsFolder then
+            return {}
+        end
+
+        local itemNames = {}
+        local categories = {"ammo", "gun", "melee", "money"}
+        for _, categoryName in ipairs(categories) do
+            local category = itemsFolder:FindFirstChild(categoryName)
+            if category then
+                for _, item in ipairs(category:GetChildren()) do
+                    if item:IsA("StringValue") or item:IsA("ObjectValue") then
+                        itemNames[item.Value or item.Name] = true
+                    else
+                        itemNames[item.Name] = true
+                    end
+                end
             end
         end
+        return itemNames
     end
-    if not next(itemNames) then
+
+    -- Cache item names for AutoPickup
+    local itemNames = getItemNames()
+    if next(itemNames) == nil then
         warn("[AutoV2] No item names found in ReplicatedStorage.Items")
         return
     end
 
-    -- Variables
+    -- AutoReload functions (based on autoReload.lua)
     local currentWeapon = nil
     local character = nil
-    local pickupRunning = false
-    local dropRunning = false
-    local reloadRunning = false
-
-    -- Utility functions
-    local function getRootPart()
-        local char = LocalPlayer.Character
-        if not char then
-            char = LocalPlayer.CharacterAdded:Wait()
-        end
-        return char:WaitForChild("HumanoidRootPart")
-    end
 
     local function updateCurrentWeapon()
         if not character then return end
-        currentWeapon = nil
-        for i = 1, 3 do
-            for _, child in pairs(character:GetChildren()) do
+        local maxAttempts = 3
+        local attempt = 1
+        while attempt <= maxAttempts do
+            currentWeapon = nil
+            for _, child in ipairs(character:GetChildren()) do
                 if child.ClassName == "Tool" then
                     currentWeapon = child
                     print("[AutoReload] Updated weapon:", child.Name)
                     return
                 end
             end
-            if not currentWeapon then
-                print("[AutoReload] Weapon not found, retrying... (Attempt", i, "of 3)")
+            if not currentWeapon and attempt < maxAttempts then
+                print("[AutoReload] Weapon not found, retrying... (Attempt", attempt, "of", maxAttempts, ")")
                 task.wait(0.2)
+                attempt = attempt + 1
+            else
+                break
             end
         end
-        warn("[AutoReload] Failed to find weapon after 3 attempts")
+        if not currentWeapon then
+            warn("[AutoReload] Failed to find weapon after", maxAttempts, "attempts")
+        end
     end
 
     local function isFirearm(weapon)
         if not weapon then return false end
+        local gunItems = ReplicatedStorage:WaitForChild("Items"):WaitForChild("gun")
         return gunItems:FindFirstChild(weapon.Name) ~= nil
     end
 
     local function getCurrentAmmoFromUI()
-        if not UI or not UI.get then
-            warn("[AutoReload] UI module or get function is unavailable")
-            return nil
-        end
-        local bulletsLabel = UI.get("Bullets")
-        if bulletsLabel and bulletsLabel.Text then
-            local current = tonumber(bulletsLabel.Text:match("^(%d+)/"))
+        local bulletsLabel = GameUI.get("Bullets")
+        if bulletsLabel then
+            local text = bulletsLabel.Text
+            local current = tonumber(text:match("^(%d+)/"))
             if current then
                 print("[AutoReload] Current ammo from UI:", current)
                 return current
             end
         end
-        warn("[AutoReload] Failed to get current ammo from UI (bulletsLabel or Text is nil)")
+        warn("[AutoReload] Failed to get current ammo from UI")
         return nil
     end
 
@@ -133,12 +161,13 @@ function AutoV2.Init(UI, Core, notify)
             [2] = "reload_gun",
             [3] = weapon
         }
+        print("[AutoReload] Sending reload event for", weapon.Name, "with event_id:", v_u_4.func)
         local success, newAmmo = pcall(function()
             return Get:InvokeServer(unpack(args))
         end)
         if success and newAmmo then
             print("[AutoReload] Reload successful, new ammo count:", newAmmo)
-            local bulletsLabel = UI.get("Bullets")
+            local bulletsLabel = GameUI.get("Bullets")
             if bulletsLabel then
                 local magSize = weapon:GetAttribute("MagSize") or 0
                 bulletsLabel.Text = string.format("%d/%d", newAmmo, magSize)
@@ -157,15 +186,39 @@ function AutoV2.Init(UI, Core, notify)
         end
     end
 
+    local function startAutoReload()
+        spawn(function()
+            while AutoV2.Config.ReloadEnabled do
+                if currentWeapon and isFirearm(currentWeapon) then
+                    local currentAmmo = getCurrentAmmoFromUI()
+                    if currentAmmo and currentAmmo <= 0 then
+                        sendReloadEvent(currentWeapon)
+                    end
+                else
+                    updateCurrentWeapon()
+                end
+                task.wait(0.5)
+            end
+        end)
+    end
+
+    local function stopAutoReload()
+        AutoV2.Config.ReloadEnabled = false
+    end
+
+    -- AutoPickup functions
+    local pickupRunning = false
     local function findNearestDroppedItem()
-        local rootPart = getRootPart()
+        local currentRootPart = getRootPart()
+        if not currentRootPart then return nil end
         local nearestItem = nil
         local minDistance = AutoV2.Config.PickupMinDistance
-        for _, item in pairs(Workspace:WaitForChild("DroppedItems"):GetChildren()) do
+        local rootPosition = currentRootPart.Position
+        for _, item in ipairs(droppedItems:GetChildren()) do
             if item.ClassName == "Model" and itemNames[item.Name] then
-                local primaryPart = item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart")
+                local primaryPart = item:FindFirstChild("PrimaryPart") or item:FindFirstChildWhichIsA("BasePart")
                 if primaryPart then
-                    local distance = (rootPart.Position - primaryPart.Position).Magnitude
+                    local distance = (rootPosition - primaryPart.Position).Magnitude
                     if distance <= minDistance then
                         nearestItem = item
                         minDistance = distance
@@ -188,12 +241,34 @@ function AutoV2.Init(UI, Core, notify)
         end)
     end
 
+    local function startAutoPickup()
+        if pickupRunning then return end
+        pickupRunning = true
+        spawn(function()
+            while pickupRunning do
+                local nearestItem = findNearestDroppedItem()
+                if nearestItem then
+                    pickupDroppedItem(nearestItem)
+                end
+                task.wait(0.03)
+            end
+        end)
+    end
+
+    local function stopAutoPickup()
+        pickupRunning = false
+    end
+
+    -- AutoDrop functions
+    local dropRunning = false
     local function findInventory()
         local itemsFrame = PlayerGui:FindFirstChild("Items")
         if not itemsFrame then return nil end
         local itemsHolder = itemsFrame:FindFirstChild("ItemsHolder")
         if not itemsHolder then return nil end
-        return itemsHolder:FindFirstChild("ItemsScrollingFrame")
+        local itemsScrollingFrame = itemsHolder:FindFirstChild("ItemsScrollingFrame")
+        if not itemsScrollingFrame then return nil end
+        return itemsScrollingFrame
     end
 
     local function parseInventoryData()
@@ -201,24 +276,25 @@ function AutoV2.Init(UI, Core, notify)
         if not inventory then return nil, nil end
         local guids = {}
         local itemsToDrop = {}
-        for _, item in pairs(inventory:GetChildren()) do
+        for _, item in ipairs(inventory:GetChildren()) do
             local itemNameObj = item:FindFirstChild("ItemName")
-            if not itemNameObj or not itemNameObj:IsA("TextLabel") then
-                -- Пропускаем итерацию
-            else
-                local itemName = string.lower(itemNameObj.Text or "Unknown")
-                local guid = item.Name
-                local itemCountObj = item:FindFirstChild("ItemCount")
-                local itemCount = itemCountObj and itemCountObj:IsA("TextLabel") and tonumber(itemCountObj.Text:match("%d+")) or 1
-                if guid and AutoV2.Config.ItemsToDrop[itemName] then
-                    table.insert(guids, guid)
-                    table.insert(itemsToDrop, {GUID = guid, Item = item, Name = itemName, Count = itemCount})
-                    if item:IsA("GuiObject") then
-                        item.BackgroundTransparency = 1
-                        item.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-                        item.BorderSizePixel = 0
-                        item.BorderColor3 = Color3.fromRGB(0, 0, 0)
-                    end
+            if not itemNameObj then continue end
+            local itemName = itemNameObj:IsA("TextLabel") and (itemNameObj.Text or "Unknown") or "Unknown"
+            itemName = string.lower(itemName)
+            local guid = item.Name
+            local itemCountObj = item:FindFirstChild("ItemCount")
+            local itemCount = 1
+            if itemCountObj and itemCountObj:IsA("TextLabel") then
+                itemCount = tonumber(itemCountObj.Text:match("%d+")) or 1
+            end
+            if guid and AutoV2.Config.ItemsToDrop[itemName] then
+                table.insert(guids, guid)
+                table.insert(itemsToDrop, {GUID = guid, Item = item, Name = itemName, Count = itemCount})
+                if item:IsA("GuiObject") then
+                    item.BackgroundTransparency = 1
+                    item.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                    item.BorderSizePixel = 0
+                    item.BorderColor3 = Color3.fromRGB(0, 0, 0)
                 end
             end
         end
@@ -227,7 +303,7 @@ function AutoV2.Init(UI, Core, notify)
 
     local function dropItems(itemsToDrop)
         if not itemsToDrop or #itemsToDrop == 0 then return false end
-        for _, itemData in pairs(itemsToDrop) do
+        for _, itemData in ipairs(itemsToDrop) do
             v_u_4.event = v_u_4.event + 1
             local args = {
                 [1] = v_u_4.event,
@@ -244,28 +320,11 @@ function AutoV2.Init(UI, Core, notify)
 
     local function executeDrop()
         local guids, itemsToDrop = parseInventoryData()
-        if guids and itemsToDrop and dropItems(itemsToDrop) then
+        if not guids or not itemsToDrop then return end
+        local success = dropItems(itemsToDrop)
+        if success then
             notify("Auto Drop", "Items dropped successfully!", true)
         end
-    end
-
-    -- Main functions
-    local function startAutoPickup()
-        if pickupRunning then return end
-        pickupRunning = true
-        spawn(function()
-            while pickupRunning do
-                local nearestItem = findNearestDroppedItem()
-                if nearestItem then
-                    pickupDroppedItem(nearestItem)
-                end
-                task.wait(0.1)
-            end
-        end)
-    end
-
-    local function stopAutoPickup()
-        pickupRunning = false
     end
 
     local function startAutoDrop()
@@ -276,7 +335,7 @@ function AutoV2.Init(UI, Core, notify)
                 if not AutoV2.Config.UseKeybind then
                     executeDrop()
                 end
-                task.wait(2)
+                task.wait(1)
             end
         end)
     end
@@ -285,27 +344,12 @@ function AutoV2.Init(UI, Core, notify)
         dropRunning = false
     end
 
-    local function startAutoReload()
-        if reloadRunning then return end
-        reloadRunning = true
-        spawn(function()
-            while reloadRunning do
-                if currentWeapon and isFirearm(currentWeapon) then
-                    local currentAmmo = getCurrentAmmoFromUI()
-                    if currentAmmo and currentAmmo <= 0 then
-                        sendReloadEvent(currentWeapon)
-                    end
-                else
-                    updateCurrentWeapon()
-                end
-                task.wait(0.5)
-            end
-        end)
-    end
-
-    local function stopAutoReload()
-        reloadRunning = false
-    end
+    -- Keybind handler for AutoDrop
+    UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
+        if input.KeyCode == AutoV2.Config.DropKeybind and not gameProcessedEvent and AutoV2.Config.UseKeybind and AutoV2.Config.DropEnabled then
+            task.spawn(executeDrop)
+        end
+    end)
 
     -- Event handlers
     LocalPlayer.CharacterAdded:Connect(function(newCharacter)
@@ -324,15 +368,9 @@ function AutoV2.Init(UI, Core, notify)
         end
     end
 
-    UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
-        if input.KeyCode == AutoV2.Config.DropKeybind and not gameProcessedEvent and AutoV2.Config.UseKeybind and AutoV2.Config.DropEnabled then
-            task.spawn(executeDrop)
-        end
-    end)
-
-    -- UI setup
-    if UI and UI.Tabs.Auto then
-        local autoPickupSection = UI.Tabs.Auto:Section({ Name = "AutoPickup", Side = "Right" })
+    -- UI setup with MacLib
+    if MacLib and MacLib.Tabs and MacLib.Tabs.Auto then
+        local autoPickupSection = MacLib.Tabs.Auto:Section({ Name = "AutoPickup", Side = "Right" })
         autoPickupSection:Header({ Name = "AutoPickup" })
         autoPickupSection:Toggle({
             Name = "Enabled",
@@ -353,14 +391,13 @@ function AutoV2.Init(UI, Core, notify)
             Default = AutoV2.Config.PickupMinDistance,
             Minimum = 5,
             Maximum = 50,
-            Precision = 1,
             Callback = function(value)
                 AutoV2.Config.PickupMinDistance = value
                 notify("Auto Pickup", "Pickup radius set to " .. value .. " meters!", true)
             end
         })
 
-        local autoDropSection = UI.Tabs.Auto:Section({ Name = "AutoDrop", Side = "Left" })
+        local autoDropSection = MacLib.Tabs.Auto:Section({ Name = "AutoDrop", Side = "Left" })
         autoDropSection:Header({ Name = "AutoDrop" })
         autoDropSection:Toggle({
             Name = "Enabled",
@@ -398,8 +435,14 @@ function AutoV2.Init(UI, Core, notify)
         autoDropSection:Dropdown({
             Name = "Items to Drop",
             Multi = true,
-            Options = {"shiesty", "hacktoolbasic", "bottle", "spray can", "jar", "bowling pin", "bike lock", "bronze mop", "chair leg", "metal pipe", "mop", "pool cue", "rolling pin", "shank", "silver mop", "taser", "wooden board", "bandage", "bull energy", "lockpick", "dice", "brick", "cinder block", "dumbbel plate", "glass", "milkshake", "rock", "soda can"},
-            Default = {"shiesty", "hacktoolbasic", "bottle", "spray can", "jar", "bowling pin"},
+            Options = {
+                "shiesty", "hacktoolbasic", "bottle", "spray can", "jar", "bowling pin",
+                "bike lock", "bronze mop", "chair leg", "metal pipe", "mop", "pool cue",
+                "rolling pin", "shank", "silver mop", "taser", "wooden board", "bandage",
+                "bull energy", "lockpick", "dice", "brick", "cinder block", "dumbbel plate",
+                "glass", "milkshake", "rock", "soda can"
+            },
+            Default = { "shiesty", "hacktoolbasic", "bottle", "spray can", "jar", "bowling pin" },
             Callback = function(value)
                 for key in pairs(AutoV2.Config.ItemsToDrop) do
                     AutoV2.Config.ItemsToDrop[key] = nil
@@ -413,7 +456,7 @@ function AutoV2.Init(UI, Core, notify)
             end
         })
 
-        local autoReloadSection = UI.Tabs.Auto:Section({ Name = "AutoReload", Side = "Right" })
+        local autoReloadSection = MacLib.Tabs.Auto:Section({ Name = "AutoReload", Side = "Right" })
         autoReloadSection:Header({ Name = "AutoReload" })
         autoReloadSection:Toggle({
             Name = "Enabled",
