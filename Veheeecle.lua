@@ -1,4 +1,4 @@
--- Модуль Vehicles: VehicleSpeed, VehicleFly и Vehicle Exploit
+-- Модуль Vehicles: VehicleSpeed и VehicleFly
 local Vehicles = {
     VehicleSpeed = {
         Settings = {
@@ -28,28 +28,19 @@ local Vehicles = {
             OriginalWheelData = {},
             Connection = nil
         }
-    },
-    VehicleExploit = {
-        Settings = {
-            SelectedVehicle = { Value = nil, Default = nil }
-        },
-        State = {
-            VehiclesList = {}
-        }
     }
 }
 
 function Vehicles.Init(UI, Core, notify)
     local VehicleSpeed = Vehicles.VehicleSpeed
     local VehicleFly = Vehicles.VehicleFly
-    local VehicleExploit = Vehicles.VehicleExploit
 
     -- Общая функция: получение текущего транспорта
     local function getCurrentVehicle()
         local char = Core.PlayerData.LocalPlayer.Character
         if char and char.Humanoid and char.Humanoid.SeatPart and char.Humanoid.SeatPart:IsA("VehicleSeat") then
             local vehicle = char.Humanoid.SeatPart.Parent
-            if vehicle and vehicle:IsDescendantOf(Core.Services.Workspace.Vehicles) then
+            if vehicle:IsDescendantOf(Core.Services.Workspace.Vehicles) then
                 return vehicle, char.Humanoid.SeatPart
             end
         end
@@ -66,7 +57,6 @@ function Vehicles.Init(UI, Core, notify)
 
     -- Стабилизация колёс
     local function stabilizeWheels(vehicle, seat)
-        if not vehicle or not seat then return end
         for _, part in ipairs(vehicle:GetDescendants()) do
             if part:IsA("BasePart") and part.Name:lower():find("wheel") then
                 part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
@@ -398,78 +388,6 @@ function Vehicles.Init(UI, Core, notify)
         notify("VehicleFly", "FlySpeed set to: " .. newSpeed, false)
     end
 
-    -- Функции VehicleExploit
-    local function updateVehicleList()
-        local vehiclesFolder = Core.Services.Workspace:FindFirstChild("Vehicles")
-        if not vehiclesFolder then
-            warn("Vehicles folder not found in workspace!")
-            return {}
-        end
-        VehicleExploit.State.VehiclesList = {}
-        for _, vehicle in ipairs(vehiclesFolder:GetChildren()) do
-            if vehicle:IsA("Model") and vehicle:FindFirstChild("DriverSeat") then
-                table.insert(VehicleExploit.State.VehiclesList, vehicle.Name)
-            end
-        end
-        table.sort(VehicleExploit.State.VehiclesList)
-        return VehicleExploit.State.VehiclesList
-    end
-
-    VehicleExploit.RefreshVehicles = function()
-        local vehicles = updateVehicleList()
-        notify("Vehicle Exploit", "Refreshed vehicle list. Found " .. #vehicles .. " vehicles.", true)
-        if UI.Sections.VehicleExploit and UI.Sections.VehicleExploit.UpdateDropdown then
-            pcall(function()
-                UI.Sections.VehicleExploit:UpdateDropdown("VehicleSelect", vehicles)
-            end)
-        end
-    end
-
-    VehicleExploit.ControlCar = function()
-        local vehicleName = VehicleExploit.Settings.SelectedVehicle.Value
-        if not vehicleName then
-            notify("Vehicle Exploit", "No vehicle selected!", true)
-            return
-        end
-        local vehiclesFolder = Core.Services.Workspace:FindFirstChild("Vehicles")
-        if not vehiclesFolder then
-            notify("Vehicle Exploit", "Vehicles folder not found!", true)
-            return
-        end
-        local vehicle = vehiclesFolder:FindFirstChild(vehicleName)
-        if not vehicle then
-            notify("Vehicle Exploit", "Vehicle not found: " .. vehicleName, true)
-            return
-        end
-        notify("Vehicle Exploit", "Controlling car: " .. vehicleName, true)
-        -- Здесь можно добавить логику управления
-    end
-
-    -- Настройка UI для VehicleExploit
-    if not UI.Sections.VehicleExploit then
-        UI.Sections.VehicleExploit = UI.Tabs.Vehicles:Section({ Name = "Vehicle Exploit", Side = "Left" })
-    end
-    if UI.Sections.VehicleExploit then
-        UI.Sections.VehicleExploit:Header({ Name = "Vehicle Exploit Settings" })
-        UI.Sections.VehicleExploit:Dropdown({
-            Name = "Vehicle Select",
-            Default = "",
-            Options = updateVehicleList(),
-            Callback = function(value)
-                VehicleExploit.Settings.SelectedVehicle.Value = value
-                notify("Vehicle Exploit", "Selected vehicle: " .. (value or "none"), false)
-            end
-        }, "VehicleSelect")
-        UI.Sections.VehicleExploit:Button({
-            Name = "Refresh",
-            Callback = VehicleExploit.RefreshVehicles
-        }, "RefreshVehicles")
-        UI.Sections.VehicleExploit:Button({
-            Name = "Control Car",
-            Callback = VehicleExploit.ControlCar
-        }, "ControlCar")
-    end
-
     -- Обработка посадки/высадки из транспорта
     Core.PlayerData.LocalPlayer.CharacterAdded:Connect(function(character)
         local humanoid = character:WaitForChild("Humanoid")
@@ -565,7 +483,7 @@ function Vehicles.Init(UI, Core, notify)
             Name = "Toggle Key",
             Default = VehicleFly.Settings.ToggleKey.Default,
             Callback = function(value)
-                VehicleFly.Settings.ToggleKey.Value = value
+                VehicleSpeed.Settings.ToggleKey.Value = value
                 if VehicleFly.Settings.Enabled.Value then
                     if VehicleFly.State.Connection then
                         VehicleFly.Stop()
