@@ -584,25 +584,20 @@ function Vehicles.Init(UI, Core, notify)
         local vehicles = updateVehicleList()
         notify("Vehicle Exploit", "Refreshed vehicle list. Found " .. #vehicles .. " vehicles.", true)
         if UI.Sections.VehicleExploit then
-            local dropdown = UI.Sections.VehicleExploit:Get("VehicleSelect")
-            if dropdown then
-                print("Clearing dropdown options...")
-                local successClear, errClear = pcall(function()
-                    dropdown:ClearOptions()
-                end)
-                if not successClear then
-                    print("Error clearing dropdown:", errClear)
-                end
+            local successClear, errClear = pcall(function()
+                UI.Sections.VehicleExploit:ClearOptions()
+                print("Cleared options successfully")
+            end)
+            if not successClear then
+                print("Error clearing options:", errClear)
+            end
 
-                print("Inserting", #vehicles, "options into dropdown:", table.concat(vehicles, ", "))
-                local successInsert, errInsert = pcall(function()
-                    dropdown:InsertOptions(vehicles)
-                end)
-                if not successInsert then
-                    print("Error inserting options:", errInsert)
-                end
-            else
-                print("Dropdown 'VehicleSelect' not found!")
+            local successInsert, errInsert = pcall(function()
+                UI.Sections.VehicleExploit:InsertOptions(vehicles)
+                print("Inserted", #vehicles, "options:", table.concat(vehicles, ", "))
+            end)
+            if not successInsert then
+                print("Error inserting options:", errInsert)
             end
         else
             print("VehicleExploit section not found!")
