@@ -434,6 +434,7 @@ function Vehicles.Init(UI, Core, notify)
                 end
             end
         end
+        print("updateVehicleList: Found", #VehicleExploit.State.VehiclesList, "vehicles")
         table.sort(VehicleExploit.State.VehiclesList)
         return VehicleExploit.State.VehiclesList
     end
@@ -586,10 +587,14 @@ function Vehicles.Init(UI, Core, notify)
         local vehicles = updateVehicleList()
         notify("Vehicle Exploit", "Refreshed vehicle list. Found " .. #vehicles .. " vehicles.", true)
         if UI.Sections.VehicleExploit and UI.Sections.VehicleExploit.ClearOptions then
-            pcall(function()
+            local success, err = pcall(function()
                 UI.Sections.VehicleExploit:ClearOptions()
+                print("ClearOptions executed, inserting", #vehicles, "options")
                 UI.Sections.VehicleExploit:InsertOptions(vehicles)
             end)
+            if not success then
+                print("Error in RefreshVehicles:", err)
+            end
         end
     end
 
