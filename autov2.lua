@@ -165,23 +165,6 @@ function AutoV2.Init(MacLib, Core, notify)
         print("[AutoReload] Re-equipped weapon:", weapon.Name)
     end
 
-    local function gunSync(weapon, newAmmo)
-        local gunModule = require(ReplicatedStorage.Modules.Game.ItemTypes.Gun)
-        local u174 = nil
-        for _, class in pairs(gunModule.class._instances) do
-            if class.instance == weapon then
-                u174 = class.states.mag
-                break
-            end
-        end
-        if u174 then
-            u174.set(newAmmo)
-            print("[AutoReload] Synced weapon ammo via GunSync to:", newAmmo)
-        else
-            warn("[AutoReload] Failed to find u174 for GunSync")
-        end
-    end
-
     local function sendReloadEvent(weapon)
         v_u_4.func = v_u_4.func + 1
         local args = {
@@ -210,8 +193,9 @@ function AutoV2.Init(MacLib, Core, notify)
                 -- Apply bypass method
                 if AutoV2.Config.BypassMethod == "ReEquip" then
                     reEquipWeapon(weapon)
-                elseif AutoV2.Config.BypassMethod == "GunSync" then
-                    gunSync(weapon, newAmmo)
+                -- GunSync is disabled due to _instances being inaccessible
+                -- elseif AutoV2.Config.BypassMethod == "GunSync" then
+                --     gunSync(weapon, newAmmo)
                 end
             else
                 warn("[AutoReload] Bullets UI element not found")
@@ -509,7 +493,7 @@ function AutoV2.Init(MacLib, Core, notify)
         })
         autoReloadSection:Dropdown({
             Name = "Bypass Method",
-            Options = {"ReEquip", "GunSync"},
+            Options = {"ReEquip"}, -- Temporarily removed GunSync
             Default = AutoV2.Config.BypassMethod,
             Callback = function(value)
                 AutoV2.Config.BypassMethod = value
