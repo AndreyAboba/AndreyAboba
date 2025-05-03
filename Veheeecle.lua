@@ -305,7 +305,7 @@ function Vehicles.Init(UI, Core, notify)
         if not vehicle or not seat or not VehicleFly.State.IsFlying or not VehicleFly.State.FlyBodyVelocity then return end
 
         local humanoid = Core.PlayerData.LocalPlayer.Character and Core.PlayerData.LocalPlayer.Character:FindFirstChild("Humanoid")
-        if not humanoid or humanoid.SeatPart != seat then
+        if not humanoid or humanoid.SeatPart ~= seat then
             VehicleFly.EnableFlight(vehicle, seat, false)
             return
         end
