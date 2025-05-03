@@ -43,6 +43,15 @@ function Vehicles.Init(UI, Core, notify)
     local VehicleSpeed = Vehicles.VehicleSpeed
     local VehicleFly = Vehicles.VehicleFly
     local VehicleExploit = Vehicles.VehicleExploit
+    local Players = Core.Services.Players
+    local ReplicatedStorage = Core.Services.ReplicatedStorage
+    local UserInputService = Core.Services.UserInputService
+    local LocalPlayer = Core.PlayerData.LocalPlayer
+    local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local Humanoid = Character:WaitForChild("Humanoid")
+    local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+    local u5 = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Core"):WaitForChild("Net"))
+    local u11 = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Game"):WaitForChild("VehicleSystem"):WaitForChild("Vehicle"))
 
     -- Общая функция: получение текущего транспорта
     local function getCurrentVehicle()
@@ -406,13 +415,111 @@ function Vehicles.Init(UI, Core, notify)
             return {}
         end
         VehicleExploit.State.VehiclesList = {}
+        local vehicleMap = {}
         for _, vehicle in ipairs(vehiclesFolder:GetChildren()) do
             if vehicle:IsA("Model") and vehicle:FindFirstChild("DriverSeat") then
-                table.insert(VehicleExploit.State.VehiclesList, vehicle.Name)
+                local driverSeat = vehicle:FindFirstChild("DriverSeat")
+                if driverSeat and driverSeat.Occupant == nil then
+                    local ownerId = vehicle:GetAttribute("OwnerUserId")
+                    local ownerName = ownerId and Players:GetNameFromUserIdAsync(ownerId) or "Unknown"
+                    local uniqueKey = vehicle.Name .. "_" .. (ownerName or "Unknown")
+                    if not vehicleMap[uniqueKey] then
+                        vehicleMap[uniqueKey] = true
+                        table.insert(VehicleExploit.State.VehiclesList, string.format("%s (Owner: %s)", vehicle.Name, ownerName))
+                    end
+                end
             end
         end
         table.sort(VehicleExploit.State.VehiclesList)
         return VehicleExploit.State.VehiclesList
+    end
+
+    local function findVehicleByName(nameWithOwner)
+        local vehiclesFolder = Core.Services.Workspace:FindFirstChild("Vehicles")
+        if not vehiclesFolder then return nil end
+        local namePart = nameWithOwner:match("(.+) %(Owner: .+)")
+        if not namePart then return nil end
+        for _, vehicle in ipairs(vehiclesFolder:GetChildren()) do
+            if vehicle.Name == namePart and vehicle:FindFirstChild("DriverSeat") then
+                return vehicle:FindFirstChild("DriverSeat")
+            end
+        end
+        return nil
+    end
+
+    local function stabilizeVehicle(vehicle)
+        local chassis = vehicle:FindFirstChild("Chassis", true)
+        if chassis and chassis:IsA("BasePart") then
+            local originalAnchored = chassis.Anchored
+            chassis.Anchored = true
+            chassis.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+            chassis.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+            print("Stabilized vehicle:", vehicle:GetFullName())
+            return function()
+                chassis.Anchored = originalAnchored
+                print("Restored vehicle state:", vehicle:GetFullName())
+            end
+        else
+            print("Could not find Chassis to stabilize vehicle:", vehicle:GetFullName())
+            return function() end
+        end
+    end
+
+    local function sitAsPassenger(vehicleSeat)
+        if not vehicleSeat then
+            print("No vehicle selected!")
+            return
+        end
+        
+        local vehicle = vehicleSeat.Parent
+        local vehicleState = u11.class.get(vehicle)
+        
+        if vehicleState and vehicleState.states.locked.get() then
+            vehicleState.states.locked.set(false)
+            print("Bypassed vehicle lock!")
+        end
+        
+        local passengerSeat = nil
+        for _, part in pairs(vehicle:GetDescendants()) do
+            if part:IsA("Seat") and part.Name ~= "DriverSeat" and part.Occupant == nil then
+                passengerSeat = part
+                break
+            end
+        end
+        
+        if not passengerSeat then
+            print("No passenger seat found in vehicle:", vehicle:GetFullName())
+            return
+        end
+        
+        local originalWalkSpeed = Humanoid.WalkSpeed
+        Humanoid.WalkSpeed = 0
+        wait(0.1)
+        
+        local seatPosition = passengerSeat.Position
+        local seatCFrame = CFrame.new(seatPosition + Vector3.new(0, 3, 0))
+        HumanoidRootPart:PivotTo(seatCFrame)
+        wait(0.2)
+        
+        local restoreVehicle = stabilizeVehicle(vehicle)
+        
+        passengerSeat:Sit(Humanoid)
+        
+        if Humanoid.SeatPart == passengerSeat then
+            print("Successfully sat as passenger in:", passengerSeat:GetFullName())
+        else
+            print("Failed to sit as passenger, retrying...")
+            wait(0.5)
+            passengerSeat:Sit(Humanoid)
+            if Humanoid.SeatPart == passengerSeat then
+                print("Successfully sat as passenger after retry:", passengerSeat:GetFullName())
+            else
+                print("Failed to sit as passenger in:", passengerSeat:GetFullName())
+            end
+        end
+        
+        Humanoid.WalkSpeed = originalWalkSpeed
+        restoreVehicle()
     end
 
     VehicleExploit.RefreshVehicles = function()
@@ -431,18 +538,12 @@ function Vehicles.Init(UI, Core, notify)
             notify("Vehicle Exploit", "No vehicle selected!", true)
             return
         end
-        local vehiclesFolder = Core.Services.Workspace:FindFirstChild("Vehicles")
-        if not vehiclesFolder then
-            notify("Vehicle Exploit", "Vehicles folder not found!", true)
-            return
-        end
-        local vehicle = vehiclesFolder:FindFirstChild(vehicleName)
-        if not vehicle then
+        local vehicleSeat = findVehicleByName(vehicleName)
+        if not vehicleSeat then
             notify("Vehicle Exploit", "Vehicle not found: " .. vehicleName, true)
             return
         end
-        notify("Vehicle Exploit", "Controlling car: " .. vehicleName, true)
-        -- Здесь можно добавить логику управления
+        sitAsPassenger(vehicleSeat)
     end
 
     -- Настройка UI для VehicleExploit
@@ -472,6 +573,9 @@ function Vehicles.Init(UI, Core, notify)
 
     -- Обработка посадки/высадки из транспорта
     Core.PlayerData.LocalPlayer.CharacterAdded:Connect(function(character)
+        Character = character
+        Humanoid = character:WaitForChild("Humanoid")
+        HumanoidRootPart = character:WaitForChild("HumanoidRootPart")
         local humanoid = character:WaitForChild("Humanoid")
         humanoid.Seated:Connect(function(isSeated, seatPart)
             if not isSeated then
