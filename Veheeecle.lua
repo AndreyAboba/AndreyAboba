@@ -34,7 +34,8 @@ local Vehicles = {
             SelectedVehicle = { Value = nil, Default = nil }
         },
         State = {
-            VehiclesList = {}
+            VehiclesList = {},
+            VehicleSeats = {} -- Сохраняем соответствие между именем и DriverSeat
         }
     }
 }
@@ -415,6 +416,7 @@ function Vehicles.Init(UI, Core, notify)
             return {}
         end
         VehicleExploit.State.VehiclesList = {}
+        VehicleExploit.State.VehicleSeats = {}
         local vehicleMap = {}
         for _, vehicle in ipairs(vehiclesFolder:GetChildren()) do
             if vehicle:IsA("Model") and vehicle:FindFirstChild("DriverSeat") then
@@ -425,7 +427,9 @@ function Vehicles.Init(UI, Core, notify)
                     local uniqueKey = vehicle.Name .. "_" .. (ownerName or "Unknown")
                     if not vehicleMap[uniqueKey] then
                         vehicleMap[uniqueKey] = true
-                        table.insert(VehicleExploit.State.VehiclesList, string.format("%s (Owner: %s)", vehicle.Name, ownerName))
+                        local displayName = string.format("%s (Owner: %s)", vehicle.Name, ownerName)
+                        table.insert(VehicleExploit.State.VehiclesList, displayName)
+                        VehicleExploit.State.VehicleSeats[displayName] = driverSeat
                     end
                 end
             end
@@ -435,16 +439,7 @@ function Vehicles.Init(UI, Core, notify)
     end
 
     local function findVehicleByName(nameWithOwner)
-        local vehiclesFolder = Core.Services.Workspace:FindFirstChild("Vehicles")
-        if not vehiclesFolder then return nil end
-        local namePart = nameWithOwner:match("(.+) %(Owner: .+)")
-        if not namePart then return nil end
-        for _, vehicle in ipairs(vehiclesFolder:GetChildren()) do
-            if vehicle.Name == namePart and vehicle:FindFirstChild("DriverSeat") then
-                return vehicle:FindFirstChild("DriverSeat")
-            end
-        end
-        return nil
+        return VehicleExploit.State.VehicleSeats[nameWithOwner]
     end
 
     local function stabilizeVehicle(vehicle)
@@ -525,9 +520,10 @@ function Vehicles.Init(UI, Core, notify)
     VehicleExploit.RefreshVehicles = function()
         local vehicles = updateVehicleList()
         notify("Vehicle Exploit", "Refreshed vehicle list. Found " .. #vehicles .. " vehicles.", true)
-        if UI.Sections.VehicleExploit and UI.Sections.VehicleExploit.UpdateDropdown then
+        if UI.Sections.VehicleExploit and UI.Sections.VehicleExploit.ClearOptions then
             pcall(function()
-                UI.Sections.VehicleExploit:UpdateDropdown("VehicleSelect", vehicles)
+                UI.Sections.VehicleExploit:ClearOptions()
+                UI.Sections.VehicleExploit:InsertOptions(vehicles)
             end)
         end
     end
