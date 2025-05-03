@@ -193,19 +193,22 @@ function AutoV2.Init(UI, Core, notify)
         local itemsToDrop = {}
         for _, item in pairs(inventory:GetChildren()) do
             local itemNameObj = item:FindFirstChild("ItemName")
-            if not itemNameObj or not itemNameObj:IsA("TextLabel") then continue end
-            local itemName = string.lower(itemNameObj.Text or "Unknown")
-            local guid = item.Name
-            local itemCountObj = item:FindFirstChild("ItemCount")
-            local itemCount = itemCountObj and itemCountObj:IsA("TextLabel") and tonumber(itemCountObj.Text:match("%d+")) or 1
-            if guid and AutoV2.Config.ItemsToDrop[itemName] then
-                table.insert(guids, guid)
-                table.insert(itemsToDrop, {GUID = guid, Item = item, Name = itemName, Count = itemCount})
-                if item:IsA("GuiObject") then
-                    item.BackgroundTransparency = 1
-                    item.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-                    item.BorderSizePixel = 0
-                    item.BorderColor3 = Color3.fromRGB(0, 0, 0)
+            if not itemNameObj or not itemNameObj:IsA("TextLabel") then
+                -- Пропускаем итерацию вместо continue
+            else
+                local itemName = string.lower(itemNameObj.Text or "Unknown")
+                local guid = item.Name
+                local itemCountObj = item:FindFirstChild("ItemCount")
+                local itemCount = itemCountObj and itemCountObj:IsA("TextLabel") and tonumber(itemCountObj.Text:match("%d+")) or 1
+                if guid and AutoV2.Config.ItemsToDrop[itemName] then
+                    table.insert(guids, guid)
+                    table.insert(itemsToDrop, {GUID = guid, Item = item, Name = itemName, Count = itemCount})
+                    if item:IsA("GuiObject") then
+                        item.BackgroundTransparency = 1
+                        item.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                        item.BorderSizePixel = 0
+                        item.BorderColor3 = Color3.fromRGB(0, 0, 0)
+                    end
                 end
             end
         end
@@ -340,7 +343,7 @@ function AutoV2.Init(UI, Core, notify)
             Default = AutoV2.Config.PickupMinDistance,
             Minimum = 5,
             Maximum = 50,
-            Increment = 1,
+            Precision = 1,
             Callback = function(value)
                 AutoV2.Config.PickupMinDistance = value
                 notify("Auto Pickup", "Pickup radius set to " .. value .. " meters!", true)
