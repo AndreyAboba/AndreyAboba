@@ -439,7 +439,33 @@ function Vehicles.Init(UI, Core, notify)
     end
 
     local function findVehicleByName(nameWithOwner)
-        return VehicleExploit.State.VehicleSeats[nameWithOwner]
+        if not nameWithOwner then
+            print("findVehicleByName: nameWithOwner is nil")
+            return nil
+        end
+        print("findVehicleByName: Looking for", nameWithOwner)
+        local driverSeat = VehicleExploit.State.VehicleSeats[nameWithOwner]
+        if driverSeat then
+            print("Found DriverSeat:", driverSeat:GetFullName())
+            return driverSeat
+        else
+            print("DriverSeat not found in VehicleSeats for:", nameWithOwner)
+            -- Резервный поиск
+            local vehiclesFolder = Core.Services.Workspace:FindFirstChild("Vehicles")
+            if vehiclesFolder then
+                for _, vehicle in ipairs(vehiclesFolder:GetChildren()) do
+                    local ownerId = vehicle:GetAttribute("OwnerUserId")
+                    local ownerName = ownerId and Players:GetNameFromUserIdAsync(ownerId) or "Unknown"
+                    local displayName = string.format("%s (Owner: %s)", vehicle.Name, ownerName)
+                    if displayName == nameWithOwner and vehicle:FindFirstChild("DriverSeat") then
+                        print("Found via fallback:", vehicle:FindFirstChild("DriverSeat"):GetFullName())
+                        return vehicle:FindFirstChild("DriverSeat")
+                    end
+                end
+            end
+        end
+        print("Vehicle not found for:", nameWithOwner)
+        return nil
     end
 
     local function stabilizeVehicle(vehicle)
@@ -553,8 +579,20 @@ function Vehicles.Init(UI, Core, notify)
             Default = "",
             Options = updateVehicleList(),
             Callback = function(value)
-                VehicleExploit.Settings.SelectedVehicle.Value = value
-                notify("Vehicle Exploit", "Selected vehicle: " .. (value or "none"), false)
+                print("Dropdown callback value:", value)
+                if type(value) == "table" then
+                    for k, v in pairs(value) do
+                        print(k, "=", v)
+                        if v then
+                            VehicleExploit.Settings.SelectedVehicle.Value = k
+                            notify("Vehicle Exploit", "Selected vehicle: " .. (k or "none"), false)
+                            break
+                        end
+                    end
+                else
+                    VehicleExploit.Settings.SelectedVehicle.Value = value
+                    notify("Vehicle Exploit", "Selected vehicle: " .. (value or "none"), false)
+                end
             end
         }, "VehicleSelect")
         UI.Sections.VehicleExploit:Button({
