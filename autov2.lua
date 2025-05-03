@@ -21,7 +21,8 @@ AutoV2.Config = {
     },
 
     -- AutoReload settings
-    ReloadEnabled = false   -- Toggle for enabling/disabling AutoReload
+    ReloadEnabled = false,   -- Toggle for enabling/disabling AutoReload
+    BypassMethod = "ReEquip" -- Default bypass method ("ReEquip" or "GunSync")
 }
 
 -- Module initialization
@@ -154,6 +155,33 @@ function AutoV2.Init(MacLib, Core, notify)
         return nil
     end
 
+    local function reEquipWeapon(weapon)
+        if not weapon or not character then return end
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if not humanoid then return end
+        humanoid:UnequipTools()
+        task.wait(0.1)
+        humanoid:EquipTool(weapon)
+        print("[AutoReload] Re-equipped weapon:", weapon.Name)
+    end
+
+    local function gunSync(weapon, newAmmo)
+        local gunModule = require(ReplicatedStorage.Modules.Game.ItemTypes.Gun)
+        local u174 = nil
+        for _, class in pairs(gunModule.class._instances) do
+            if class.instance == weapon then
+                u174 = class.states.mag
+                break
+            end
+        end
+        if u174 then
+            u174.set(newAmmo)
+            print("[AutoReload] Synced weapon ammo via GunSync to:", newAmmo)
+        else
+            warn("[AutoReload] Failed to find u174 for GunSync")
+        end
+    end
+
     local function sendReloadEvent(weapon)
         v_u_4.func = v_u_4.func + 1
         local args = {
@@ -179,28 +207,11 @@ function AutoV2.Init(MacLib, Core, notify)
                     itemInfo.ammo_amount = newAmmo
                 end
 
-                -- Attempt to sync client-side weapon state
-                if weapon then
-                    -- Update local attributes if they exist
-                    if weapon:GetAttribute("Ammo") then
-                        weapon:SetAttribute("Ammo", newAmmo)
-                    end
-                    -- Look for a local script or module that might manage ammo
-                    local weaponScripts = weapon:GetDescendants()
-                    for _, script in ipairs(weaponScripts) do
-                        if script:IsA("LocalScript") or script:IsA("ModuleScript") then
-                            local module = script:IsA("ModuleScript") and require(script) or nil
-                            if module and type(module) == "table" then
-                                if module.ammo then
-                                    module.ammo = newAmmo
-                                    print("[AutoReload] Updated local module ammo to:", newAmmo)
-                                elseif module.currentAmmo then
-                                    module.currentAmmo = newAmmo
-                                    print("[AutoReload] Updated local module currentAmmo to:", newAmmo)
-                                end
-                            end
-                        end
-                    end
+                -- Apply bypass method
+                if AutoV2.Config.BypassMethod == "ReEquip" then
+                    reEquipWeapon(weapon)
+                elseif AutoV2.Config.BypassMethod == "GunSync" then
+                    gunSync(weapon, newAmmo)
                 end
             else
                 warn("[AutoReload] Bullets UI element not found")
@@ -415,7 +426,6 @@ function AutoV2.Init(MacLib, Core, notify)
             Default = AutoV2.Config.PickupMinDistance,
             Minimum = 5,
             Maximum = 50,
-            Precision = 0, -- Ensure integer values
             Callback = function(value)
                 AutoV2.Config.PickupMinDistance = value
                 notify("Auto Pickup", "Pickup radius set to " .. value .. " meters!", true)
@@ -495,6 +505,15 @@ function AutoV2.Init(MacLib, Core, notify)
                     stopAutoReload()
                     notify("Auto Reload", "Auto-reload disabled!", true)
                 end
+            end
+        })
+        autoReloadSection:Dropdown({
+            Name = "Bypass Method",
+            Options = {"ReEquip", "GunSync"},
+            Default = AutoV2.Config.BypassMethod,
+            Callback = function(value)
+                AutoV2.Config.BypassMethod = value
+                notify("Auto Reload", "Bypass method set to " .. value, true)
             end
         })
     end
