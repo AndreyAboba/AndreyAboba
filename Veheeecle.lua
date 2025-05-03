@@ -35,7 +35,9 @@ local Vehicles = {
         },
         State = {
             VehiclesList = {},
-            VehicleSeats = {} -- Сохраняем соответствие между именем и DriverSeat
+            VehicleSeats = {},
+            LastUpdate = 0,
+            UpdateInterval = 1 -- Интервал обновления списка машин (в секундах)
         }
     }
 }
@@ -68,10 +70,7 @@ function Vehicles.Init(UI, Core, notify)
 
     -- Проверка, является ли транспорт ATV
     local function isATV(vehicle)
-        if vehicle and vehicle.Name:lower():find("atv") then
-            return true
-        end
-        return false
+        return vehicle and vehicle.Name:lower():find("atv") and true or false
     end
 
     -- Стабилизация колёс
@@ -114,9 +113,10 @@ function Vehicles.Init(UI, Core, notify)
         if not motors or not VehicleSpeed.State.OriginalAttributes[vehicle] then return end
 
         local effectiveMultiplier = isATV(vehicle) and math.min(multiplier, 1.55) or multiplier
-        motors:SetAttribute("forwardMaxSpeed", VehicleSpeed.State.OriginalAttributes[vehicle].forwardMaxSpeed * effectiveMultiplier)
-        motors:SetAttribute("nitroMaxSpeed", VehicleSpeed.State.OriginalAttributes[vehicle].nitroMaxSpeed * effectiveMultiplier)
-        motors:SetAttribute("acceleration", VehicleSpeed.State.OriginalAttributes[vehicle].acceleration * effectiveMultiplier)
+        local attrs = VehicleSpeed.State.OriginalAttributes[vehicle]
+        motors:SetAttribute("forwardMaxSpeed", attrs.forwardMaxSpeed * effectiveMultiplier)
+        motors:SetAttribute("nitroMaxSpeed", attrs.nitroMaxSpeed * effectiveMultiplier)
+        motors:SetAttribute("acceleration", attrs.acceleration * effectiveMultiplier)
     end
 
     -- Функции VehicleSpeed
@@ -188,9 +188,8 @@ function Vehicles.Init(UI, Core, notify)
 
     VehicleSpeed.SetSpeedBoostMultiplier = function(newMultiplier)
         VehicleSpeed.Settings.SpeedBoostMultiplier.Value = newMultiplier
-
         if VehicleSpeed.State.IsBoosting then
-            local vehicle, _ = getCurrentVehicle()
+            local vehicle = VehicleSpeed.State.CurrentVehicle
             if vehicle then
                 applyVehicleAttributes(vehicle, newMultiplier)
             end
@@ -285,7 +284,7 @@ function Vehicles.Init(UI, Core, notify)
                             local roll, pitch = part.CFrame:ToEulerAnglesXYZ()
                             if math.abs(roll) > math.rad(5) or math.abs(pitch) > math.rad(5) then
                                 for _, constraint in ipairs(part:GetChildren()) do
-                                    if constraint:IsA("HingeConstraint") and data and data.Constraints.Hinge then
+                                    if constraint:IsA("HingeConstraint") and data.Constraints.Hinge then
                                         constraint.TargetAngle = data.Constraints.Hinge.TargetAngle
                                     end
                                 end
@@ -408,16 +407,22 @@ function Vehicles.Init(UI, Core, notify)
     local vehicleDropdown -- Переменная для хранения dropdown
 
     local function updateVehicleList()
-        local vehiclesFolder = Core.Services.Workspace:FindFirstChild("Vehicles")
-        if not vehiclesFolder then
-            warn("Vehicles folder not found in workspace!")
-            return {}
+        if tick() - VehicleExploit.State.LastUpdate < VehicleExploit.State.UpdateInterval then
+            return VehicleExploit.State.VehiclesList
         end
+
+        VehicleExploit.State.LastUpdate = tick()
         VehicleExploit.State.VehiclesList = {}
         VehicleExploit.State.VehicleSeats = {}
         local vehicleMap = {}
+        local vehiclesFolder = Core.Services.Workspace:FindFirstChild("Vehicles")
+        if not vehiclesFolder then
+            warn("Vehicles folder not found in workspace!")
+            return VehicleExploit.State.VehiclesList
+        end
+
         for _, vehicle in ipairs(vehiclesFolder:GetChildren()) do
-            if vehicle:IsA("Model") and vehicle:FindFirstChild("DriverSeat") then
+            if vehicle:IsA("Model") then
                 local driverSeat = vehicle:FindFirstChild("DriverSeat")
                 if driverSeat and driverSeat.Occupant == nil then
                     local ownerId = vehicle:GetAttribute("OwnerUserId")
@@ -432,40 +437,13 @@ function Vehicles.Init(UI, Core, notify)
                 end
             end
         end
-        print("updateVehicleList: Found", #VehicleExploit.State.VehiclesList, "vehicles")
-        print("Vehicles list:", table.concat(VehicleExploit.State.VehiclesList, ", "))
         table.sort(VehicleExploit.State.VehiclesList)
         return VehicleExploit.State.VehiclesList
     end
 
     local function findVehicleByName(nameWithOwner)
-        if not nameWithOwner then
-            print("findVehicleByName: nameWithOwner is nil")
-            return nil
-        end
-        print("findVehicleByName: Looking for", nameWithOwner)
-        local driverSeat = VehicleExploit.State.VehicleSeats[nameWithOwner]
-        if driverSeat then
-            print("Found DriverSeat:", driverSeat:GetFullName())
-            return driverSeat
-        else
-            print("DriverSeat not found in VehicleSeats for:", nameWithOwner)
-            -- Резервный поиск
-            local vehiclesFolder = Core.Services.Workspace:FindFirstChild("Vehicles")
-            if vehiclesFolder then
-                for _, vehicle in ipairs(vehiclesFolder:GetChildren()) do
-                    local ownerId = vehicle:GetAttribute("OwnerUserId")
-                    local ownerName = ownerId and Players:GetNameFromUserIdAsync(ownerId) or "Unknown"
-                    local displayName = string.format("%s (Owner: %s)", vehicle.Name, ownerName)
-                    if displayName == nameWithOwner and vehicle:FindFirstChild("DriverSeat") then
-                        print("Found via fallback:", vehicle:FindFirstChild("DriverSeat"):GetFullName())
-                        return vehicle:FindFirstChild("DriverSeat")
-                    end
-                end
-            end
-        end
-        print("Vehicle not found for:", nameWithOwner)
-        return nil
+        if not nameWithOwner then return nil end
+        return VehicleExploit.State.VehicleSeats[nameWithOwner]
     end
 
     local function stabilizeVehicle(vehicle)
@@ -475,118 +453,81 @@ function Vehicles.Init(UI, Core, notify)
             chassis.Anchored = true
             chassis.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
             chassis.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-            print("Stabilized vehicle:", vehicle:GetFullName())
             return function()
                 chassis.Anchored = originalAnchored
-                print("Restored vehicle state:", vehicle:GetFullName())
             end
-        else
-            print("Could not find Chassis to stabilize vehicle:", vehicle:GetFullName())
-            return function() end
         end
+        return function() end
     end
 
     local function sitAsPassenger(vehicleSeat)
-        if not vehicleSeat then
-            print("No vehicle selected!")
-            return
-        end
-        
+        if not vehicleSeat then return end
+
         local vehicle = vehicleSeat.Parent
         local vehicleState = u11.class.get(vehicle)
-        
+
         if vehicleState and vehicleState.states.locked.get() then
             vehicleState.states.locked.set(false)
-            print("Bypassed vehicle lock!")
         end
-        
-        local passengerSeat = nil
+
+        local passengerSeat
         for _, part in pairs(vehicle:GetDescendants()) do
             if part:IsA("Seat") and part.Name ~= "DriverSeat" and part.Occupant == nil then
                 passengerSeat = part
                 break
             end
         end
-        
-        if not passengerSeat then
-            print("No passenger seat found in vehicle:", vehicle:GetFullName())
-            return
-        end
-        
+
+        if not passengerSeat then return end
+
         local originalWalkSpeed = Humanoid.WalkSpeed
         Humanoid.WalkSpeed = 0
-        wait(0.1)
-        
+        task.wait(0.1)
+
         local seatPosition = passengerSeat.Position
         local seatCFrame = CFrame.new(seatPosition + Vector3.new(0, 3, 0))
         HumanoidRootPart:PivotTo(seatCFrame)
-        wait(0.2)
-        
+        task.wait(0.2)
+
         local restoreVehicle = stabilizeVehicle(vehicle)
-        
         passengerSeat:Sit(Humanoid)
-        
-        if Humanoid.SeatPart == passengerSeat then
-            print("Successfully sat as passenger in:", passengerSeat:GetFullName())
-        else
-            print("Failed to sit as passenger, retrying...")
-            wait(0.5)
+
+        if Humanoid.SeatPart ~= passengerSeat then
+            task.wait(0.5)
             passengerSeat:Sit(Humanoid)
-            if Humanoid.SeatPart == passengerSeat then
-                print("Successfully sat as passenger after retry:", passengerSeat:GetFullName())
-            else
-                print("Failed to sit as passenger in:", passengerSeat:GetFullName())
-            end
         end
-        
+
         Humanoid.WalkSpeed = originalWalkSpeed
         restoreVehicle()
     end
 
     local function sitInVehicle(vehicleSeat)
-        if not vehicleSeat then
-            print("No vehicle selected!")
-            return
-        end
-        
+        if not vehicleSeat then return end
+
         local vehicle = vehicleSeat.Parent
         local vehicleState = u11.class.get(vehicle)
         if vehicleState and vehicleState.states.locked.get() then
             vehicleState.states.locked.set(false)
-            print("Bypassed vehicle lock!")
         end
-        
+
         local drivePrompt = vehicleSeat:FindFirstChild("DrivePrompt", true)
         if drivePrompt then
             drivePrompt.Enabled = true
-            print("Enabled DrivePrompt!")
         end
-        
-        local restoreVehicle = stabilizeVehicle(vehicleSeat.Parent)
-        
+
+        local restoreVehicle = stabilizeVehicle(vehicle)
         vehicleSeat:Sit(Humanoid)
-        
-        if Humanoid.SeatPart == vehicleSeat then
-            print("Successfully sat in vehicle:", vehicleSeat:GetFullName())
-        else
-            print("Failed to sit, retrying...")
-            wait(0.5)
+
+        if Humanoid.SeatPart ~= vehicleSeat then
+            task.wait(0.5)
             vehicleSeat:Sit(Humanoid)
-            if Humanoid.SeatPart == vehicleSeat then
-                print("Successfully sat in vehicle after retry:", vehicleSeat:GetFullName())
-            else
-                print("Failed to sit in vehicle:", vehicleSeat:GetFullName())
-            end
         end
-        
+
         restoreVehicle()
     end
 
     local function updateVehicleDropdownOptions()
-        if not vehicleDropdown then
-            print("Vehicle dropdown not initialized!")
-            return
-        end
+        if not vehicleDropdown then return end
 
         local newOptions = updateVehicleList()
         notify("Vehicle Exploit", "Refreshed vehicle list. Found " .. #newOptions .. " vehicles.", true)
@@ -595,40 +536,17 @@ function Vehicles.Init(UI, Core, notify)
         local currentOptions = vehicleDropdown:GetOptions() or {}
         local optionsChanged = #newOptions ~= table.getn(currentOptions)
         if not optionsChanged then
-            for i, opt in ipairs(newOptions) do
-                local found = false
-                for k, v in pairs(currentOptions) do
-                    if k == opt then
-                        found = true
-                        break
-                    end
-                end
-                if not found then
-                    optionsChanged = true
-                    break
-                end
-            end
+            local currentStr = table.concat(currentOptions, ",")
+            local newStr = table.concat(newOptions, ",")
+            optionsChanged = currentStr ~= newStr
         end
 
         if optionsChanged then
-            local successClear, errClear = pcall(function()
-                vehicleDropdown:ClearOptions()
-                print("Cleared vehicle dropdown options successfully")
-            end)
-            if not successClear then
-                print("Error clearing vehicle dropdown options:", errClear)
-            end
-
-            local successInsert, errInsert = pcall(function()
-                vehicleDropdown:InsertOptions(newOptions)
-                print("Inserted", #newOptions, "options into vehicle dropdown:", table.concat(newOptions, ", "))
-            end)
-            if not successInsert then
-                print("Error inserting options into vehicle dropdown:", errInsert)
-            end
+            vehicleDropdown:ClearOptions()
+            vehicleDropdown:InsertOptions(newOptions)
         end
 
-        -- Обновляем выбор, сохраняя текущий, если он всё ещё существует
+        -- Обновляем выбор
         local currentSelection = VehicleExploit.Settings.SelectedVehicle.Value
         if currentSelection and vehicleDropdown:IsOption(currentSelection) then
             vehicleDropdown:UpdateSelection(currentSelection)
@@ -638,6 +556,7 @@ function Vehicles.Init(UI, Core, notify)
     end
 
     VehicleExploit.RefreshVehicles = function()
+        VehicleExploit.State.LastUpdate = 0 -- Сброс кэша при ручном обновлении
         updateVehicleDropdownOptions()
     end
 
@@ -653,9 +572,9 @@ function Vehicles.Init(UI, Core, notify)
             return
         end
         u5.send("initiate_lockpicking", vehicleSeat.Parent)
-        wait(0.1)
+        task.wait(0.1)
         u5.send("lockpick_success", vehicleSeat.Parent)
-        wait(0.1)
+        task.wait(0.1)
         sitInVehicle(vehicleSeat)
     end
 
@@ -670,10 +589,8 @@ function Vehicles.Init(UI, Core, notify)
             Default = "",
             Options = updateVehicleList(),
             Callback = function(value)
-                print("Dropdown callback value:", value)
                 if type(value) == "table" then
                     for k, v in pairs(value) do
-                        print(k, "=", v)
                         if v then
                             VehicleExploit.Settings.SelectedVehicle.Value = k
                             notify("Vehicle Exploit", "Selected vehicle: " .. (k or "none"), false)
