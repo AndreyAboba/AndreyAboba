@@ -30,6 +30,16 @@ function AutoV2.Init(UI, Core, notify)
     local Get = Remotes:WaitForChild("Get")
     local Send = Remotes:WaitForChild("Send")
 
+    -- Debug: Check the passed UI
+    print("[AutoV2] UI passed to Init:", UI)
+    if UI and UI.get then
+        print("[AutoV2] UI.get exists:", UI.get)
+    else
+        warn("[AutoV2] UI or UI.get is unavailable, loading UI directly")
+        -- Fallback: Load UI directly as in autoReload.lua
+        UI = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Core"):WaitForChild("UI"))
+    end
+
     -- Cache v_u_4 for function increment
     local v_u_4
     for _, obj in pairs(getgc(true)) do
@@ -194,7 +204,7 @@ function AutoV2.Init(UI, Core, notify)
         for _, item in pairs(inventory:GetChildren()) do
             local itemNameObj = item:FindFirstChild("ItemName")
             if not itemNameObj or not itemNameObj:IsA("TextLabel") then
-                -- Пропускаем итерацию вместо continue
+                -- Пропускаем итерацию
             else
                 local itemName = string.lower(itemNameObj.Text or "Unknown")
                 local guid = item.Name
@@ -249,7 +259,7 @@ function AutoV2.Init(UI, Core, notify)
                 if nearestItem then
                     pickupDroppedItem(nearestItem)
                 end
-                task.wait(0.1) -- Увеличена задержка для снижения нагрузки
+                task.wait(0.1)
             end
         end)
     end
@@ -266,7 +276,7 @@ function AutoV2.Init(UI, Core, notify)
                 if not AutoV2.Config.UseKeybind then
                     executeDrop()
                 end
-                task.wait(2) -- Увеличена задержка для снижения нагрузки
+                task.wait(2)
             end
         end)
     end
@@ -288,7 +298,7 @@ function AutoV2.Init(UI, Core, notify)
                 else
                     updateCurrentWeapon()
                 end
-                task.wait(0.5) -- Оставляем как есть для быстрой реакции
+                task.wait(0.5)
             end
         end)
     end
