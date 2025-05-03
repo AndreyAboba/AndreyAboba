@@ -169,8 +169,6 @@ function Vehicles.Init(UI, Core, notify)
                 VehicleSpeed.State.IsBoosting = false
             end
         end)
-
-        notify("VehicleSpeed", "Started with SpeedBoostMultiplier: " .. VehicleSpeed.Settings.SpeedBoostMultiplier.Value, true)
     end
 
     VehicleSpeed.Stop = function()
@@ -186,12 +184,10 @@ function Vehicles.Init(UI, Core, notify)
         VehicleSpeed.State.IsBoosting = false
         VehicleSpeed.State.CurrentVehicle = nil
         VehicleSpeed.State.OriginalAttributes = {}
-        notify("VehicleSpeed", "Stopped", true)
     end
 
     VehicleSpeed.SetSpeedBoostMultiplier = function(newMultiplier)
         VehicleSpeed.Settings.SpeedBoostMultiplier.Value = newMultiplier
-        notify("VehicleSpeed", "SpeedBoostMultiplier set to: " .. newMultiplier, false)
 
         if VehicleSpeed.State.IsBoosting then
             local vehicle, _ = getCurrentVehicle()
@@ -435,6 +431,7 @@ function Vehicles.Init(UI, Core, notify)
             end
         end
         print("updateVehicleList: Found", #VehicleExploit.State.VehiclesList, "vehicles")
+        print("Vehicles list:", table.concat(VehicleExploit.State.VehiclesList, ", "))
         table.sort(VehicleExploit.State.VehiclesList)
         return VehicleExploit.State.VehiclesList
     end
@@ -586,15 +583,29 @@ function Vehicles.Init(UI, Core, notify)
     VehicleExploit.RefreshVehicles = function()
         local vehicles = updateVehicleList()
         notify("Vehicle Exploit", "Refreshed vehicle list. Found " .. #vehicles .. " vehicles.", true)
-        if UI.Sections.VehicleExploit and UI.Sections.VehicleExploit.ClearOptions then
-            local success, err = pcall(function()
-                UI.Sections.VehicleExploit:ClearOptions()
-                print("ClearOptions executed, inserting", #vehicles, "options")
-                UI.Sections.VehicleExploit:InsertOptions(vehicles)
-            end)
-            if not success then
-                print("Error in RefreshVehicles:", err)
+        if UI.Sections.VehicleExploit then
+            local dropdown = UI.Sections.VehicleExploit:Get("VehicleSelect")
+            if dropdown then
+                print("Clearing dropdown options...")
+                local successClear, errClear = pcall(function()
+                    dropdown:ClearOptions()
+                end)
+                if not successClear then
+                    print("Error clearing dropdown:", errClear)
+                end
+
+                print("Inserting", #vehicles, "options into dropdown:", table.concat(vehicles, ", "))
+                local successInsert, errInsert = pcall(function()
+                    dropdown:InsertOptions(vehicles)
+                end)
+                if not successInsert then
+                    print("Error inserting options:", errInsert)
+                end
+            else
+                print("Dropdown 'VehicleSelect' not found!")
             end
+        else
+            print("VehicleExploit section not found!")
         end
     end
 
@@ -697,7 +708,6 @@ function Vehicles.Init(UI, Core, notify)
             Default = VehicleSpeed.Settings.HoldSpeed.Default,
             Callback = function(value)
                 VehicleSpeed.Settings.HoldSpeed.Value = value
-                notify("VehicleSpeed", "Hold Speed " .. (value and "Enabled" or "Disabled"), true)
             end
         }, 'HoldSpeed')
         UI.Sections.VehicleSpeed:Keybind({
@@ -706,7 +716,6 @@ function Vehicles.Init(UI, Core, notify)
             Callback = function(value)
                 if value ~= VehicleSpeed.Settings.HoldKeybind.Value then
                     VehicleSpeed.Settings.HoldKeybind.Value = value
-                    notify("VehicleSpeed", "Hold Keybind set to: " .. tostring(value), true)
                 end
             end
         }, 'HoldKeybind')
@@ -721,8 +730,6 @@ function Vehicles.Init(UI, Core, notify)
                     else
                         VehicleSpeed.Start()
                     end
-                else
-                    notify("VehicleSpeed", "Enable Vehicle Speed to use keybind.", true)
                 end
             end
         }, 'ToggleKeyVS')
