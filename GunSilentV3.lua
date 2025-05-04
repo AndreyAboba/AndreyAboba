@@ -300,7 +300,7 @@ local function predictTargetPositionGun(target)
     local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
     local equippedTool = getEquippedGunTool(GunSilent.State.LocalCharacter)
     if not hitPart or not targetRoot or not equippedTool then
-        return { position = nil, direction = nil, timeToTarget = 0, clientPosition = nil }
+        return { position = targetRoot.Position, direction = (targetRoot.Position - myPos).Unit, timeToTarget = 0, clientPosition = targetRoot.Position }
     end
 
     local targetPos = hitPart.Position
@@ -352,8 +352,8 @@ local function predictTargetPositionGun(target)
     end
 
     return {
-        position = predictedPos or clientPos,
-        direction = predictedPos and (predictedPos - myPos).Unit or (clientPos - myPos).Unit,
+        position = predictedPos or targetRoot.Position,
+        direction = predictedPos and (predictedPos - myPos).Unit or (targetRoot.Position - myPos).Unit,
         timeToTarget = timeToTarget,
         clientPosition = clientPos
     }
@@ -410,8 +410,8 @@ local function updateVisualsGun(target)
     end
 
     local prediction = target and predictTargetPositionGun(target)
-    local targetPos = prediction and prediction.clientPosition
-    local predictionPos = prediction and prediction.position
+    local targetPos = prediction and prediction.clientPosition or (target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") and target.Character.HumanoidRootPart.Position)
+    local predictionPos = prediction and prediction.position or targetPos
 
     if not target or not target.Character or not predictionPos or not prediction.direction then
         if GunSilent.State.PredictVisualPart then
