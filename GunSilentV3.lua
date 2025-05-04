@@ -6,7 +6,7 @@ local UserInputService = game:GetService("UserInputService")
 local GunSilent = {
     Settings = {
         Enabled = { Value = false, Default = false },
-        RangePlus = { Value = 100, Default = 100 },
+        RangePlus = { Value = 200, Default = 200 }, -- Увеличено для большего охвата
         HitPart = { Value = "Head", Default = "Head" },
         BulletSpeed = { Value = 2500, Default = 2500 },
         UseFOV = { Value = true, Default = true },
@@ -20,7 +20,11 @@ local GunSilent = {
         SmoothingFactor = { Value = 0.1, Default = 0.1 },
         ResolverEnabled = { Value = true, Default = true },
         ResolverThreshold = { Value = 0.3, Default = 0.3 },
-        PositionHistorySize = { Value = 30, Default = 30 }
+        PositionHistorySize = { Value = 30, Default = 30 },
+        SortMethod = { Value = "Mouse&Distance", Default = "Mouse&Distance" }, -- Перенесено из V2
+        ShotgunSupport = { Value = false, Default = false }, -- Перенесено из V2
+        GenBullet = { Value = 4, Default = 4 }, -- Перенесено из V2
+        TestGenBullet = { Value = false, Default = false } -- Перенесено из V2
     },
     FixedPredictionValues = {
         MaxPlayerSpeed = 50,
@@ -45,7 +49,8 @@ local GunSilent = {
         LastTargetPos = nil,
         LastPredictionPos = nil,
         LastTargetUpdate = 0,
-        TargetUpdateInterval = 0.1
+        TargetUpdateInterval = 0.1,
+        LastFriendsList = nil
     }
 }
 
@@ -88,8 +93,14 @@ local function isGunTool(tool)
     return gunFolder:FindFirstChild(tool.Name) ~= nil
 end
 
+local function isShotgun(tool)
+    if not tool then return false end
+    local ammoType = tool:GetAttribute("AmmoType")
+    return ammoType and ammoType:lower() == "shotgun"
+end
+
 local function getGunRange(tool)
-    return GunSilent.Settings.RangePlus.Value -- Убрано ограничение по атрибуту Range оружия
+    return GunSilent.Settings.RangePlus.Value
 end
 
 local function getEquippedGunTool(character)
@@ -141,14 +152,6 @@ local function isInFov(targetPos, camera)
     return distanceFromReference <= math.tan(math.rad(GunSilent.Settings.FOV.Value) / 2) * camera.ViewportSize.X / 2
 end
 
-local function isVisible(startPos, targetPos)
-    local raycastParams = RaycastParams.new()
-    raycastParams.FilterDescendantsInstances = {GunSilent.State.LocalCharacter}
-    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
-    local rayResult = Workspace:Raycast(startPos, (targetPos - startPos), raycastParams)
-    return not rayResult
-end
-
 local function getNearestPlayerGun(gunRange)
     local currentTime = tick()
     if currentTime - GunSilent.State.LastTargetUpdate < GunSilent.State.TargetUpdateInterval then
@@ -158,6 +161,12 @@ local function getNearestPlayerGun(gunRange)
         end
     end
     GunSilent.State.LastTargetUpdate = currentTime
+
+    local friendsList = GunSilent.Core.Services.FriendsList or {}
+    local friendsHash = {}
+    for k in pairs(friendsList) do
+        friendsHash[k:lower()] = true
+    end
 
     local localRoot = GunSilent.State.LocalRoot
     if not localRoot then
@@ -171,11 +180,12 @@ local function getNearestPlayerGun(gunRange)
         return nil
     end
 
-    local nearestPlayer, shortestDistance = nil, gunRange
+    local nearestPlayer, shortestDistance, closestToCursor, bestScore = nil, gunRange, math.huge, math.huge
+    local sortMethod = GunSilent.Settings.SortMethod.Value
     local debugInfo = {}
 
     for _, player in pairs(Players:GetPlayers()) do
-        if player ~= Players.LocalPlayer then
+        if player ~= Players.LocalPlayer and not friendsHash[player.Name:lower()] then
             local targetChar = player.Character
             if targetChar then
                 local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
@@ -183,12 +193,30 @@ local function getNearestPlayerGun(gunRange)
                 if targetRoot and targetHumanoid and targetHumanoid.Health > 0 then
                     local distance = (rootPos - targetRoot.Position).Magnitude
                     local inFov = isInFov(targetRoot.Position, camera)
-                    local visible = isVisible(rootPos, targetRoot.Position)
-                    if distance <= shortestDistance and inFov and visible then
-                        shortestDistance = distance
-                        nearestPlayer = player
+                    if inFov then
+                        if sortMethod == "Mouse&Distance" then
+                            local screenPos = camera:WorldToViewportPoint(targetRoot.Position)
+                            local cursorDistance = (Vector2.new(screenPos.X, screenPos.Y) - UserInputService:GetMouseLocation()).Magnitude
+                            local score = (distance / (GunSilent.Settings.RangePlus.Value + 50)) + (cursorDistance / camera.ViewportSize.X)
+                            if score < bestScore then
+                                bestScore = score
+                                nearestPlayer = player
+                            end
+                        elseif sortMethod == "Distance" and distance < shortestDistance then
+                            shortestDistance = distance
+                            nearestPlayer = player
+                        elseif sortMethod == "Mouse" then
+                            local screenPos = camera:WorldToViewportPoint(targetRoot.Position)
+                            local cursorDistance = (Vector2.new(screenPos.X, screenPos.Y) - UserInputService:GetMouseLocation()).Magnitude
+                            if cursorDistance < closestToCursor then
+                                closestToCursor = cursorDistance
+                                nearestPlayer = player
+                            end
+                        end
+                        table.insert(debugInfo, string.format("Player: %s, Distance: %.1f, InFOV: %s", player.Name, distance, tostring(inFov)))
+                    else
+                        table.insert(debugInfo, string.format("Player: %s, Not in FOV, Distance: %.1f", player.Name, distance))
                     end
-                    table.insert(debugInfo, string.format("Player: %s, Distance: %.1f, InFOV: %s, Visible: %s", player.Name, distance, tostring(inFov), tostring(visible)))
                 else
                     table.insert(debugInfo, string.format("Player: %s, Invalid: No HumanoidRootPart or dead", player.Name))
                 end
@@ -206,6 +234,7 @@ local function getNearestPlayerGun(gunRange)
     end
 
     GunSilent.Core.GunSilentTarget.CurrentTarget = nearestPlayer
+    GunSilent.State.LastFriendsList = friendsList
     return nearestPlayer
 end
 
@@ -302,7 +331,7 @@ local function predictTargetPositionGun(target)
         else
             local speedFactor = 0.8 + (targetSpeed / GunSilent.FixedPredictionValues.MaxPlayerSpeed) * 0.5
             local ping = GunSilent.Settings.PingCompensation.Value * math.clamp(distance / 50, 0.5, 1.0)
-            local accuracyFactor = math.clamp(weaponRange / distance, 0.5, 1.0) -- Корректировка точности по Range
+            local accuracyFactor = math.clamp(weaponRange / distance, 0.5, 1.0)
             local totalPredictionTime = (timeToTarget + ping) * GunSilent.Settings.PredictionStrength.Value * speedFactor * accuracyFactor
             predictedPos = clientPos + resolvedVelocity * totalPredictionTime
 
@@ -341,8 +370,19 @@ local function createHitDataGun(target)
     local hitPart = targetChar:FindFirstChild(GunSilent.Settings.HitPart.Value) or targetChar:FindFirstChild("HumanoidRootPart")
     if not hitPart then return nil end
 
+    local equippedTool = getEquippedGunTool(GunSilent.State.LocalCharacter)
+    local isShotgunWeapon = GunSilent.Settings.ShotgunSupport.Value and equippedTool and isShotgun(equippedTool)
+    local useMultiBullets = isShotgunWeapon or GunSilent.Settings.TestGenBullet.Value
+    local numBullets = useMultiBullets and (isShotgunWeapon and GunSilent.Settings.GenBullet.Value or 4) or 1
     local hitData = {}
-    hitData[1] = {{Normal = prediction.direction, Instance = hitPart, Position = prediction.position}}
+
+    if useMultiBullets then
+        for i = 1, numBullets do
+            hitData[i] = {{Normal = prediction.direction, Instance = hitPart, Position = prediction.position}}
+        end
+    else
+        hitData[1] = {{Normal = prediction.direction, Instance = hitPart, Position = prediction.position}}
+    end
     return hitData
 end
 
@@ -552,7 +592,7 @@ local function Init(UI, Core, notify)
                 element = UI.Sections.GunSilent:Slider({
                     Name = "Range Plus",
                     Minimum = 0,
-                    Maximum = 300, -- Увеличено для поддержки дальних целей
+                    Maximum = 300,
                     Default = GunSilent.Settings.RangePlus.Value,
                     Precision = 0,
                     Callback = function(value)
@@ -578,6 +618,66 @@ local function Init(UI, Core, notify)
                 callback = function(value)
                     GunSilent.Settings.HitPart.Value = value
                     print("[GunSilent] Hit Part set to: " .. value)
+                end
+            }
+            uiElements.ShotgunSupport = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Shotgun Support",
+                    Default = GunSilent.Settings.ShotgunSupport.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.ShotgunSupport.Value = value
+                        print("[GunSilent] Shotgun Support " .. (value and "Enabled" or "Disabled"))
+                    end
+                }, 'ShotgunSupport'),
+                callback = function(value)
+                    GunSilent.Settings.ShotgunSupport.Value = value
+                    print("[GunSilent] Shotgun Support " .. (value and "Enabled" or "Disabled"))
+                end
+            }
+            uiElements.GenerateBullets = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Generate Bullets",
+                    Default = GunSilent.Settings.GenBullet.Value,
+                    Minimum = 1,
+                    Maximum = 10,
+                    Precision = 0,
+                    Callback = function(value)
+                        GunSilent.Settings.GenBullet.Value = value
+                        print("[GunSilent] Number of Bullets set to: " .. value)
+                    end
+                }, 'GenerateBullets'),
+                callback = function(value)
+                    GunSilent.Settings.GenBullet.Value = value
+                    print("[GunSilent] Number of Bullets set to: " .. value)
+                end
+            }
+            uiElements.TestGenerateBullets = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Test Generate Bullets",
+                    Default = GunSilent.Settings.TestGenBullet.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.TestGenBullet.Value = value
+                        print("[GunSilent] Test Generate Bullets " .. (value and "Enabled" or "Disabled"))
+                    end
+                }, 'TestGenerateBullets'),
+                callback = function(value)
+                    GunSilent.Settings.TestGenBullet.Value = value
+                    print("[GunSilent] Test Generate Bullets " .. (value and "Enabled" or "Disabled"))
+                end
+            }
+            uiElements.SortMethod = {
+                element = UI.Sections.GunSilent:Dropdown({
+                    Name = "Sort Method",
+                    Default = GunSilent.Settings.SortMethod.Value,
+                    Options = {"Mouse", "Distance", "Mouse&Distance"},
+                    Callback = function(value)
+                        GunSilent.Settings.SortMethod.Value = value
+                        print("[GunSilent] Sort Method set to: " .. value)
+                    end
+                }, 'SortMethod'),
+                callback = function(value)
+                    GunSilent.Settings.SortMethod.Value = value
+                    print("[GunSilent] Sort Method set to: " .. value)
                 end
             }
             uiElements.UseFOV = {
@@ -781,6 +881,16 @@ local function Init(UI, Core, notify)
                     for option, selected in pairs(hitPartOptions) do
                         if selected then
                             uiElements.HitPart.callback(option)
+                            break
+                        end
+                    end
+                    uiElements.ShotgunSupport.callback(uiElements.ShotgunSupport.element:GetState())
+                    uiElements.GenerateBullets.callback(uiElements.GenerateBullets.element:GetValue())
+                    uiElements.TestGenerateBullets.callback(uiElements.TestGenerateBullets.element:GetState())
+                    local sortMethodOptions = uiElements.SortMethod.element:GetOptions()
+                    for option, selected in pairs(sortMethodOptions) do
+                        if selected then
+                            uiElements.SortMethod.callback(option)
                             break
                         end
                     end
