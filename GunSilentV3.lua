@@ -44,7 +44,7 @@ local GunSilent = {
         LastTargetPos = nil,
         LastPredictionPos = nil,
         LastTargetUpdate = 0,
-        TargetUpdateInterval = 0.2, -- Увеличено для снижения нагрузки
+        TargetUpdateInterval = 0.2,
         LastFriendsList = nil
     }
 }
@@ -233,52 +233,80 @@ local function resolveVelocity(target, positionHistory, clientVelocity, targetCh
     local validEntries = 0
     local maxSpeedLimit = isInVehicle(targetChar) and 150 or 50
 
+    -- Сохраняем историю для анализа
     local filteredHistory = {}
     for i = 1, #positionHistory do
         filteredHistory[#filteredHistory + 1] = positionHistory[i]
     end
 
-    local calculatedVelocity = Vector3.new(0, 0, 0)
-    local useCFrame = #filteredHistory > 2 and (function()
-        local meanPos = Vector3.new(0, 0, 0)
-        for _, entry in ipairs(filteredHistory) do
-            meanPos = meanPos + entry.pos
-        end
-        meanPos = meanPos / #filteredHistory
-        local variance = 0
-        for _, entry in ipairs(filteredHistory) do
-            variance = variance + (entry.pos - meanPos).Magnitude^2
-        end
-        return variance / #filteredHistory < 0.1
-    end)()
-
-    if useCFrame and targetChar:FindFirstChild("Head") and not isInVehicle(targetChar) then
-        local headCFrame = targetChar.Head.CFrame
-        local rootCFrame = targetChar.HumanoidRootPart.CFrame
-        local offset = headCFrame.Position - rootCFrame.Position
-        calculatedVelocity = offset / GunSilent.Settings.PingCompensation.Value
-    else
-        for i = #filteredHistory - 1, math.max(1, #filteredHistory - 10), -1 do
-            local currEntry = filteredHistory[i + 1]
-            local prevEntry = filteredHistory[i]
-            local timeDelta = currEntry.time - prevEntry.time
-            if timeDelta > 0 and timeDelta < 0.2 then
-                local velocity = (currEntry.pos - prevEntry.pos) / timeDelta
-                if velocity.Magnitude <= maxSpeedLimit * 1.5 then
-                    local weight = 1 / (1 + (currentTime - currEntry.time) * 5)
-                    totalVelocity = totalVelocity + velocity * weight
-                    totalWeight = totalWeight + weight
-                    validEntries = validEntries + 1
-                end
+    -- Вычисляем скорости и их дисперсию для выявления "пульсирующих" движений
+    local velocities = {}
+    for i = #filteredHistory - 1, math.max(1, #filteredHistory - 10), -1 do
+        local currEntry = filteredHistory[i + 1]
+        local prevEntry = filteredHistory[i]
+        local timeDelta = currEntry.time - prevEntry.time
+        if timeDelta > 0 and timeDelta < 0.2 then
+            local velocity = (currEntry.pos - prevEntry.pos) / timeDelta
+            if velocity.Magnitude <= maxSpeedLimit * 1.5 then
+                velocities[#velocities + 1] = velocity
             end
         end
-        calculatedVelocity = validEntries > 0 and totalVelocity / totalWeight or Vector3.new(0, 0, 0)
+    end
 
-        if isInVehicle(targetChar) and targetChar:FindFirstChild("HumanoidRootPart") then
-            local rootCFrame = targetChar.HumanoidRootPart.CFrame
-            local forwardVector = rootCFrame.LookVector
-            calculatedVelocity = calculatedVelocity + forwardVector * calculatedVelocity.Magnitude * 0.3
+    -- Вычисляем дисперсию скоростей
+    local meanVelocity = Vector3.new(0, 0, 0)
+    for _, vel in ipairs(velocities) do
+        meanVelocity = meanVelocity + vel
+    end
+    meanVelocity = meanVelocity / (#velocities > 0 and #velocities or 1)
+    
+    local variance = 0
+    for _, vel in ipairs(velocities) do
+        variance = variance + (vel - meanVelocity).Magnitude^2
+    end
+    variance = variance / (#velocities > 0 and #velocities or 1)
+
+    -- Если дисперсия высокая или скорость слишком большая, корректируем веса
+    local isPulsating = variance > 50 -- Порог для "пульсирующих" движений
+    local isFastMoving = meanVelocity.Magnitude > 100 -- Порог для быстрых движений
+    local latestVelocity = velocities[#velocities] or clientVelocity
+
+    for i = #filteredHistory - 1, math.max(1, #filteredHistory - 10), -1 do
+        local currEntry = filteredHistory[i + 1]
+        local prevEntry = filteredHistory[i]
+        local timeDelta = currEntry.time - prevEntry.time
+        if timeDelta > 0 and timeDelta < 0.2 then
+            local velocity = (currEntry.pos - prevEntry.pos) / timeDelta
+            if velocity.Magnitude <= maxSpeedLimit * 1.5 then
+                -- Адаптивный вес: больше веса для новых данных
+                local weight = 1 / (1 + (currentTime - currEntry.time) * (isPulsating and 10 or 5))
+                if isFastMoving then
+                    -- Уменьшаем влияние истории для быстрых движений
+                    weight = weight * 0.5
+                end
+                totalVelocity = totalVelocity + velocity * weight
+                totalWeight = totalWeight + weight
+                validEntries = validEntries + 1
+            end
         end
+    end
+
+    local calculatedVelocity = validEntries > 0 and totalVelocity / totalWeight or Vector3.new(0, 0, 0)
+
+    -- Если быстрые или пульсирующие движения, больше полагаемся на последнюю скорость
+    if isFastMoving or isPulsating then
+        calculatedVelocity = calculatedVelocity:Lerp(latestVelocity, isFastMoving and 0.7 or 0.5)
+    end
+
+    -- Усиливаем сглаживание для пульсирующих движений
+    if isPulsating then
+        calculatedVelocity = calculatedVelocity:Lerp(clientVelocity, 0.3)
+    end
+
+    if isInVehicle(targetChar) and targetChar:FindFirstChild("HumanoidRootPart") then
+        local rootCFrame = targetChar.HumanoidRootPart.CFrame
+        local forwardVector = rootCFrame.LookVector
+        calculatedVelocity = calculatedVelocity + forwardVector * calculatedVelocity.Magnitude * 0.3
     end
 
     return calculatedVelocity
@@ -418,7 +446,6 @@ local function updateVisualsGun(target)
         return
     end
 
-    -- Оптимизация: обновляем визуализацию только при значительном изменении позиции
     if GunSilent.State.LastTargetPos and (targetPos - GunSilent.State.LastTargetPos).Magnitude < 1 then return end
 
     local targetChar = target.Character
@@ -430,7 +457,7 @@ local function updateVisualsGun(target)
 
     if GunSilent.Settings.PredictVisual.Value then
         local predictVisualPart = GunSilent.State.PredictVisualPart
-        if not predictVisualPart then
+        if not predictVisualPart or not predictVisualPart.Parent then
             predictVisualPart = safeCreateInstance("Part", {
                 Size = Vector3.new(0.5, 0.5, 0.5),
                 Shape = Enum.PartType.Ball,
@@ -452,7 +479,7 @@ local function updateVisualsGun(target)
 
     if GunSilent.Settings.TrajectoryBeam.Value and GunSilent.Settings.PredictVisual.Value then
         local trajectoryBeam = GunSilent.State.TrajectoryBeam
-        if not trajectoryBeam then
+        if not trajectoryBeam or not trajectoryBeam.Parent then
             trajectoryBeam = safeCreateInstance("Beam", {
                 FaceCamera = true,
                 Width0 = 0.15,
@@ -461,13 +488,11 @@ local function updateVisualsGun(target)
                 Color = ColorSequence.new(Color3.fromRGB(147, 112, 219)),
                 Parent = Workspace
             })
-            if trajectoryBeam then
-                GunSilent.State.TrajectoryBeam = trajectoryBeam
-                GunSilent.State.TrajectoryAttachment0 = safeCreateInstance("Attachment", { Parent = localRoot })
-                GunSilent.State.TrajectoryAttachment1 = safeCreateInstance("Attachment", { Parent = GunSilent.State.PredictVisualPart })
-                trajectoryBeam.Attachment0 = GunSilent.State.TrajectoryAttachment0
-                trajectoryBeam.Attachment1 = GunSilent.State.TrajectoryAttachment1
-            end
+            GunSilent.State.TrajectoryBeam = trajectoryBeam
+            GunSilent.State.TrajectoryAttachment0 = safeCreateInstance("Attachment", { Parent = localRoot })
+            GunSilent.State.TrajectoryAttachment1 = safeCreateInstance("Attachment", { Parent = GunSilent.State.PredictVisualPart })
+            trajectoryBeam.Attachment0 = GunSilent.State.TrajectoryAttachment0
+            trajectoryBeam.Attachment1 = GunSilent.State.TrajectoryAttachment1
         end
         if trajectoryBeam and GunSilent.State.TrajectoryAttachment0 and GunSilent.State.TrajectoryAttachment1 then
             if not GunSilent.State.TrajectoryAttachment0.Parent or not GunSilent.State.TrajectoryAttachment1.Parent then
@@ -543,6 +568,14 @@ local function initializeGunSilent()
                 GunSilent.State.TrajectoryAttachment1:Destroy()
                 GunSilent.State.TrajectoryAttachment1 = nil
             end
+            if GunSilent.State.PredictVisualPart then
+                GunSilent.State.PredictVisualPart:Destroy()
+                GunSilent.State.PredictVisualPart = nil
+            end
+            if GunSilent.State.TrajectoryBeam then
+                GunSilent.State.TrajectoryBeam:Destroy()
+                GunSilent.State.TrajectoryBeam = nil
+            end
         end
 
         local currentTool = getEquippedGunTool(character)
@@ -580,16 +613,47 @@ local function Init(UI, Core, notify)
             character:WaitForChild("HumanoidRootPart")
             GunSilent.State.LocalCharacter = character
             GunSilent.State.LocalRoot = character.HumanoidRootPart
-            -- Пересоздаем Attachment после спавна
-            if GunSilent.State.TrajectoryBeam and not GunSilent.State.TrajectoryAttachment0 then
+
+            -- Пересоздаем PredictVisualPart, если он отсутствует
+            if GunSilent.State.PredictVisualPart and not GunSilent.State.PredictVisualPart.Parent then
+                GunSilent.State.PredictVisualPart = nil
+            end
+            if not GunSilent.State.PredictVisualPart then
+                local predictVisualPart = safeCreateInstance("Part", {
+                    Size = Vector3.new(0.5, 0.5, 0.5),
+                    Shape = Enum.PartType.Ball,
+                    Anchored = true,
+                    CanCollide = false,
+                    Transparency = 0.3,
+                    Parent = Workspace
+                })
+                GunSilent.State.PredictVisualPart = predictVisualPart
+            end
+
+            -- Пересоздаем TrajectoryBeam и Attachments
+            if GunSilent.State.TrajectoryBeam and not GunSilent.State.TrajectoryBeam.Parent then
+                GunSilent.State.TrajectoryBeam = nil
+            end
+            if not GunSilent.State.TrajectoryBeam then
+                local trajectoryBeam = safeCreateInstance("Beam", {
+                    FaceCamera = true,
+                    Width0 = 0.15,
+                    Width1 = 0.15,
+                    Transparency = NumberSequence.new(0.4),
+                    Color = ColorSequence.new(Color3.fromRGB(147, 112, 219)),
+                    Parent = Workspace
+                })
+                GunSilent.State.TrajectoryBeam = trajectoryBeam
+            end
+            if not GunSilent.State.TrajectoryAttachment0 or not GunSilent.State.TrajectoryAttachment0.Parent then
                 GunSilent.State.TrajectoryAttachment0 = safeCreateInstance("Attachment", { Parent = GunSilent.State.LocalRoot })
-                if GunSilent.State.TrajectoryBeam.Attachment0 then
+                if GunSilent.State.TrajectoryBeam then
                     GunSilent.State.TrajectoryBeam.Attachment0 = GunSilent.State.TrajectoryAttachment0
                 end
             end
-            if GunSilent.State.TrajectoryBeam and not GunSilent.State.TrajectoryAttachment1 then
+            if not GunSilent.State.TrajectoryAttachment1 or not GunSilent.State.TrajectoryAttachment1.Parent then
                 GunSilent.State.TrajectoryAttachment1 = safeCreateInstance("Attachment", { Parent = GunSilent.State.PredictVisualPart })
-                if GunSilent.State.TrajectoryBeam.Attachment1 then
+                if GunSilent.State.TrajectoryBeam then
                     GunSilent.State.TrajectoryBeam.Attachment1 = GunSilent.State.TrajectoryAttachment1
                 end
             end
