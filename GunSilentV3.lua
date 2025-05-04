@@ -19,7 +19,7 @@ local GunSilent = {
         PingCompensation = { Value = 0.1, Default = 0.1 },
         SmoothingFactor = { Value = 0.1, Default = 0.1 },
         ResolverEnabled = { Value = true, Default = true },
-        ResolverLevel = { Value = 2, Default = 2 },
+        ResolverLevel = { Value = 1, Default = 1 }, -- Зафиксировано на уровне 1
         ResolverThreshold = { Value = 0.3, Default = 0.3 },
         PositionHistorySize = { Value = 30, Default = 30 },
         SortMethod = { Value = "Mouse&Distance", Default = "Mouse&Distance" },
@@ -247,44 +247,22 @@ local function resolveVelocity(target, positionHistory, clientVelocity, targetCh
         filteredHistory[#filteredHistory + 1] = positionHistory[i]
     end
 
-    local calculatedVelocity = Vector3.new(0, 0, 0)
-    local useCFrame = GunSilent.Settings.ResolverLevel.Value == 2 and #filteredHistory > 2 and (function()
-        local meanPos = Vector3.new(0, 0, 0)
-        for _, entry in ipairs(filteredHistory) do
-            meanPos = meanPos + entry.pos
-        end
-        meanPos = meanPos / #filteredHistory
-        local variance = 0
-        for _, entry in ipairs(filteredHistory) do
-            variance = variance + (entry.pos - meanPos).Magnitude^2
-        end
-        return variance / #filteredHistory < GunSilent.Settings.ResolverThreshold.Value
-    end)()
-
-    if useCFrame and targetChar:FindFirstChild("Head") then
-        local headCFrame = targetChar.Head.CFrame
-        local rootCFrame = targetChar.HumanoidRootPart.CFrame
-        local offset = headCFrame.Position - rootCFrame.Position
-        calculatedVelocity = offset / GunSilent.Settings.PingCompensation.Value
-    else
-        for i = #filteredHistory - 1, math.max(1, #filteredHistory - 10), -1 do
-            local currEntry = filteredHistory[i + 1]
-            local prevEntry = filteredHistory[i]
-            local timeDelta = currEntry.time - prevEntry.time
-            if timeDelta > 0 and timeDelta < 0.2 then
-                local velocity = (currEntry.pos - prevEntry.pos) / timeDelta
-                if velocity.Magnitude <= maxSpeedLimit * 1.5 then
-                    local weight = 1 / (1 + (currentTime - currEntry.time) * 5)
-                    totalVelocity = totalVelocity + velocity * weight
-                    totalWeight = totalWeight + weight
-                    validEntries = validEntries + 1
-                end
+    for i = #filteredHistory - 1, math.max(1, #filteredHistory - 10), -1 do
+        local currEntry = filteredHistory[i + 1]
+        local prevEntry = filteredHistory[i]
+        local timeDelta = currEntry.time - prevEntry.time
+        if timeDelta > 0 and timeDelta < 0.2 then
+            local velocity = (currEntry.pos - prevEntry.pos) / timeDelta
+            if velocity.Magnitude <= maxSpeedLimit * 1.5 then
+                local weight = 1 / (1 + (currentTime - currEntry.time) * 5)
+                totalVelocity = totalVelocity + velocity * weight
+                totalWeight = totalWeight + weight
+                validEntries = validEntries + 1
             end
         end
-        calculatedVelocity = validEntries > 0 and totalVelocity / totalWeight or Vector3.new(0, 0, 0)
     end
 
-    return calculatedVelocity
+    return validEntries > 0 and totalVelocity / totalWeight or Vector3.new(0, 0, 0)
 end
 
 local function predictTargetPositionGun(target)
@@ -830,21 +808,6 @@ local function Init(UI, Core, notify)
                 callback = function(value)
                     GunSilent.Settings.ResolverEnabled.Value = value
                     safeNotify(GunSilent.notify, "GunSilent", "Resolver " .. (value and "Enabled" or "Disabled"), true)
-                end
-            }
-            uiElements.ResolverLevel = {
-                element = UI.Sections.GunSilent:Dropdown({
-                    Name = "Resolver Level",
-                    Default = tostring(GunSilent.Settings.ResolverLevel.Value),
-                    Options = {"2"},
-                    Callback = function(value)
-                        GunSilent.Settings.ResolverLevel.Value = tonumber(value)
-                        safeNotify(GunSilent.notify, "GunSilent", "Resolver Level set to: " .. value, true)
-                    end
-                }, 'ResolverLevel'),
-                callback = function(value)
-                    GunSilent.Settings.ResolverLevel.Value = tonumber(value)
-                    safeNotify(GunSilent.notify, "GunSilent", "Resolver Level set to: " .. value, true)
                 end
             }
             uiElements.ResolverThreshold = {
