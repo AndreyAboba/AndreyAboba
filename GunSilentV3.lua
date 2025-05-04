@@ -12,7 +12,6 @@ local GunSilent = {
         UseFOV = { Value = true, Default = true },
         FOV = { Value = 120, Default = 120 },
         ShowCircle = { Value = true, Default = true },
-        CircleMethod = { Value = "Center", Default = "Center", Options = {"Center", "Cursor"} },
         PredictVisual = { Value = true, Default = true },
         TrajectoryBeam = { Value = true, Default = true },
         HitChance = { Value = 100, Default = 100 },
@@ -26,6 +25,13 @@ local GunSilent = {
         ShotgunSupport = { Value = false, Default = false },
         GenBullet = { Value = 4, Default = 4 },
         TestGenBullet = { Value = false, Default = false }
+    },
+    FixedPredictionValues = {
+        MaxPlayerSpeed = 50,
+        TeleportThreshold = 50,
+        MinSmoothing = 0.05,
+        MaxSmoothing = 0.15,
+        VehicleHeadOffset = Vector3.new(0, 1.5, 0) -- Корректировка для головы в машине
     },
     State = {
         LastEventId = 0,
@@ -44,8 +50,10 @@ local GunSilent = {
         LastTargetPos = nil,
         LastPredictionPos = nil,
         LastTargetUpdate = 0,
-        TargetUpdateInterval = 0.2,
-        LastFriendsList = nil
+        TargetUpdateInterval = 0.1,
+        LastFriendsList = nil,
+        VisualUpdateInterval = 0.05, -- Добавляем интервал для визуальных обновлений
+        TargetUpdateCounter = 0 -- Счетчик для обновления цели
     }
 }
 
@@ -129,7 +137,7 @@ local function updateFovCircle()
     end
 
     local newRadius = math.tan(math.rad(GunSilent.Settings.FOV.Value) / 2) * camera.ViewportSize.X / 2
-    local circlePos = GunSilent.Settings.CircleMethod.Value == "Cursor" and UserInputService:GetMouseLocation() or camera.ViewportSize / 2
+    local circlePos = camera.ViewportSize / 2
 
     fovCircle.Radius = newRadius
     fovCircle.Position = circlePos
@@ -140,7 +148,7 @@ local function isInFov(targetPos, camera)
     if not GunSilent.Settings.UseFOV.Value then return true end
     local screenPos, onScreen = camera:WorldToViewportPoint(targetPos)
     if not onScreen then return false end
-    local referencePos = GunSilent.Settings.CircleMethod.Value == "Cursor" and UserInputService:GetMouseLocation() or camera.ViewportSize / 2
+    local referencePos = camera.ViewportSize / 2
     local distanceFromReference = (Vector2.new(screenPos.X, screenPos.Y) - referencePos).Magnitude
     return distanceFromReference <= math.tan(math.rad(GunSilent.Settings.FOV.Value) / 2) * camera.ViewportSize.X / 2
 end
@@ -163,11 +171,13 @@ local function getNearestPlayerGun(gunRange)
 
     local localRoot = GunSilent.State.LocalRoot
     if not localRoot then
+        safeNotify(GunSilent.notify, "GunSilent", "LocalRoot not found", false)
         return nil
     end
     local rootPos = localRoot.Position
     local camera = Workspace.CurrentCamera
     if not camera then
+        safeNotify(GunSilent.notify, "GunSilent", "Camera not found", false)
         return nil
     end
 
@@ -187,7 +197,7 @@ local function getNearestPlayerGun(gunRange)
                         if sortMethod == "Mouse&Distance" then
                             local screenPos = camera:WorldToViewportPoint(targetRoot.Position)
                             local cursorDistance = (Vector2.new(screenPos.X, screenPos.Y) - UserInputService:GetMouseLocation()).Magnitude
-                            local score = (cursorDistance / camera.ViewportSize.X) * 0.7 + (distance / (GunSilent.Settings.RangePlus.Value + 50)) * 0.3
+                            local score = (distance / (GunSilent.Settings.RangePlus.Value + 50)) + (cursorDistance / camera.ViewportSize.X)
                             if score < bestScore then
                                 bestScore = score
                                 nearestPlayer = player
@@ -214,76 +224,36 @@ local function getNearestPlayerGun(gunRange)
     return nearestPlayer
 end
 
-local function isInVehicle(targetChar)
-    local humanoid = targetChar:FindFirstChild("Humanoid")
-    if humanoid then
-        return humanoid.SeatPart ~= nil
-    end
-    return false
-end
-
 local function resolveVelocity(target, positionHistory, clientVelocity, targetChar)
     if not GunSilent.Settings.ResolverEnabled.Value or not positionHistory or #positionHistory < 3 then
-        return clientVelocity
+        return clientVelocity, false
     end
 
     local currentTime = tick()
     local totalVelocity = Vector3.new(0, 0, 0)
     local totalWeight = 0
     local validEntries = 0
-    local maxSpeedLimit = isInVehicle(targetChar) and 150 or 50
+    local maxSpeedLimit = GunSilent.FixedPredictionValues.MaxPlayerSpeed
+    local teleportThreshold = GunSilent.FixedPredictionValues.TeleportThreshold
+    local humanoid = targetChar:FindFirstChild("Humanoid")
+    local isInVehicle = humanoid and humanoid.SeatPart ~= nil
 
-    -- Сохраняем историю для анализа
+    -- Упрощаем фильтрацию истории, используем только последние 10 записей
     local filteredHistory = {}
-    for i = 1, #positionHistory do
+    local historySize = math.min(#positionHistory, 10)
+    for i = #positionHistory - historySize + 1, #positionHistory do
         filteredHistory[#filteredHistory + 1] = positionHistory[i]
     end
 
-    -- Вычисляем скорости и их дисперсию для выявления "пульсирующих" движений
-    local velocities = {}
-    for i = #filteredHistory - 1, math.max(1, #filteredHistory - 10), -1 do
+    -- Анализ через velocity для динамичных движений
+    for i = #filteredHistory - 1, 1, -1 do
         local currEntry = filteredHistory[i + 1]
         local prevEntry = filteredHistory[i]
         local timeDelta = currEntry.time - prevEntry.time
         if timeDelta > 0 and timeDelta < 0.2 then
             local velocity = (currEntry.pos - prevEntry.pos) / timeDelta
             if velocity.Magnitude <= maxSpeedLimit * 1.5 then
-                velocities[#velocities + 1] = velocity
-            end
-        end
-    end
-
-    -- Вычисляем дисперсию скоростей
-    local meanVelocity = Vector3.new(0, 0, 0)
-    for _, vel in ipairs(velocities) do
-        meanVelocity = meanVelocity + vel
-    end
-    meanVelocity = meanVelocity / (#velocities > 0 and #velocities or 1)
-    
-    local variance = 0
-    for _, vel in ipairs(velocities) do
-        variance = variance + (vel - meanVelocity).Magnitude^2
-    end
-    variance = variance / (#velocities > 0 and #velocities or 1)
-
-    -- Если дисперсия высокая или скорость слишком большая, корректируем веса
-    local isPulsating = variance > 50 -- Порог для "пульсирующих" движений
-    local isFastMoving = meanVelocity.Magnitude > 100 -- Порог для быстрых движений
-    local latestVelocity = velocities[#velocities] or clientVelocity
-
-    for i = #filteredHistory - 1, math.max(1, #filteredHistory - 10), -1 do
-        local currEntry = filteredHistory[i + 1]
-        local prevEntry = filteredHistory[i]
-        local timeDelta = currEntry.time - prevEntry.time
-        if timeDelta > 0 and timeDelta < 0.2 then
-            local velocity = (currEntry.pos - prevEntry.pos) / timeDelta
-            if velocity.Magnitude <= maxSpeedLimit * 1.5 then
-                -- Адаптивный вес: больше веса для новых данных
-                local weight = 1 / (1 + (currentTime - currEntry.time) * (isPulsating and 10 or 5))
-                if isFastMoving then
-                    -- Уменьшаем влияние истории для быстрых движений
-                    weight = weight * 0.5
-                end
+                local weight = 1 / (1 + (currentTime - currEntry.time) * 5)
                 totalVelocity = totalVelocity + velocity * weight
                 totalWeight = totalWeight + weight
                 validEntries = validEntries + 1
@@ -293,23 +263,26 @@ local function resolveVelocity(target, positionHistory, clientVelocity, targetCh
 
     local calculatedVelocity = validEntries > 0 and totalVelocity / totalWeight or Vector3.new(0, 0, 0)
 
-    -- Если быстрые или пульсирующие движения, больше полагаемся на последнюю скорость
-    if isFastMoving or isPulsating then
-        calculatedVelocity = calculatedVelocity:Lerp(latestVelocity, isFastMoving and 0.7 or 0.5)
+    -- Проверка телепортации при нокауте
+    local isSpoofed = false
+    if humanoid and humanoid.Health <= 0 and #filteredHistory > 1 then
+        local lastPos = filteredHistory[#filteredHistory].pos
+        local secondLastPos = filteredHistory[#filteredHistory - 1].pos
+        if (lastPos - secondLastPos).Magnitude > teleportThreshold * 2 then
+            isSpoofed = true
+            calculatedVelocity = Vector3.new(0, 0, 0)
+        end
     end
 
-    -- Усиливаем сглаживание для пульсирующих движений
-    if isPulsating then
-        calculatedVelocity = calculatedVelocity:Lerp(clientVelocity, 0.3)
+    if validEntries >= 3 and clientVelocity.Magnitude > 5 then
+        local velocityDiff = (clientVelocity - calculatedVelocity).Magnitude
+        local threshold = maxSpeedLimit * GunSilent.Settings.ResolverThreshold.Value
+        if velocityDiff > threshold or clientVelocity.Magnitude > maxSpeedLimit * 1.5 then
+            isSpoofed = true
+        end
     end
 
-    if isInVehicle(targetChar) and targetChar:FindFirstChild("HumanoidRootPart") then
-        local rootCFrame = targetChar.HumanoidRootPart.CFrame
-        local forwardVector = rootCFrame.LookVector
-        calculatedVelocity = calculatedVelocity + forwardVector * calculatedVelocity.Magnitude * 0.3
-    end
-
-    return calculatedVelocity
+    return calculatedVelocity, isSpoofed
 end
 
 local function predictTargetPositionGun(target)
@@ -329,7 +302,7 @@ local function predictTargetPositionGun(target)
 
     local targetPos = hitPart.Position
     local targetId = tostring(target.UserId)
-    local isTeleporting = GunSilent.State.LastTargetPosition[targetId] and (targetPos - GunSilent.State.LastTargetPosition[targetId]).Magnitude > 50
+    local isTeleporting = GunSilent.State.LastTargetPosition[targetId] and (targetPos - GunSilent.State.LastTargetPosition[targetId]).Magnitude > GunSilent.FixedPredictionValues.TeleportThreshold
     GunSilent.State.LastTargetPosition[targetId] = targetPos
 
     local distance = (targetPos - myPos).Magnitude
@@ -339,32 +312,25 @@ local function predictTargetPositionGun(target)
     local positionHistory = GunSilent.State.PositionHistory[target] or {}
     GunSilent.State.PositionHistory[target] = positionHistory
     local currentTime = tick()
-
     positionHistory[#positionHistory + 1] = { pos = targetPos, time = currentTime, velocity = targetRoot.Velocity }
     while #positionHistory > GunSilent.Settings.PositionHistorySize.Value do
         table.remove(positionHistory, 1)
     end
 
     local clientPos = targetPos
-    local resolvedVelocity = resolveVelocity(target, positionHistory, targetRoot.Velocity, targetChar)
+    local resolvedVelocity, isSpoofed = resolveVelocity(target, positionHistory, targetRoot.Velocity, targetChar)
 
     local predictedPos = clientPos
     if not isTeleporting then
         local targetSpeed = resolvedVelocity.Magnitude
-        local isInVehicle = isInVehicle(targetChar)
-        local predictionStrength = GunSilent.Settings.PredictionStrength.Value
-        if isInVehicle then
-            predictionStrength = predictionStrength * 1.5
-        end
-
         if targetSpeed < 5 then
             local ping = GunSilent.Settings.PingCompensation.Value * math.clamp(distance / 50, 0.5, 1.0)
             predictedPos = clientPos + resolvedVelocity * ping
         else
-            local speedFactor = 0.8 + (targetSpeed / (isInVehicle and 150 or 50)) * 0.5
+            local speedFactor = 0.8 + (targetSpeed / GunSilent.FixedPredictionValues.MaxPlayerSpeed) * 0.5
             local ping = GunSilent.Settings.PingCompensation.Value * math.clamp(distance / 50, 0.5, 1.0)
             local accuracyFactor = math.clamp(getGunRange(equippedTool) / distance, 0.5, 1.0)
-            local totalPredictionTime = (timeToTarget + ping) * predictionStrength * speedFactor * accuracyFactor
+            local totalPredictionTime = (timeToTarget + ping) * GunSilent.Settings.PredictionStrength.Value * speedFactor * accuracyFactor
             predictedPos = clientPos + resolvedVelocity * totalPredictionTime
 
             if GunSilent.State.LastPredictionPos then
@@ -378,7 +344,9 @@ local function predictTargetPositionGun(target)
         position = predictedPos,
         direction = (predictedPos - myPos).Unit,
         timeToTarget = timeToTarget,
-        clientPosition = clientPos
+        clientPosition = targetPos,
+        isSpoofed = isSpoofed,
+        isTeleporting = isTeleporting
     }
 end
 
@@ -418,7 +386,7 @@ end
 
 local function updateVisualsGun(target)
     local currentTime = tick()
-    if currentTime - GunSilent.State.LastVisualUpdateTime < 0.016 then return end
+    if currentTime - GunSilent.State.LastVisualUpdateTime < GunSilent.State.VisualUpdateInterval then return end
     GunSilent.State.LastVisualUpdateTime = currentTime
 
     local localRoot = GunSilent.State.LocalRoot
@@ -446,8 +414,6 @@ local function updateVisualsGun(target)
         return
     end
 
-    if GunSilent.State.LastTargetPos and (targetPos - GunSilent.State.LastTargetPos).Magnitude < 1 then return end
-
     local targetChar = target.Character
     local hitPart = targetChar:FindFirstChild(GunSilent.Settings.HitPart.Value) or targetChar:FindFirstChild("HumanoidRootPart")
     if not hitPart then return end
@@ -457,7 +423,7 @@ local function updateVisualsGun(target)
 
     if GunSilent.Settings.PredictVisual.Value then
         local predictVisualPart = GunSilent.State.PredictVisualPart
-        if not predictVisualPart or not predictVisualPart.Parent then
+        if not predictVisualPart then
             predictVisualPart = safeCreateInstance("Part", {
                 Size = Vector3.new(0.5, 0.5, 0.5),
                 Shape = Enum.PartType.Ball,
@@ -470,7 +436,7 @@ local function updateVisualsGun(target)
         end
         if predictVisualPart then
             predictVisualPart.Position = prediction.position
-            predictVisualPart.Color = Color3.fromRGB(0, 255, 255)
+            predictVisualPart.Color = prediction.isSpoofed and Color3.fromRGB(255, 0, 0) or (prediction.isTeleporting and Color3.fromRGB(255, 165, 0) or Color3.fromRGB(0, 255, 255))
             predictVisualPart.Transparency = 0.3
         end
     elseif GunSilent.State.PredictVisualPart then
@@ -479,7 +445,7 @@ local function updateVisualsGun(target)
 
     if GunSilent.Settings.TrajectoryBeam.Value and GunSilent.Settings.PredictVisual.Value then
         local trajectoryBeam = GunSilent.State.TrajectoryBeam
-        if not trajectoryBeam or not trajectoryBeam.Parent then
+        if not trajectoryBeam then
             trajectoryBeam = safeCreateInstance("Beam", {
                 FaceCamera = true,
                 Width0 = 0.15,
@@ -488,17 +454,15 @@ local function updateVisualsGun(target)
                 Color = ColorSequence.new(Color3.fromRGB(147, 112, 219)),
                 Parent = Workspace
             })
-            GunSilent.State.TrajectoryBeam = trajectoryBeam
-            GunSilent.State.TrajectoryAttachment0 = safeCreateInstance("Attachment", { Parent = localRoot })
-            GunSilent.State.TrajectoryAttachment1 = safeCreateInstance("Attachment", { Parent = GunSilent.State.PredictVisualPart })
-            trajectoryBeam.Attachment0 = GunSilent.State.TrajectoryAttachment0
-            trajectoryBeam.Attachment1 = GunSilent.State.TrajectoryAttachment1
-        end
-        if trajectoryBeam and GunSilent.State.TrajectoryAttachment0 and GunSilent.State.TrajectoryAttachment1 then
-            if not GunSilent.State.TrajectoryAttachment0.Parent or not GunSilent.State.TrajectoryAttachment1.Parent then
-                GunSilent.State.TrajectoryAttachment0.Parent = localRoot
-                GunSilent.State.TrajectoryAttachment1.Parent = GunSilent.State.PredictVisualPart
+            if trajectoryBeam then
+                local attachment0 = safeCreateInstance("Attachment", { Parent = localRoot })
+                local attachment1 = safeCreateInstance("Attachment", { Parent = GunSilent.State.PredictVisualPart })
+                trajectoryBeam.Attachment0 = attachment0
+                trajectoryBeam.Attachment1 = attachment1
+                GunSilent.State.TrajectoryBeam = trajectoryBeam
             end
+        end
+        if trajectoryBeam and trajectoryBeam.Attachment0 and trajectoryBeam.Attachment1 then
             trajectoryBeam.Enabled = true
         else
             if GunSilent.State.TrajectoryBeam then
@@ -558,26 +522,6 @@ local function initializeGunSilent()
         end
 
         local character = GunSilent.State.LocalCharacter
-        if character and not character:FindFirstChild("HumanoidRootPart") then
-            GunSilent.State.LocalRoot = nil
-            if GunSilent.State.TrajectoryAttachment0 then
-                GunSilent.State.TrajectoryAttachment0:Destroy()
-                GunSilent.State.TrajectoryAttachment0 = nil
-            end
-            if GunSilent.State.TrajectoryAttachment1 then
-                GunSilent.State.TrajectoryAttachment1:Destroy()
-                GunSilent.State.TrajectoryAttachment1 = nil
-            end
-            if GunSilent.State.PredictVisualPart then
-                GunSilent.State.PredictVisualPart:Destroy()
-                GunSilent.State.PredictVisualPart = nil
-            end
-            if GunSilent.State.TrajectoryBeam then
-                GunSilent.State.TrajectoryBeam:Destroy()
-                GunSilent.State.TrajectoryBeam = nil
-            end
-        end
-
         local currentTool = getEquippedGunTool(character)
         if currentTool ~= GunSilent.State.LastTool then
             if currentTool and not GunSilent.State.LastTool then
@@ -590,7 +534,12 @@ local function initializeGunSilent()
             GunSilent.State.LastTool = currentTool
         end
 
-        updateFovCircle()
+        -- Обновляем FOV круг каждые 2 кадра
+        GunSilent.State.TargetUpdateCounter = GunSilent.State.TargetUpdateCounter + 1
+        if GunSilent.State.TargetUpdateCounter % 2 == 0 then
+            updateFovCircle()
+        end
+
         if not currentTool then
             GunSilent.Core.GunSilentTarget.CurrentTarget = nil
             updateVisualsGun(nil)
@@ -613,50 +562,6 @@ local function Init(UI, Core, notify)
             character:WaitForChild("HumanoidRootPart")
             GunSilent.State.LocalCharacter = character
             GunSilent.State.LocalRoot = character.HumanoidRootPart
-
-            -- Пересоздаем PredictVisualPart, если он отсутствует
-            if GunSilent.State.PredictVisualPart and not GunSilent.State.PredictVisualPart.Parent then
-                GunSilent.State.PredictVisualPart = nil
-            end
-            if not GunSilent.State.PredictVisualPart then
-                local predictVisualPart = safeCreateInstance("Part", {
-                    Size = Vector3.new(0.5, 0.5, 0.5),
-                    Shape = Enum.PartType.Ball,
-                    Anchored = true,
-                    CanCollide = false,
-                    Transparency = 0.3,
-                    Parent = Workspace
-                })
-                GunSilent.State.PredictVisualPart = predictVisualPart
-            end
-
-            -- Пересоздаем TrajectoryBeam и Attachments
-            if GunSilent.State.TrajectoryBeam and not GunSilent.State.TrajectoryBeam.Parent then
-                GunSilent.State.TrajectoryBeam = nil
-            end
-            if not GunSilent.State.TrajectoryBeam then
-                local trajectoryBeam = safeCreateInstance("Beam", {
-                    FaceCamera = true,
-                    Width0 = 0.15,
-                    Width1 = 0.15,
-                    Transparency = NumberSequence.new(0.4),
-                    Color = ColorSequence.new(Color3.fromRGB(147, 112, 219)),
-                    Parent = Workspace
-                })
-                GunSilent.State.TrajectoryBeam = trajectoryBeam
-            end
-            if not GunSilent.State.TrajectoryAttachment0 or not GunSilent.State.TrajectoryAttachment0.Parent then
-                GunSilent.State.TrajectoryAttachment0 = safeCreateInstance("Attachment", { Parent = GunSilent.State.LocalRoot })
-                if GunSilent.State.TrajectoryBeam then
-                    GunSilent.State.TrajectoryBeam.Attachment0 = GunSilent.State.TrajectoryAttachment0
-                end
-            end
-            if not GunSilent.State.TrajectoryAttachment1 or not GunSilent.State.TrajectoryAttachment1.Parent then
-                GunSilent.State.TrajectoryAttachment1 = safeCreateInstance("Attachment", { Parent = GunSilent.State.PredictVisualPart })
-                if GunSilent.State.TrajectoryBeam then
-                    GunSilent.State.TrajectoryBeam.Attachment1 = GunSilent.State.TrajectoryAttachment1
-                end
-            end
         end)
         if LocalPlayer.Character then
             GunSilent.State.LocalCharacter = LocalPlayer.Character
@@ -821,21 +726,6 @@ local function Init(UI, Core, notify)
                 callback = function(value)
                     GunSilent.Settings.ShowCircle.Value = value
                     safeNotify(GunSilent.notify, "GunSilent", "Show Circle " .. (value and "Enabled" or "Disabled"), true)
-                end
-            }
-            uiElements.CircleMethod = {
-                element = UI.Sections.GunSilent:Dropdown({
-                    Name = "Circle Method",
-                    Default = GunSilent.Settings.CircleMethod.Value,
-                    Options = GunSilent.Settings.CircleMethod.Options,
-                    Callback = function(value)
-                        GunSilent.Settings.CircleMethod.Value = value
-                        safeNotify(GunSilent.notify, "GunSilent", "Circle Method set to: " .. value, true)
-                    end
-                }, 'CircleMethod'),
-                callback = function(value)
-                    GunSilent.Settings.CircleMethod.Value = value
-                    safeNotify(GunSilent.notify, "GunSilent", "Circle Method set to: " .. value, true)
                 end
             }
             uiElements.PredictVisual = {
