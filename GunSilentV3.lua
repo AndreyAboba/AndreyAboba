@@ -24,13 +24,17 @@ local GunSilent = {
         SortMethod = { Value = "Mouse&Distance", Default = "Mouse&Distance" },
         ShotgunSupport = { Value = false, Default = false },
         GenBullet = { Value = 4, Default = 4 },
-        TestGenBullet = { Value = false, Default = false }
+        TestGenBullet = { Value = false, Default = false },
+        PredictLevel = { Value = 2, Default = 2 }, -- 1, 2, 3
+        ResolverLevel = { Value = 1, Default = 1 }  -- 1, 2
     },
     State = {
         LastEventId = 0,
         LastTool = nil,
         PredictVisualPart = nil,
         TrajectoryBeam = nil,
+        TrajectoryAttachment0 = nil,
+        TrajectoryAttachment1 = nil,
         FovCircle = nil,
         V_U_4 = nil,
         Connection = nil,
@@ -189,7 +193,6 @@ local function getNearestPlayerGun(gunRange)
                         if sortMethod == "Mouse&Distance" then
                             local screenPos = camera:WorldToViewportPoint(targetRoot.Position)
                             local cursorDistance = (Vector2.new(screenPos.X, screenPos.Y) - UserInputService:GetMouseLocation()).Magnitude
-                            -- Приоритет направлению взгляда: cursorDistance имеет больший вес
                             local score = (cursorDistance / camera.ViewportSize.X) * 0.7 + (distance / (GunSilent.Settings.RangePlus.Value + 50)) * 0.3
                             if score < bestScore then
                                 bestScore = score
@@ -206,7 +209,7 @@ local function getNearestPlayerGun(gunRange)
                                 nearestPlayer = player
                             end
                         end
-                        table.insert(debugInfo, string.format("Player: %s, Distance: %.1f, InFOV: %s", player.Name, distance, tostring(inFov)))
+                        table.insert(debugInfo, string.format("Player: %s, Distance: %.1f, CursorDist: %.1f, InFOV: %s", player.Name, distance, cursorDistance, tostring(inFov)))
                     else
                         table.insert(debugInfo, string.format("Player: %s, Not in FOV, Distance: %.1f", player.Name, distance))
                     end
@@ -248,7 +251,7 @@ local function resolveVelocity(target, positionHistory, clientVelocity, targetCh
     end
 
     local calculatedVelocity = Vector3.new(0, 0, 0)
-    local useCFrame = #filteredHistory > 2 and (function()
+    local useCFrame = GunSilent.Settings.ResolverLevel.Value >= 2 and #filteredHistory > 2 and (function()
         local meanPos = Vector3.new(0, 0, 0)
         for _, entry in ipairs(filteredHistory) do
             meanPos = meanPos + entry.pos
@@ -258,7 +261,7 @@ local function resolveVelocity(target, positionHistory, clientVelocity, targetCh
         for _, entry in ipairs(filteredHistory) do
             variance = variance + (entry.pos - meanPos).Magnitude^2
         end
-        return variance / #filteredHistory < 0.1
+        return variance / #filteredHistory < GunSilent.Settings.ResolverThreshold.Value
     end)()
 
     if useCFrame and targetChar:FindFirstChild("Head") then
@@ -326,19 +329,26 @@ local function predictTargetPositionGun(target)
     local predictedPos = clientPos
     if not isTeleporting then
         local targetSpeed = resolvedVelocity.Magnitude
-        if targetSpeed < 5 then
-            local ping = GunSilent.Settings.PingCompensation.Value * math.clamp(distance / 50, 0.5, 1.0)
-            predictedPos = clientPos + resolvedVelocity * ping
-        else
+        if GunSilent.Settings.PredictLevel.Value >= 2 and targetSpeed >= 5 then
             local speedFactor = 0.8 + (targetSpeed / 50) * 0.5
             local ping = GunSilent.Settings.PingCompensation.Value * math.clamp(distance / 50, 0.5, 1.0)
             local accuracyFactor = math.clamp(getGunRange(equippedTool) / distance, 0.5, 1.0)
             local totalPredictionTime = (timeToTarget + ping) * GunSilent.Settings.PredictionStrength.Value * speedFactor * accuracyFactor
             predictedPos = clientPos + resolvedVelocity * totalPredictionTime
-
-            if GunSilent.State.LastPredictionPos then
-                predictedPos = GunSilent.State.LastPredictionPos:Lerp(predictedPos, 1 - GunSilent.Settings.SmoothingFactor.Value)
+        end
+        if GunSilent.Settings.PredictLevel.Value == 3 and #positionHistory > 3 then
+            local acceleration = Vector3.new(0, 0, 0)
+            for i = #positionHistory - 1, 2, -1 do
+                local currVel = (positionHistory[i].pos - positionHistory[i - 1].pos) / (positionHistory[i].time - positionHistory[i - 1].time)
+                local prevVel = (positionHistory[i - 1].pos - positionHistory[i - 2].pos) / (positionHistory[i - 1].time - positionHistory[i - 2].time)
+                acceleration = acceleration + (currVel - prevVel) / (positionHistory[i].time - positionHistory[i - 1].time)
             end
+            acceleration = acceleration / (#positionHistory - 2)
+            predictedPos = predictedPos + acceleration * (totalPredictionTime ^ 2) / 2
+        end
+
+        if GunSilent.State.LastPredictionPos then
+            predictedPos = GunSilent.State.LastPredictionPos:Lerp(predictedPos, 1 - GunSilent.Settings.SmoothingFactor.Value)
         end
         GunSilent.State.LastPredictionPos = predictedPos
     end
@@ -456,14 +466,14 @@ local function updateVisualsGun(target)
                 Parent = Workspace
             })
             if trajectoryBeam then
-                local attachment0 = safeCreateInstance("Attachment", { Parent = localRoot })
-                local attachment1 = safeCreateInstance("Attachment", { Parent = GunSilent.State.PredictVisualPart })
-                trajectoryBeam.Attachment0 = attachment0
-                trajectoryBeam.Attachment1 = attachment1
+                GunSilent.State.TrajectoryAttachment0 = safeCreateInstance("Attachment", { Parent = localRoot })
+                GunSilent.State.TrajectoryAttachment1 = safeCreateInstance("Attachment", { Parent = GunSilent.State.PredictVisualPart })
+                trajectoryBeam.Attachment0 = GunSilent.State.TrajectoryAttachment0
+                trajectoryBeam.Attachment1 = GunSilent.State.TrajectoryAttachment1
                 GunSilent.State.TrajectoryBeam = trajectoryBeam
             end
         end
-        if trajectoryBeam and trajectoryBeam.Attachment0 and trajectoryBeam.Attachment1 then
+        if trajectoryBeam and GunSilent.State.TrajectoryAttachment0 and GunSilent.State.TrajectoryAttachment1 then
             trajectoryBeam.Enabled = true
         else
             if GunSilent.State.TrajectoryBeam then
@@ -770,6 +780,21 @@ local function Init(UI, Core, notify)
                 end
             }
             UI.Sections.GunSilent:Header({ Name = "Prediction Settings" })
+            uiElements.PredictLevel = {
+                element = UI.Sections.GunSilent:Dropdown({
+                    Name = "Predict Level",
+                    Default = tostring(GunSilent.Settings.PredictLevel.Value),
+                    Options = {"1", "2", "3"},
+                    Callback = function(value)
+                        GunSilent.Settings.PredictLevel.Value = tonumber(value)
+                        safeNotify(GunSilent.notify, "GunSilent", "Predict Level set to: " .. value, true)
+                    end
+                }, 'PredictLevel'),
+                callback = function(value)
+                    GunSilent.Settings.PredictLevel.Value = tonumber(value)
+                    safeNotify(GunSilent.notify, "GunSilent", "Predict Level set to: " .. value, true)
+                end
+            }
             uiElements.PredictionStrength = {
                 element = UI.Sections.GunSilent:Slider({
                     Name = "Prediction Strength",
@@ -833,6 +858,21 @@ local function Init(UI, Core, notify)
                 callback = function(value)
                     GunSilent.Settings.ResolverEnabled.Value = value
                     safeNotify(GunSilent.notify, "GunSilent", "Resolver " .. (value and "Enabled" or "Disabled"), true)
+                end
+            }
+            uiElements.ResolverLevel = {
+                element = UI.Sections.GunSilent:Dropdown({
+                    Name = "Resolver Level",
+                    Default = tostring(GunSilent.Settings.ResolverLevel.Value),
+                    Options = {"1", "2"},
+                    Callback = function(value)
+                        GunSilent.Settings.ResolverLevel.Value = tonumber(value)
+                        safeNotify(GunSilent.notify, "GunSilent", "Resolver Level set to: " .. value, true)
+                    end
+                }, 'ResolverLevel'),
+                callback = function(value)
+                    GunSilent.Settings.ResolverLevel.Value = tonumber(value)
+                    safeNotify(GunSilent.notify, "GunSilent", "Resolver Level set to: " .. value, true)
                 end
             }
             uiElements.ResolverThreshold = {
@@ -899,10 +939,12 @@ local function Init(UI, Core, notify)
                     uiElements.PredictVisual.callback(uiElements.PredictVisual.element:GetState())
                     uiElements.TrajectoryBeam.callback(uiElements.TrajectoryBeam.element:GetState())
                     uiElements.HitChance.callback(uiElements.HitChance.element:GetValue())
+                    uiElements.PredictLevel.callback(tostring(uiElements.PredictLevel.element:GetValue()))
                     uiElements.PredictionStrength.callback(uiElements.PredictionStrength.element:GetValue())
                     uiElements.PingCompensation.callback(uiElements.PingCompensation.element:GetValue())
                     uiElements.SmoothingFactor.callback(uiElements.SmoothingFactor.element:GetValue())
                     uiElements.ResolverEnabled.callback(uiElements.ResolverEnabled.element:GetState())
+                    uiElements.ResolverLevel.callback(tostring(uiElements.ResolverLevel.element:GetValue()))
                     uiElements.ResolverThreshold.callback(uiElements.ResolverThreshold.element:GetValue())
                     uiElements.BulletSpeed.callback(uiElements.BulletSpeed.element:GetValue())
                     safeNotify(GunSilent.notify, "GunSilent", "Settings synchronized with UI!", true)
