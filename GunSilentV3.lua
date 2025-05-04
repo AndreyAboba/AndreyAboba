@@ -43,7 +43,7 @@ local GunSilent = {
         LastTargetPos = nil,
         LastPredictionPos = nil,
         LastTargetUpdate = 0,
-        TargetUpdateInterval = 0.05, -- Уменьшено для более частого обновления
+        TargetUpdateInterval = 0.1,
         LastFriendsList = nil
     }
 }
@@ -245,10 +245,9 @@ local function resolveVelocity(target, positionHistory, clientVelocity, targetCh
 
     local currentTime = tick()
     local totalVelocity = Vector3.new(0, 0, 0)
-    local totalAcceleration = Vector3.new(0, 0, 0)
     local totalWeight = 0
     local validEntries = 0
-    local maxSpeedLimit = isInVehicle(targetChar) and 150 or 50 -- Увеличим лимит для машин
+    local maxSpeedLimit = isInVehicle(targetChar) and 150 or 50
 
     local filteredHistory = {}
     for i = 1, #positionHistory do
@@ -286,21 +285,10 @@ local function resolveVelocity(target, positionHistory, clientVelocity, targetCh
                     totalVelocity = totalVelocity + velocity * weight
                     totalWeight = totalWeight + weight
                     validEntries = validEntries + 1
-
-                    if i > 1 then
-                        local prevVelocity = (prevEntry.pos - filteredHistory[i - 1].pos) / (prevEntry.time - filteredHistory[i - 1].time)
-                        local acceleration = (velocity - prevVelocity) / timeDelta
-                        totalAcceleration = totalAcceleration + acceleration * weight
-                    end
                 end
             end
         end
         calculatedVelocity = validEntries > 0 and totalVelocity / totalWeight or Vector3.new(0, 0, 0)
-
-        if validEntries > 0 then
-            local avgAcceleration = totalAcceleration / totalWeight
-            calculatedVelocity = calculatedVelocity + avgAcceleration * GunSilent.Settings.PingCompensation.Value
-        end
 
         if isInVehicle(targetChar) and targetChar:FindFirstChild("HumanoidRootPart") then
             local rootCFrame = targetChar.HumanoidRootPart.CFrame
@@ -354,19 +342,18 @@ local function predictTargetPositionGun(target)
         local isInVehicle = isInVehicle(targetChar)
         local predictionStrength = GunSilent.Settings.PredictionStrength.Value
         if isInVehicle then
-            predictionStrength = predictionStrength * 1.5 -- Увеличим силу предсказания для машин
+            predictionStrength = predictionStrength * 1.5
         end
 
-        local gravityAdjustment = Vector3.new(0, -workspace.Gravity * timeToTarget * timeToTarget / 2, 0) -- Учет гравитации
         if targetSpeed < 5 then
             local ping = GunSilent.Settings.PingCompensation.Value * math.clamp(distance / 50, 0.5, 1.0)
-            predictedPos = clientPos + resolvedVelocity * ping + gravityAdjustment
+            predictedPos = clientPos + resolvedVelocity * ping
         else
             local speedFactor = 0.8 + (targetSpeed / (isInVehicle and 150 or 50)) * 0.5
             local ping = GunSilent.Settings.PingCompensation.Value * math.clamp(distance / 50, 0.5, 1.0)
             local accuracyFactor = math.clamp(getGunRange(equippedTool) / distance, 0.5, 1.0)
             local totalPredictionTime = (timeToTarget + ping) * predictionStrength * speedFactor * accuracyFactor
-            predictedPos = clientPos + resolvedVelocity * totalPredictionTime + gravityAdjustment
+            predictedPos = clientPos + resolvedVelocity * totalPredictionTime
 
             if GunSilent.State.LastPredictionPos then
                 predictedPos = GunSilent.State.LastPredictionPos:Lerp(predictedPos, 1 - GunSilent.Settings.SmoothingFactor.Value)
@@ -496,8 +483,7 @@ local function updateVisualsGun(target)
             end
         end
         if trajectoryBeam and GunSilent.State.TrajectoryAttachment0 and GunSilent.State.TrajectoryAttachment1 then
-            if not trajectoryBeam.Parent or not GunSilent.State.TrajectoryAttachment0.Parent or not GunSilent.State.TrajectoryAttachment1.Parent then
-                trajectoryBeam.Parent = Workspace
+            if not GunSilent.State.TrajectoryAttachment0.Parent or not GunSilent.State.TrajectoryAttachment1.Parent then
                 GunSilent.State.TrajectoryAttachment0.Parent = localRoot
                 GunSilent.State.TrajectoryAttachment1.Parent = GunSilent.State.PredictVisualPart
             end
@@ -560,6 +546,18 @@ local function initializeGunSilent()
         end
 
         local character = GunSilent.State.LocalCharacter
+        if character and not character:FindFirstChild("HumanoidRootPart") then
+            GunSilent.State.LocalRoot = nil
+            if GunSilent.State.TrajectoryAttachment0 then
+                GunSilent.State.TrajectoryAttachment0:Destroy()
+                GunSilent.State.TrajectoryAttachment0 = nil
+            end
+            if GunSilent.State.TrajectoryAttachment1 then
+                GunSilent.State.TrajectoryAttachment1:Destroy()
+                GunSilent.State.TrajectoryAttachment1 = nil
+            end
+        end
+
         local currentTool = getEquippedGunTool(character)
         if currentTool ~= GunSilent.State.LastTool then
             if currentTool and not GunSilent.State.LastTool then
@@ -595,6 +593,14 @@ local function Init(UI, Core, notify)
             character:WaitForChild("HumanoidRootPart")
             GunSilent.State.LocalCharacter = character
             GunSilent.State.LocalRoot = character.HumanoidRootPart
+            if GunSilent.State.TrajectoryBeam and not GunSilent.State.TrajectoryAttachment0 then
+                GunSilent.State.TrajectoryAttachment0 = safeCreateInstance("Attachment", { Parent = GunSilent.State.LocalRoot })
+                GunSilent.State.TrajectoryBeam.Attachment0 = GunSilent.State.TrajectoryAttachment0
+            end
+            if GunSilent.State.TrajectoryBeam and not GunSilent.State.TrajectoryAttachment1 then
+                GunSilent.State.TrajectoryAttachment1 = safeCreateInstance("Attachment", { Parent = GunSilent.State.PredictVisualPart })
+                GunSilent.State.TrajectoryBeam.Attachment1 = GunSilent.State.TrajectoryAttachment1
+            end
         end)
         if LocalPlayer.Character then
             GunSilent.State.LocalCharacter = LocalPlayer.Character
