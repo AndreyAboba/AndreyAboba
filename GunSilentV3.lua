@@ -228,6 +228,62 @@ local function getNearestPlayerGun(gunRange)
     return nearestPlayer
 end
 
+local function resolveVelocity(target, positionHistory, clientVelocity, targetChar)
+    if not positionHistory or #positionHistory < 3 then
+        return clientVelocity
+    end
+
+    local currentTime = tick()
+    local totalVelocity = Vector3.new(0, 0, 0)
+    local totalWeight = 0
+    local validEntries = 0
+    local maxSpeedLimit = 50
+
+    local filteredHistory = {}
+    for i = 1, #positionHistory do
+        filteredHistory[#filteredHistory + 1] = positionHistory[i]
+    end
+
+    local calculatedVelocity = Vector3.new(0, 0, 0)
+    local useCFrame = #filteredHistory > 2 and (function()
+        local meanPos = Vector3.new(0, 0, 0)
+        for _, entry in ipairs(filteredHistory) do
+            meanPos = meanPos + entry.pos
+        end
+        meanPos = meanPos / #filteredHistory
+        local variance = 0
+        for _, entry in ipairs(filteredHistory) do
+            variance = variance + (entry.pos - meanPos).Magnitude^2
+        end
+        return variance / #filteredHistory < 0.1
+    end)()
+
+    if useCFrame and targetChar:FindFirstChild("Head") then
+        local headCFrame = targetChar.Head.CFrame
+        local rootCFrame = targetChar.HumanoidRootPart.CFrame
+        local offset = headCFrame.Position - rootCFrame.Position
+        calculatedVelocity = offset / GunSilent.Settings.PingCompensation.Value
+    else
+        for i = #filteredHistory - 1, math.max(1, #filteredHistory - 10), -1 do
+            local currEntry = filteredHistory[i + 1]
+            local prevEntry = filteredHistory[i]
+            local timeDelta = currEntry.time - prevEntry.time
+            if timeDelta > 0 and timeDelta < 0.2 then
+                local velocity = (currEntry.pos - prevEntry.pos) / timeDelta
+                if velocity.Magnitude <= maxSpeedLimit * 1.5 then
+                    local weight = 1 / (1 + (currentTime - currEntry.time) * 5)
+                    totalVelocity = totalVelocity + velocity * weight
+                    totalWeight = totalWeight + weight
+                    validEntries = validEntries + 1
+                end
+            end
+        end
+        calculatedVelocity = validEntries > 0 and totalVelocity / totalWeight or Vector3.new(0, 0, 0)
+    end
+
+    return calculatedVelocity
+end
+
 local function predictTargetPositionGun(target)
     local localRoot = GunSilent.State.LocalRoot
     if not target or not target.Character or not localRoot then
@@ -262,7 +318,7 @@ local function predictTargetPositionGun(target)
     end
 
     local clientPos = targetPos
-    local resolvedVelocity = targetRoot.Velocity
+    local resolvedVelocity = resolveVelocity(target, positionHistory, targetRoot.Velocity, targetChar)
 
     local predictedPos = clientPos
     if not isTeleporting then
