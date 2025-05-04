@@ -190,9 +190,9 @@ local function getNearestPlayerGun(gunRange)
                     local distance = (rootPos - targetRoot.Position).Magnitude
                     local inFov = isInFov(targetRoot.Position, camera)
                     if inFov then
+                        local screenPos, onScreen = camera:WorldToViewportPoint(targetRoot.Position)
+                        local cursorDistance = onScreen and (Vector2.new(screenPos.X, screenPos.Y) - UserInputService:GetMouseLocation()).Magnitude or math.huge
                         if sortMethod == "Mouse&Distance" then
-                            local screenPos = camera:WorldToViewportPoint(targetRoot.Position)
-                            local cursorDistance = (Vector2.new(screenPos.X, screenPos.Y) - UserInputService:GetMouseLocation()).Magnitude
                             local score = (cursorDistance / camera.ViewportSize.X) * 0.7 + (distance / (GunSilent.Settings.RangePlus.Value + 50)) * 0.3
                             if score < bestScore then
                                 bestScore = score
@@ -202,8 +202,6 @@ local function getNearestPlayerGun(gunRange)
                             shortestDistance = distance
                             nearestPlayer = player
                         elseif sortMethod == "Mouse" then
-                            local screenPos = camera:WorldToViewportPoint(targetRoot.Position)
-                            local cursorDistance = (Vector2.new(screenPos.X, screenPos.Y) - UserInputService:GetMouseLocation()).Magnitude
                             if cursorDistance < closestToCursor then
                                 closestToCursor = cursorDistance
                                 nearestPlayer = player
@@ -939,10 +937,12 @@ local function Init(UI, Core, notify)
                     uiElements.PredictVisual.callback(uiElements.PredictVisual.element:GetState())
                     uiElements.TrajectoryBeam.callback(uiElements.TrajectoryBeam.element:GetState())
                     uiElements.HitChance.callback(uiElements.HitChance.element:GetValue())
+                    uiElements.PredictLevel.callback(tostring(uiElements.PredictLevel.element:GetValue()))
                     uiElements.PredictionStrength.callback(uiElements.PredictionStrength.element:GetValue())
                     uiElements.PingCompensation.callback(uiElements.PingCompensation.element:GetValue())
                     uiElements.SmoothingFactor.callback(uiElements.SmoothingFactor.element:GetValue())
                     uiElements.ResolverEnabled.callback(uiElements.ResolverEnabled.element:GetState())
+                    uiElements.ResolverLevel.callback(tostring(uiElements.ResolverLevel.element:GetValue()))
                     uiElements.ResolverThreshold.callback(uiElements.ResolverThreshold.element:GetValue())
                     uiElements.BulletSpeed.callback(uiElements.BulletSpeed.element:GetValue())
                     safeNotify(GunSilent.notify, "GunSilent", "Settings synchronized with UI!", true)
