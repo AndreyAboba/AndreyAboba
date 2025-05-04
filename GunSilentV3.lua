@@ -29,9 +29,7 @@ local GunSilent = {
     FixedPredictionValues = {
         MaxPlayerSpeed = 50,
         TeleportThreshold = 50,
-        MinSmoothing = 0.05,
-        MaxSmoothing = 0.15,
-        VehicleHeadOffset = Vector3.new(0, 1.5, 0),
+        AntistompSpeedThreshold = 10, -- Порог скорости для antistomp
         FreezeDuration = 1.0 -- Длительность "заморозки" модели
     },
     State = {
@@ -190,7 +188,7 @@ local function getNearestPlayerGun(gunRange)
             if targetChar then
                 local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
                 local targetHumanoid = targetChar:FindFirstChild("Humanoid")
-                if targetRoot and targetHumanoid and targetHumanoid.Health > 0 then
+                if targetRoot and targetHumanoid then
                     local distance = (rootPos - targetRoot.Position).Magnitude
                     local inFov = isInFov(targetRoot.Position, camera)
                     if inFov then
@@ -249,9 +247,10 @@ local function resolveVelocity(target, positionHistory, clientVelocity, targetCh
     local validEntries = 0
     local maxSpeedLimit = GunSilent.FixedPredictionValues.MaxPlayerSpeed
     local teleportThreshold = GunSilent.FixedPredictionValues.TeleportThreshold
+    local antistompSpeedThreshold = GunSilent.FixedPredictionValues.AntistompSpeedThreshold
     local humanoid = targetChar:FindFirstChild("Humanoid")
+    local assembly = targetChar:FindFirstChild("LowerTorso") -- Аналогично коду рагдолла
     local isInVehicle = humanoid and humanoid.SeatPart ~= nil
-    local head = targetChar:FindFirstChild("Head")
 
     local filteredHistory = {}
     for i = 1, #positionHistory do
@@ -260,27 +259,23 @@ local function resolveVelocity(target, positionHistory, clientVelocity, targetCh
         end
     end
 
-    -- Проверка однородности истории позиций
-    local variance = 0
-    if #filteredHistory > 2 then
+    local calculatedVelocity = Vector3.new(0, 0, 0)
+    local isSpoofed = false
+    local useCFrame = #filteredHistory > 2 and (function()
         local meanPos = Vector3.new(0, 0, 0)
         for _, entry in ipairs(filteredHistory) do
             meanPos = meanPos + entry.pos
         end
         meanPos = meanPos / #filteredHistory
+        local variance = 0
         for _, entry in ipairs(filteredHistory) do
             variance = variance + (entry.pos - meanPos).Magnitude^2
         end
-        variance = variance / #filteredHistory
-    end
+        return variance / #filteredHistory < 0.1
+    end)()
 
-    local calculatedVelocity = Vector3.new(0, 0, 0)
-    local isSpoofed = false
-    local useCFrame = variance < 0.1
-
-    if useCFrame and head then
-        -- Анализ через CFrame для случаев, когда игрок стоит на месте
-        local headCFrame = head.CFrame
+    if useCFrame and targetChar:FindFirstChild("Head") then
+        local headCFrame = targetChar.Head.CFrame
         local rootCFrame = targetChar.HumanoidRootPart.CFrame
         local offset = headCFrame.Position - rootCFrame.Position
         if isInVehicle and offset.Y < 1 then
@@ -289,7 +284,6 @@ local function resolveVelocity(target, positionHistory, clientVelocity, targetCh
             calculatedVelocity = offset / GunSilent.Settings.PingCompensation.Value
         end
     else
-        -- Анализ через velocity для динамичных движений
         for i = #filteredHistory - 1, math.max(1, #filteredHistory - 10), -1 do
             local currEntry = filteredHistory[i + 1]
             local prevEntry = filteredHistory[i]
@@ -307,30 +301,35 @@ local function resolveVelocity(target, positionHistory, clientVelocity, targetCh
         calculatedVelocity = validEntries > 0 and totalVelocity / totalWeight or Vector3.new(0, 0, 0)
     end
 
-    -- Обнаружение antistomp и заморозка модели
-    if humanoid then
+    -- Улучшенное обнаружение antistomp и нокаута
+    if humanoid and assembly then
         local state = humanoid:GetState()
         local isKnockedOut = state == Enum.HumanoidStateType.FallingDown or state == Enum.HumanoidStateType.Dead or humanoid.Health < 10
-        if isKnockedOut and #filteredHistory > 1 then
+        local isStunned = humanoid:GetAttribute("Stunned") or false
+        local isDead = humanoid:GetAttribute("IsDead") or false
+        local speed = assembly.AssemblyLinearVelocity.Magnitude
+
+        if (isKnockedOut or isStunned or isDead) and #filteredHistory > 1 then
             local lastPos = filteredHistory[#filteredHistory].pos
             local secondLastPos = filteredHistory[#filteredHistory - 1].pos
-            if (lastPos - secondLastPos).Magnitude > teleportThreshold * 2 then
+            local posChange = (lastPos - secondLastPos).Magnitude
+            local isAntistomp = posChange > teleportThreshold * 2 or (speed > antistompSpeedThreshold and posChange > teleportThreshold)
+
+            if isAntistomp and (not positionHistory.FreezeUntil or currentTime > positionHistory.FreezeUntil) then
                 isSpoofed = true
-                if not positionHistory.FreezeUntil or currentTime > positionHistory.FreezeUntil then
-                    positionHistory.FreezeUntil = currentTime + GunSilent.FixedPredictionValues.FreezeDuration
-                    positionHistory.FrozenPosition = secondLastPos
-                    local rootPart = targetChar:FindFirstChild("HumanoidRootPart")
-                    if rootPart and not rootPart.Anchored then
-                        rootPart.Anchored = true
-                        rootPart.CFrame = CFrame.new(secondLastPos)
-                        spawn(function()
-                            wait(GunSilent.FixedPredictionValues.FreezeDuration)
-                            if rootPart and rootPart.Parent then
-                                rootPart.Anchored = false
-                                positionHistory.FreezeUntil = nil
-                            end
-                        end)
-                    end
+                positionHistory.FreezeUntil = currentTime + GunSilent.FixedPredictionValues.FreezeDuration
+                positionHistory.FrozenPosition = secondLastPos
+                local rootPart = targetChar:FindFirstChild("HumanoidRootPart")
+                if rootPart and not rootPart.Anchored then
+                    rootPart.Anchored = true
+                    rootPart.CFrame = CFrame.new(secondLastPos)
+                    spawn(function()
+                        wait(GunSilent.FixedPredictionValues.FreezeDuration)
+                        if rootPart and rootPart.Parent then
+                            rootPart.Anchored = false
+                            positionHistory.FreezeUntil = nil
+                        end
+                    end)
                 end
             end
         end
