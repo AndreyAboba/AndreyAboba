@@ -394,7 +394,7 @@ local function createHitDataGun(target)
 
     local equippedTool = getEquippedGunTool(GunSilent.State.LocalCharacter)
     local isShotgunWeapon = GunSilent.Settings.ShotgunSupport.Value and equippedTool and isShotgun(equippedTool)
-    local useMultiBullets = isShotgunWeapon or GunSilent.Settings.Test asGenBullet.Value
+    local useMultiBullets = isShotgunWeapon or GunSilent.Settings.TestGenBullet.Value
     local numBullets = useMultiBullets and (isShotgunWeapon and GunSilent.Settings.GenBullet.Value or 4) or 1
     local hitData = {}
 
