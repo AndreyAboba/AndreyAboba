@@ -321,7 +321,7 @@ function AutoV2.Init(MacLib, Core, notify)
             Precision = 1,
             Callback = function(value)
                 AutoV2.Config.PickupMinDistance = value
-                notify("Auto Pickup", "Pickup radius set to " .. value .. " meters!", true)
+                notify("Auto Pickup", "Pickup radius set to " .. value .. " meters!", false)
             end
         }, 'PickupRadius')
 
