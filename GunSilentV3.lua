@@ -43,7 +43,7 @@ local GunSilent = {
         LastTargetPos = nil,
         LastPredictionPos = nil,
         LastTargetUpdate = 0,
-        TargetUpdateInterval = 0.1,
+        TargetUpdateInterval = 0.05, -- Уменьшено для более частого обновления
         LastFriendsList = nil
     }
 }
@@ -189,7 +189,6 @@ local function getNearestPlayerGun(gunRange)
                         if sortMethod == "Mouse&Distance" then
                             local screenPos = camera:WorldToViewportPoint(targetRoot.Position)
                             local cursorDistance = (Vector2.new(screenPos.X, screenPos.Y) - UserInputService:GetMouseLocation()).Magnitude
-                            -- Приоритет направлению взгляда: cursorDistance имеет больший вес
                             local score = (cursorDistance / camera.ViewportSize.X) * 0.7 + (distance / (GunSilent.Settings.RangePlus.Value + 50)) * 0.3
                             if score < bestScore then
                                 bestScore = score
@@ -231,6 +230,14 @@ local function getNearestPlayerGun(gunRange)
     return nearestPlayer
 end
 
+local function isInVehicle(targetChar)
+    local humanoid = targetChar:FindFirstChild("Humanoid")
+    if humanoid then
+        return humanoid.SeatPart ~= nil
+    end
+    return false
+end
+
 local function resolveVelocity(target, positionHistory, clientVelocity, targetChar)
     if not GunSilent.Settings.ResolverEnabled.Value or not positionHistory or #positionHistory < 3 then
         return clientVelocity
@@ -238,9 +245,10 @@ local function resolveVelocity(target, positionHistory, clientVelocity, targetCh
 
     local currentTime = tick()
     local totalVelocity = Vector3.new(0, 0, 0)
+    local totalAcceleration = Vector3.new(0, 0, 0)
     local totalWeight = 0
     local validEntries = 0
-    local maxSpeedLimit = 50
+    local maxSpeedLimit = isInVehicle(targetChar) and 150 or 50 -- Увеличим лимит для машин
 
     local filteredHistory = {}
     for i = 1, #positionHistory do
@@ -261,7 +269,7 @@ local function resolveVelocity(target, positionHistory, clientVelocity, targetCh
         return variance / #filteredHistory < 0.1
     end)()
 
-    if useCFrame and targetChar:FindFirstChild("Head") then
+    if useCFrame and targetChar:FindFirstChild("Head") and not isInVehicle(targetChar) then
         local headCFrame = targetChar.Head.CFrame
         local rootCFrame = targetChar.HumanoidRootPart.CFrame
         local offset = headCFrame.Position - rootCFrame.Position
@@ -278,10 +286,27 @@ local function resolveVelocity(target, positionHistory, clientVelocity, targetCh
                     totalVelocity = totalVelocity + velocity * weight
                     totalWeight = totalWeight + weight
                     validEntries = validEntries + 1
+
+                    if i > 1 then
+                        local prevVelocity = (prevEntry.pos - filteredHistory[i - 1].pos) / (prevEntry.time - filteredHistory[i - 1].time)
+                        local acceleration = (velocity - prevVelocity) / timeDelta
+                        totalAcceleration = totalAcceleration + acceleration * weight
+                    end
                 end
             end
         end
         calculatedVelocity = validEntries > 0 and totalVelocity / totalWeight or Vector3.new(0, 0, 0)
+
+        if validEntries > 0 then
+            local avgAcceleration = totalAcceleration / totalWeight
+            calculatedVelocity = calculatedVelocity + avgAcceleration * GunSilent.Settings.PingCompensation.Value
+        end
+
+        if isInVehicle(targetChar) and targetChar:FindFirstChild("HumanoidRootPart") then
+            local rootCFrame = targetChar.HumanoidRootPart.CFrame
+            local forwardVector = rootCFrame.LookVector
+            calculatedVelocity = calculatedVelocity + forwardVector * calculatedVelocity.Magnitude * 0.3
+        end
     end
 
     return calculatedVelocity
@@ -326,15 +351,22 @@ local function predictTargetPositionGun(target)
     local predictedPos = clientPos
     if not isTeleporting then
         local targetSpeed = resolvedVelocity.Magnitude
+        local isInVehicle = isInVehicle(targetChar)
+        local predictionStrength = GunSilent.Settings.PredictionStrength.Value
+        if isInVehicle then
+            predictionStrength = predictionStrength * 1.5 -- Увеличим силу предсказания для машин
+        end
+
+        local gravityAdjustment = Vector3.new(0, -workspace.Gravity * timeToTarget * timeToTarget / 2, 0) -- Учет гравитации
         if targetSpeed < 5 then
             local ping = GunSilent.Settings.PingCompensation.Value * math.clamp(distance / 50, 0.5, 1.0)
-            predictedPos = clientPos + resolvedVelocity * ping
+            predictedPos = clientPos + resolvedVelocity * ping + gravityAdjustment
         else
-            local speedFactor = 0.8 + (targetSpeed / 50) * 0.5
+            local speedFactor = 0.8 + (targetSpeed / (isInVehicle and 150 or 50)) * 0.5
             local ping = GunSilent.Settings.PingCompensation.Value * math.clamp(distance / 50, 0.5, 1.0)
             local accuracyFactor = math.clamp(getGunRange(equippedTool) / distance, 0.5, 1.0)
-            local totalPredictionTime = (timeToTarget + ping) * GunSilent.Settings.PredictionStrength.Value * speedFactor * accuracyFactor
-            predictedPos = clientPos + resolvedVelocity * totalPredictionTime
+            local totalPredictionTime = (timeToTarget + ping) * predictionStrength * speedFactor * accuracyFactor
+            predictedPos = clientPos + resolvedVelocity * totalPredictionTime + gravityAdjustment
 
             if GunSilent.State.LastPredictionPos then
                 predictedPos = GunSilent.State.LastPredictionPos:Lerp(predictedPos, 1 - GunSilent.Settings.SmoothingFactor.Value)
