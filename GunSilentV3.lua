@@ -19,21 +19,18 @@ local GunSilent = {
         PingCompensation = { Value = 0.1, Default = 0.1 },
         SmoothingFactor = { Value = 0.1, Default = 0.1 },
         ResolverEnabled = { Value = true, Default = true },
-        ResolverLevel = { Value = 1, Default = 1 }, -- Зафиксировано на уровне 1
         ResolverThreshold = { Value = 0.3, Default = 0.3 },
         PositionHistorySize = { Value = 30, Default = 30 },
         SortMethod = { Value = "Mouse&Distance", Default = "Mouse&Distance" },
         ShotgunSupport = { Value = false, Default = false },
         GenBullet = { Value = 4, Default = 4 },
-        TestGenBullet = { Value = false, Default = false },
+        TestGenBullet = { Value = false, Default = false }
     },
     State = {
         LastEventId = 0,
         LastTool = nil,
         PredictVisualPart = nil,
         TrajectoryBeam = nil,
-        TrajectoryAttachment0 = nil,
-        TrajectoryAttachment1 = nil,
         FovCircle = nil,
         V_U_4 = nil,
         Connection = nil,
@@ -189,9 +186,10 @@ local function getNearestPlayerGun(gunRange)
                     local distance = (rootPos - targetRoot.Position).Magnitude
                     local inFov = isInFov(targetRoot.Position, camera)
                     if inFov then
-                        local screenPos, onScreen = camera:WorldToViewportPoint(targetRoot.Position)
-                        local cursorDistance = onScreen and (Vector2.new(screenPos.X, screenPos.Y) - UserInputService:GetMouseLocation()).Magnitude or math.huge
                         if sortMethod == "Mouse&Distance" then
+                            local screenPos = camera:WorldToViewportPoint(targetRoot.Position)
+                            local cursorDistance = (Vector2.new(screenPos.X, screenPos.Y) - UserInputService:GetMouseLocation()).Magnitude
+                            -- Приоритет направлению взгляда: cursorDistance имеет больший вес
                             local score = (cursorDistance / camera.ViewportSize.X) * 0.7 + (distance / (GunSilent.Settings.RangePlus.Value + 50)) * 0.3
                             if score < bestScore then
                                 bestScore = score
@@ -201,12 +199,14 @@ local function getNearestPlayerGun(gunRange)
                             shortestDistance = distance
                             nearestPlayer = player
                         elseif sortMethod == "Mouse" then
+                            local screenPos = camera:WorldToViewportPoint(targetRoot.Position)
+                            local cursorDistance = (Vector2.new(screenPos.X, screenPos.Y) - UserInputService:GetMouseLocation()).Magnitude
                             if cursorDistance < closestToCursor then
                                 closestToCursor = cursorDistance
                                 nearestPlayer = player
                             end
                         end
-                        table.insert(debugInfo, string.format("Player: %s, Distance: %.1f, CursorDist: %.1f, InFOV: %s", player.Name, distance, cursorDistance, tostring(inFov)))
+                        table.insert(debugInfo, string.format("Player: %s, Distance: %.1f, InFOV: %s", player.Name, distance, tostring(inFov)))
                     else
                         table.insert(debugInfo, string.format("Player: %s, Not in FOV, Distance: %.1f", player.Name, distance))
                     end
@@ -247,22 +247,44 @@ local function resolveVelocity(target, positionHistory, clientVelocity, targetCh
         filteredHistory[#filteredHistory + 1] = positionHistory[i]
     end
 
-    for i = #filteredHistory - 1, math.max(1, #filteredHistory - 10), -1 do
-        local currEntry = filteredHistory[i + 1]
-        local prevEntry = filteredHistory[i]
-        local timeDelta = currEntry.time - prevEntry.time
-        if timeDelta > 0 and timeDelta < 0.2 then
-            local velocity = (currEntry.pos - prevEntry.pos) / timeDelta
-            if velocity.Magnitude <= maxSpeedLimit * 1.5 then
-                local weight = 1 / (1 + (currentTime - currEntry.time) * 5)
-                totalVelocity = totalVelocity + velocity * weight
-                totalWeight = totalWeight + weight
-                validEntries = validEntries + 1
+    local calculatedVelocity = Vector3.new(0, 0, 0)
+    local useCFrame = #filteredHistory > 2 and (function()
+        local meanPos = Vector3.new(0, 0, 0)
+        for _, entry in ipairs(filteredHistory) do
+            meanPos = meanPos + entry.pos
+        end
+        meanPos = meanPos / #filteredHistory
+        local variance = 0
+        for _, entry in ipairs(filteredHistory) do
+            variance = variance + (entry.pos - meanPos).Magnitude^2
+        end
+        return variance / #filteredHistory < 0.1
+    end)()
+
+    if useCFrame and targetChar:FindFirstChild("Head") then
+        local headCFrame = targetChar.Head.CFrame
+        local rootCFrame = targetChar.HumanoidRootPart.CFrame
+        local offset = headCFrame.Position - rootCFrame.Position
+        calculatedVelocity = offset / GunSilent.Settings.PingCompensation.Value
+    else
+        for i = #filteredHistory - 1, math.max(1, #filteredHistory - 10), -1 do
+            local currEntry = filteredHistory[i + 1]
+            local prevEntry = filteredHistory[i]
+            local timeDelta = currEntry.time - prevEntry.time
+            if timeDelta > 0 and timeDelta < 0.2 then
+                local velocity = (currEntry.pos - prevEntry.pos) / timeDelta
+                if velocity.Magnitude <= maxSpeedLimit * 1.5 then
+                    local weight = 1 / (1 + (currentTime - currEntry.time) * 5)
+                    totalVelocity = totalVelocity + velocity * weight
+                    totalWeight = totalWeight + weight
+                    validEntries = validEntries + 1
+                end
             end
         end
+        calculatedVelocity = validEntries > 0 and totalVelocity / totalWeight or Vector3.new(0, 0, 0)
     end
 
-    return validEntries > 0 and totalVelocity / totalWeight or Vector3.new(0, 0, 0)
+    return calculatedVelocity
 end
 
 local function predictTargetPositionGun(target)
@@ -277,7 +299,7 @@ local function predictTargetPositionGun(target)
     local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
     local equippedTool = getEquippedGunTool(GunSilent.State.LocalCharacter)
     if not hitPart or not targetRoot or not equippedTool then
-        return { position = targetRoot and targetRoot.Position or nil, direction = targetRoot and (targetRoot.Position - myPos).Unit or nil, timeToTarget = 0, clientPosition = targetRoot and targetRoot.Position or nil }
+        return { position = nil, direction = nil, timeToTarget = 0, clientPosition = nil }
     end
 
     local targetPos = hitPart.Position
@@ -304,23 +326,26 @@ local function predictTargetPositionGun(target)
     local predictedPos = clientPos
     if not isTeleporting then
         local targetSpeed = resolvedVelocity.Magnitude
-        if targetSpeed >= 5 then
+        if targetSpeed < 5 then
+            local ping = GunSilent.Settings.PingCompensation.Value * math.clamp(distance / 50, 0.5, 1.0)
+            predictedPos = clientPos + resolvedVelocity * ping
+        else
             local speedFactor = 0.8 + (targetSpeed / 50) * 0.5
             local ping = GunSilent.Settings.PingCompensation.Value * math.clamp(distance / 50, 0.5, 1.0)
             local accuracyFactor = math.clamp(getGunRange(equippedTool) / distance, 0.5, 1.0)
             local totalPredictionTime = (timeToTarget + ping) * GunSilent.Settings.PredictionStrength.Value * speedFactor * accuracyFactor
             predictedPos = clientPos + resolvedVelocity * totalPredictionTime
-        end
 
-        if GunSilent.State.LastPredictionPos and predictedPos then
-            predictedPos = GunSilent.State.LastPredictionPos:Lerp(predictedPos, 1 - GunSilent.Settings.SmoothingFactor.Value)
+            if GunSilent.State.LastPredictionPos then
+                predictedPos = GunSilent.State.LastPredictionPos:Lerp(predictedPos, 1 - GunSilent.Settings.SmoothingFactor.Value)
+            end
         end
         GunSilent.State.LastPredictionPos = predictedPos
     end
 
     return {
-        position = predictedPos or (targetRoot and targetRoot.Position) or nil,
-        direction = predictedPos and (predictedPos - myPos).Unit or (targetRoot and (targetRoot.Position - myPos).Unit) or nil,
+        position = predictedPos,
+        direction = (predictedPos - myPos).Unit,
         timeToTarget = timeToTarget,
         clientPosition = clientPos
     }
@@ -377,8 +402,8 @@ local function updateVisualsGun(target)
     end
 
     local prediction = target and predictTargetPositionGun(target)
-    local targetPos = prediction and prediction.clientPosition or (target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") and target.Character.HumanoidRootPart.Position)
-    local predictionPos = prediction and prediction.position or targetPos
+    local targetPos = prediction and prediction.clientPosition
+    local predictionPos = prediction and prediction.position
 
     if not target or not target.Character or not predictionPos or not prediction.direction then
         if GunSilent.State.PredictVisualPart then
@@ -411,7 +436,7 @@ local function updateVisualsGun(target)
             GunSilent.State.PredictVisualPart = predictVisualPart
         end
         if predictVisualPart then
-            predictVisualPart.Position = predictionPos
+            predictVisualPart.Position = prediction.position
             predictVisualPart.Color = Color3.fromRGB(0, 255, 255)
             predictVisualPart.Transparency = 0.3
         end
@@ -431,14 +456,19 @@ local function updateVisualsGun(target)
                 Parent = Workspace
             })
             if trajectoryBeam then
+                GunSilent.State.TrajectoryBeam = trajectoryBeam
                 GunSilent.State.TrajectoryAttachment0 = safeCreateInstance("Attachment", { Parent = localRoot })
                 GunSilent.State.TrajectoryAttachment1 = safeCreateInstance("Attachment", { Parent = GunSilent.State.PredictVisualPart })
                 trajectoryBeam.Attachment0 = GunSilent.State.TrajectoryAttachment0
                 trajectoryBeam.Attachment1 = GunSilent.State.TrajectoryAttachment1
-                GunSilent.State.TrajectoryBeam = trajectoryBeam
             end
         end
         if trajectoryBeam and GunSilent.State.TrajectoryAttachment0 and GunSilent.State.TrajectoryAttachment1 then
+            if not trajectoryBeam.Parent or not GunSilent.State.TrajectoryAttachment0.Parent or not GunSilent.State.TrajectoryAttachment1.Parent then
+                trajectoryBeam.Parent = Workspace
+                GunSilent.State.TrajectoryAttachment0.Parent = localRoot
+                GunSilent.State.TrajectoryAttachment1.Parent = GunSilent.State.PredictVisualPart
+            end
             trajectoryBeam.Enabled = true
         else
             if GunSilent.State.TrajectoryBeam then
