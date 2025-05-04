@@ -13,8 +13,9 @@ local GunSilent = {
         FOV = { Value = 90, Default = 90 },
         ShowCircle = { Value = true, Default = true },
         PredictVisual = { Value = true, Default = true },
+        TrajectoryBeam = { Value = true, Default = true }, -- Вернули настройку
         HitChance = { Value = 100, Default = 100 },
-        PredictionStrength = { Value = 1.5, Default = 1.5 }, -- Оставлено 1.5, как работает идеально
+        PredictionStrength = { Value = 1.5, Default = 1.5 },
         PingCompensation = { Value = 0.1, Default = 0.1 },
         SmoothingFactor = { Value = 0.1, Default = 0.1 },
         ResolverEnabled = { Value = true, Default = true },
@@ -31,6 +32,7 @@ local GunSilent = {
         LastEventId = 0,
         LastTool = nil,
         PredictVisualPart = nil,
+        TrajectoryBeam = nil,
         FovCircle = nil,
         V_U_4 = nil,
         Connection = nil,
@@ -320,6 +322,9 @@ local function updateVisualsGun(target)
         if GunSilent.State.PredictVisualPart then
             GunSilent.State.PredictVisualPart.Transparency = 1
         end
+        if GunSilent.State.TrajectoryBeam then
+            GunSilent.State.TrajectoryBeam.Enabled = false
+        end
         return
     end
 
@@ -331,6 +336,9 @@ local function updateVisualsGun(target)
         if GunSilent.State.PredictVisualPart then
             GunSilent.State.PredictVisualPart.Transparency = 1
         end
+        if GunSilent.State.TrajectoryBeam then
+            GunSilent.State.TrajectoryBeam.Enabled = false
+        end
         return
     end
 
@@ -339,6 +347,7 @@ local function updateVisualsGun(target)
     if not hitPart then return end
 
     GunSilent.State.LastTargetPos, GunSilent.State.LastPredictionPos = targetPos, predictionPos
+    local startPos = localRoot.Position + Vector3.new(0, 1.5, 0)
 
     if GunSilent.Settings.PredictVisual.Value then
         local predictVisualPart = GunSilent.State.PredictVisualPart
@@ -360,6 +369,36 @@ local function updateVisualsGun(target)
         end
     elseif GunSilent.State.PredictVisualPart then
         GunSilent.State.PredictVisualPart.Transparency = 1
+    end
+
+    if GunSilent.Settings.TrajectoryBeam.Value and GunSilent.Settings.PredictVisual.Value then
+        local trajectoryBeam = GunSilent.State.TrajectoryBeam
+        if not trajectoryBeam then
+            trajectoryBeam = safeCreateInstance("Beam", {
+                FaceCamera = true,
+                Width0 = 0.15,
+                Width1 = 0.15,
+                Transparency = NumberSequence.new(0.4),
+                Color = ColorSequence.new(Color3.fromRGB(147, 112, 219)),
+                Parent = Workspace
+            })
+            if trajectoryBeam then
+                local attachment0 = safeCreateInstance("Attachment", { Parent = localRoot })
+                local attachment1 = safeCreateInstance("Attachment", { Parent = GunSilent.State.PredictVisualPart })
+                trajectoryBeam.Attachment0 = attachment0
+                trajectoryBeam.Attachment1 = attachment1
+                GunSilent.State.TrajectoryBeam = trajectoryBeam
+            end
+        end
+        if trajectoryBeam and trajectoryBeam.Attachment0 and trajectoryBeam.Attachment1 then
+            trajectoryBeam.Enabled = true
+        else
+            if GunSilent.State.TrajectoryBeam then
+                GunSilent.State.TrajectoryBeam.Enabled = false
+            end
+        end
+    elseif GunSilent.State.TrajectoryBeam then
+        GunSilent.State.TrajectoryBeam.Enabled = false
     end
 end
 
@@ -566,6 +605,20 @@ local function Init(UI, Core, notify)
                     safeNotify(notify, "GunSilent", "Predict Visual " .. (value and "Enabled" or "Disabled"), true)
                 end
             }
+            uiElements.TrajectoryBeam = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Trajectory Beam",
+                    Default = GunSilent.Settings.TrajectoryBeam.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.TrajectoryBeam.Value = value
+                        safeNotify(notify, "GunSilent", "Trajectory Beam " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'TrajectoryBeam'),
+                callback = function(value)
+                    GunSilent.Settings.TrajectoryBeam.Value = value
+                    safeNotify(notify, "GunSilent", "Trajectory Beam " .. (value and "Enabled" or "Disabled"), true)
+                end
+            }
             uiElements.HitChance = {
                 element = UI.Sections.GunSilent:Slider({
                     Name = "Hit Chance",
@@ -701,6 +754,7 @@ local function Init(UI, Core, notify)
                     uiElements.FOV.callback(uiElements.FOV.element:GetValue())
                     uiElements.ShowCircle.callback(uiElements.ShowCircle.element:GetState())
                     uiElements.PredictVisual.callback(uiElements.PredictVisual.element:GetState())
+                    uiElements.TrajectoryBeam.callback(uiElements.TrajectoryBeam.element:GetState())
                     uiElements.HitChance.callback(uiElements.HitChance.element:GetValue())
                     uiElements.PredictionStrength.callback(uiElements.PredictionStrength.element:GetValue())
                     uiElements.PingCompensation.callback(uiElements.PingCompensation.element:GetValue())
