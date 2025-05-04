@@ -795,7 +795,7 @@ local function Init(UI, Core, notify)
                 element = UI.Sections.GunSilent:Slider({
                     Name = "Ping Compensation",
                     Minimum = 0.0,
-                    Maximum = 0.2,
+                    Maximum = 0.4,
                     Default = GunSilent.Settings.PingCompensation.Value,
                     Precision = 3,
                     Callback = function(value)
@@ -812,7 +812,7 @@ local function Init(UI, Core, notify)
                 element = UI.Sections.GunSilent:Slider({
                     Name = "Smoothing Factor",
                     Minimum = 0.05,
-                    Maximum = 0.2,
+                    Maximum = 0.25,
                     Default = GunSilent.Settings.SmoothingFactor.Value,
                     Precision = 2,
                     Callback = function(value)
@@ -842,7 +842,7 @@ local function Init(UI, Core, notify)
             uiElements.ResolverThreshold = {
                 element = UI.Sections.GunSilent:Slider({
                     Name = "Resolver Threshold",
-                    Minimum = 0.2,
+                    Minimum = 0.1,
                     Maximum = 0.5,
                     Default = GunSilent.Settings.ResolverThreshold.Value,
                     Precision = 2,
