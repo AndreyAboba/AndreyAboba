@@ -18,6 +18,8 @@ local GunSilent = {
         PredictionStrength = { Value = 1.5, Default = 1.5 },
         PingCompensation = { Value = 0.1, Default = 0.1 },
         SmoothingFactor = { Value = 0.1, Default = 0.1 },
+        ResolverEnabled = { Value = true, Default = true },
+        ResolverThreshold = { Value = 0.3, Default = 0.3 },
         PositionHistorySize = { Value = 30, Default = 30 },
         SortMethod = { Value = "Mouse&Distance", Default = "Mouse&Distance" },
         ShotgunSupport = { Value = false, Default = false },
@@ -180,14 +182,15 @@ local function getNearestPlayerGun(gunRange)
             if targetChar then
                 local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
                 local targetHumanoid = targetChar:FindFirstChild("Humanoid")
-                if targetRoot and targetHumanoid then
+                if targetRoot and targetHumanoid and targetHumanoid.Health > 0 then
                     local distance = (rootPos - targetRoot.Position).Magnitude
                     local inFov = isInFov(targetRoot.Position, camera)
                     if inFov then
                         if sortMethod == "Mouse&Distance" then
                             local screenPos = camera:WorldToViewportPoint(targetRoot.Position)
                             local cursorDistance = (Vector2.new(screenPos.X, screenPos.Y) - UserInputService:GetMouseLocation()).Magnitude
-                            local score = (distance / (GunSilent.Settings.RangePlus.Value + 50)) + (cursorDistance / camera.ViewportSize.X)
+                            -- Приоритет направлению взгляда: cursorDistance имеет больший вес
+                            local score = (cursorDistance / camera.ViewportSize.X) * 0.7 + (distance / (GunSilent.Settings.RangePlus.Value + 50)) * 0.3
                             if score < bestScore then
                                 bestScore = score
                                 nearestPlayer = player
@@ -208,7 +211,7 @@ local function getNearestPlayerGun(gunRange)
                         table.insert(debugInfo, string.format("Player: %s, Not in FOV, Distance: %.1f", player.Name, distance))
                     end
                 else
-                    table.insert(debugInfo, string.format("Player: %s, Invalid: No HumanoidRootPart or dead", player.Name))
+                    table.insert(debugInfo, string.format("Player: %s, Invalid: No HumanoidRootPart or dead (Health: %s)", player.Name, targetHumanoid and targetHumanoid.Health or "N/A"))
                 end
             else
                 table.insert(debugInfo, string.format("Player: %s, No Character", player.Name))
@@ -229,7 +232,7 @@ local function getNearestPlayerGun(gunRange)
 end
 
 local function resolveVelocity(target, positionHistory, clientVelocity, targetChar)
-    if not positionHistory or #positionHistory < 3 then
+    if not GunSilent.Settings.ResolverEnabled.Value or not positionHistory or #positionHistory < 3 then
         return clientVelocity
     end
 
@@ -818,6 +821,37 @@ local function Init(UI, Core, notify)
                     safeNotify(GunSilent.notify, "GunSilent", "Smoothing Factor set to: " .. value, false)
                 end
             }
+            uiElements.ResolverEnabled = {
+                element = UI.Sections.GunSilent:Toggle({
+                    Name = "Resolver Enabled",
+                    Default = GunSilent.Settings.ResolverEnabled.Value,
+                    Callback = function(value)
+                        GunSilent.Settings.ResolverEnabled.Value = value
+                        safeNotify(GunSilent.notify, "GunSilent", "Resolver " .. (value and "Enabled" or "Disabled"), true)
+                    end
+                }, 'ResolverEnabled'),
+                callback = function(value)
+                    GunSilent.Settings.ResolverEnabled.Value = value
+                    safeNotify(GunSilent.notify, "GunSilent", "Resolver " .. (value and "Enabled" or "Disabled"), true)
+                end
+            }
+            uiElements.ResolverThreshold = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Resolver Threshold",
+                    Minimum = 0.2,
+                    Maximum = 0.5,
+                    Default = GunSilent.Settings.ResolverThreshold.Value,
+                    Precision = 2,
+                    Callback = function(value)
+                        GunSilent.Settings.ResolverThreshold.Value = value
+                        safeNotify(GunSilent.notify, "GunSilent", "Resolver Threshold set to: " .. value, false)
+                    end
+                }, 'ResolverThreshold'),
+                callback = function(value)
+                    GunSilent.Settings.ResolverThreshold.Value = value
+                    safeNotify(GunSilent.notify, "GunSilent", "Resolver Threshold set to: " .. value, false)
+                end
+            }
             uiElements.BulletSpeed = {
                 element = UI.Sections.GunSilent:Slider({
                     Name = "Bullet Speed",
@@ -868,6 +902,8 @@ local function Init(UI, Core, notify)
                     uiElements.PredictionStrength.callback(uiElements.PredictionStrength.element:GetValue())
                     uiElements.PingCompensation.callback(uiElements.PingCompensation.element:GetValue())
                     uiElements.SmoothingFactor.callback(uiElements.SmoothingFactor.element:GetValue())
+                    uiElements.ResolverEnabled.callback(uiElements.ResolverEnabled.element:GetState())
+                    uiElements.ResolverThreshold.callback(uiElements.ResolverThreshold.element:GetValue())
                     uiElements.BulletSpeed.callback(uiElements.BulletSpeed.element:GetValue())
                     safeNotify(GunSilent.notify, "GunSilent", "Settings synchronized with UI!", true)
                 end
