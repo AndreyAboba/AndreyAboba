@@ -28,7 +28,7 @@ local GunSilent = {
         AdvancedFastVehicleFactor = { Value = 1.1, Default = 1.1 },
         AdvancedMediumVehicleFactor = { Value = 1.0, Default = 1.0 },
         AdvancedPedestrianFactor = { Value = 0.55, Default = 0.55 },
-        AdvancedPredictionAggressiveness = { Value = 1.2, Default = 1.2 },
+        AdvancedPredictionStrength = { Value = 1.0, Default = 1.0 },
         AdvancedSmoothingFactor = { Value = 0.1, Default = 0.1 },
         AdvancedSmallDistanceSpeedFactorMultiplier = { Value = 1.7, Default = 1.7 },
         AdvancedSlowVehiclePredictionFactor = { Value = 1.95, Default = 1.95 },
@@ -45,20 +45,21 @@ local GunSilent = {
         HitboxTarget = { Value = true, Default = true },
         DistancePredictionMultiplier = { Value = 1.0, Default = 1.0 },
         ResolverEnabled = { Value = true, Default = true },
-        ResolverSensitivity = { Value = 0.5, Default = 0.5 } -- Чувствительность Resolver'а
+        ResolverSensitivity = { Value = 0.5, Default = 0.5 }
     },
     FixedPredictionValues = {
         VehicleFactor = 0.9,
         FastVehicleFactor = 1.1,
         MediumVehicleFactor = 1.0,
         PedestrianFactor = 0.55,
-        PredictionAggressiveness = 1.2,
+        PredictionStrength = 1.0,
         SmallDistanceSpeedFactorMultiplier = 1.7,
         SlowVehiclePredictionFactor = 1.95,
         FastVehiclePredictionLimit = 2.2,
         PositionHistorySize = 20,
         SmoothingFactor = 0.1,
-        PredictBullet = 600
+        PredictBullet = 600,
+        MaxSpeed = 500
     },
     State = {
         LastEventId = 0,
@@ -243,7 +244,7 @@ local function resolveVelocity(target, positionHistory, clientVelocity)
     local validEntries = 0
     local maxSpeedLimit = GunSilent.Settings.AdvancedEnabled.Value and 500 or GunSilent.FixedPredictionValues.MaxSpeed
 
-    -- Вычисляем среднюю скорость на основе последних позиций
+    -- Вычисляем среднюю скорость на основе последних 5 позиций
     for i = #positionHistory - 1, math.max(1, #positionHistory - 5), -1 do
         local currEntry = positionHistory[i + 1]
         local prevEntry = positionHistory[i]
@@ -331,13 +332,14 @@ local function predictTargetPositionGun(target, applyFakeDistance)
 
     local ping = GunSilent.Settings.LatencyCompensation.Value
     local totalPredictionTime = timeToTarget + ping
+    local predictionStrength = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedPredictionStrength.Value or GunSilent.FixedPredictionValues.PredictionStrength
     local distanceMultiplier = GunSilent.Settings.DistancePredictionMultiplier.Value * (distance / 100)
     totalPredictionTime = totalPredictionTime * distanceMultiplier
 
     local predictedPos = clientPos
     if not GunSilent.State.IsTeleporting then
         local smoothingFactor = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedSmoothingFactor.Value or GunSilent.FixedPredictionValues.SmoothingFactor
-        local velocityFactor = resolvedVelocity * predictionFactor * (1 - smoothingFactor)
+        local velocityFactor = resolvedVelocity * predictionFactor * predictionStrength * (1 - smoothingFactor)
         predictedPos = clientPos + velocityFactor * totalPredictionTime
 
         if #positionHistory >= 3 and not isSpoofed then
@@ -352,7 +354,7 @@ local function predictTargetPositionGun(target, applyFakeDistance)
             local timeDelta = positionHistory[#positionHistory].time - prevEntry.time
             if timeDelta > 0 then
                 local avgVelocity = (positionHistory[#positionHistory].pos - prevEntry.pos) / timeDelta
-                predictedPos = clientPos + avgVelocity * totalPredictionTime * predictionFactor
+                predictedPos = clientPos + avgVelocity * totalPredictionTime * predictionStrength
             end
         end
     end
@@ -392,7 +394,7 @@ local function createHitDataGun(target)
 
     local equippedTool = getEquippedGunTool(GunSilent.State.LocalCharacter)
     local isShotgunWeapon = GunSilent.Settings.ShotgunSupport.Value and equippedTool and isShotgun(equippedTool)
-    local useMultiBullets = isShotgunWeapon or GunSilent.Settings.TestGenBullet.Value
+    local useMultiBullets = isShotgunWeapon or GunSilent.Settings.Test asGenBullet.Value
     local numBullets = useMultiBullets and (isShotgunWeapon and GunSilent.Settings.GenBullet.Value or 4) or 1
     local hitData = {}
 
@@ -739,7 +741,7 @@ local function Init(UI, Core, notify)
                     Callback = function()
                         GunSilent.Settings.Rage.Value = not GunSilent.Settings.Rage.Value
                         initializeGunSilent()
-                        notify("GunSilent", "Rage " .. (GunSilent.Settings.Rage.Value and "Enabled" or "Disabled"), true)
+                        notify("GunSilent", "Rage " .. (value and "Enabled" or "Disabled"), true)
                     end
                 }, 'RageKeybind'),
                 callback = function()
@@ -1151,21 +1153,38 @@ local function Init(UI, Core, notify)
                     notify("GunSilent", "Pedestrian Prediction Factor set to: " .. value, false)
                 end
             }
-            uiElements.Agressivness = {
+            uiElements.PredictionStrength = {
                 element = UI.Sections.GunSilent:Slider({
-                    Name = "Agressivness",
-                    Minimum = 0.4,
-                    Maximum = 2.1,
-                    Default = GunSilent.Settings.AdvancedPredictionAggressiveness.Value,
+                    Name = "Prediction Strength",
+                    Minimum = 0.5,
+                    Maximum = 1.5,
+                    Default = GunSilent.Settings.AdvancedPredictionStrength.Value,
                     Precision = 2,
                     Callback = function(value)
-                        GunSilent.Settings.AdvancedPredictionAggressiveness.Value = value
-                        notify("GunSilent", "Prediction Aggressiveness set to: " .. value, false)
+                        GunSilent.Settings.AdvancedPredictionStrength.Value = value
+                        notify("GunSilent", "Prediction Strength set to: " .. value, false)
                     end
-                }, 'Agressivness'),
+                }, 'PredictionStrength'),
                 callback = function(value)
-                    GunSilent.Settings.AdvancedPredictionAggressiveness.Value = value
-                    notify("GunSilent", "Prediction Aggressiveness set to: " .. value, false)
+                    GunSilent.Settings.AdvancedPredictionStrength.Value = value
+                    notify("GunSilent", "Prediction Strength set to: " .. value, false)
+                end
+            }
+            uiElements.SmoothingFactor = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Smoothing Factor",
+                    Minimum = 0.1,
+                    Maximum = 0.9,
+                    Default = GunSilent.Settings.AdvancedSmoothingFactor.Value,
+                    Precision = 1,
+                    Callback = function(value)
+                        GunSilent.Settings.AdvancedSmoothingFactor.Value = value
+                        notify("GunSilent", "Smoothing Factor set to: " .. value, false)
+                    end
+                }, 'SmoothingFactor'),
+                callback = function(value)
+                    GunSilent.Settings.AdvancedSmoothingFactor.Value = value
+                    notify("GunSilent", "Smoothing Factor set to: " .. value, false)
                 end
             }
             uiElements.LowDistanceMulti = {
@@ -1217,40 +1236,6 @@ local function Init(UI, Core, notify)
                 callback = function(value)
                     GunSilent.Settings.AdvancedFastVehiclePredictionLimit.Value = value
                     notify("GunSilent", "Fast Vehicle Prediction Limit set to: " .. value, false)
-                end
-            }
-            uiElements.PositionHistory = {
-                element = UI.Sections.GunSilent:Slider({
-                    Name = "Position History",
-                    Minimum = 2,
-                    Maximum = 20,
-                    Default = GunSilent.Settings.AdvancedPositionHistorySize.Value,
-                    Precision = 0,
-                    Callback = function(value)
-                        GunSilent.Settings.AdvancedPositionHistorySize.Value = value
-                        notify("GunSilent", "Position History Size set to: " .. value, false)
-                    end
-                }, 'PositionHistory'),
-                callback = function(value)
-                    GunSilent.Settings.AdvancedPositionHistorySize.Value = value
-                    notify("GunSilent", "Position History Size set to: " .. value, false)
-                end
-            }
-            uiElements.SmoothingFactor = {
-                element = UI.Sections.GunSilent:Slider({
-                    Name = "Smoothing Factor",
-                    Minimum = 0.1,
-                    Maximum = 0.9,
-                    Default = GunSilent.Settings.AdvancedSmoothingFactor.Value,
-                    Precision = 1,
-                    Callback = function(value)
-                        GunSilent.Settings.AdvancedSmoothingFactor.Value = value
-                        notify("GunSilent", "Smoothing Factor set to: " .. value, false)
-                    end
-                }, 'SmoothingFactor'),
-                callback = function(value)
-                    GunSilent.Settings.AdvancedSmoothingFactor.Value = value
-                    notify("GunSilent", "Smoothing Factor set to: " .. value, false)
                 end
             }
             uiElements.VehicleYCorrection = {
@@ -1404,12 +1389,11 @@ local function Init(UI, Core, notify)
                     uiElements.FastVehicleFactor.callback(uiElements.FastVehicleFactor.element:GetValue())
                     uiElements.MediumVehicleFactor.callback(uiElements.MediumVehicleFactor.element:GetValue())
                     uiElements.PlayerFactor.callback(uiElements.PlayerFactor.element:GetValue())
-                    uiElements.Agressivness.callback(uiElements.Agressivness.element:GetValue())
+                    uiElements.PredictionStrength.callback(uiElements.PredictionStrength.element:GetValue())
+                    uiElements.SmoothingFactor.callback(uiElements.SmoothingFactor.element:GetValue())
                     uiElements.LowDistanceMulti.callback(uiElements.LowDistanceMulti.element:GetValue())
                     uiElements.SlowVehicleMulti.callback(uiElements.SlowVehicleMulti.element:GetValue())
                     uiElements.FastPredictionLimit.callback(uiElements.FastPredictionLimit.element:GetValue())
-                    uiElements.PositionHistory.callback(uiElements.PositionHistory.element:GetValue())
-                    uiElements.SmoothingFactor.callback(uiElements.SmoothingFactor.element:GetValue())
                     uiElements.VehicleYCorrection.callback(uiElements.VehicleYCorrection.element:GetValue())
                     uiElements.VisualUpdate.callback(uiElements.VisualUpdate.element:GetValue())
                     uiElements.BulletSpeed.callback(uiElements.BulletSpeed.element:GetValue())
