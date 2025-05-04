@@ -13,10 +13,7 @@ local GunSilent = {
         UseFOV = { Value = true, Default = true },
         FOV = { Value = 90, Default = 90 },
         ShowCircle = { Value = true, Default = true },
-        CircleMethod = { Value = "Cursor", Default = "Cursor" },
-        SortMethod = { Value = "Mouse&Distance", Default = "Mouse&Distance" },
         PredictVisual = { Value = true, Default = true },
-        DirectionVisual = { Value = true, Default = true },
         TrajectoryBeam = { Value = true, Default = true },
         HitChance = { Value = 100, Default = 100 },
         PredictionStrength = { Value = 1.0, Default = 1.0 },
@@ -24,20 +21,18 @@ local GunSilent = {
         SmoothingFactor = { Value = 0.1, Default = 0.1 },
         ResolverEnabled = { Value = true, Default = true },
         ResolverThreshold = { Value = 0.3, Default = 0.3 },
-        PositionHistorySize = { Value = 50, Default = 50 }
+        PositionHistorySize = { Value = 30, Default = 30 }
     },
     FixedPredictionValues = {
-        MaxPlayerSpeed = 50, -- Максимальная скорость игрока (Da Hood)
-        MaxAcceleration = 100,
+        MaxPlayerSpeed = 50, -- Максимальная скорость игрока в Da Hood
         TeleportThreshold = 50,
         MinSmoothing = 0.05,
-        MaxSmoothing = 0.2
+        MaxSmoothing = 0.15
     },
     State = {
         LastEventId = 0,
         LastTool = nil,
         PredictVisualPart = nil,
-        DirectionVisualPart = nil,
         TrajectoryBeam = nil,
         FovCircle = nil,
         V_U_4 = nil,
@@ -51,7 +46,7 @@ local GunSilent = {
         LastTargetPos = nil,
         LastPredictionPos = nil,
         LastTargetUpdate = 0,
-        TargetUpdateInterval = 0.2
+        TargetUpdateInterval = 0.5
     }
 }
 
@@ -100,7 +95,7 @@ local function updateFovCircle()
     end
 
     local newRadius = math.tan(math.rad(GunSilent.Settings.FOV.Value) / 2) * camera.ViewportSize.X / 2
-    local circlePos = GunSilent.Settings.CircleMethod.Value == "Middle" and camera.ViewportSize / 2 or UserInputService:GetMouseLocation()
+    local circlePos = camera.ViewportSize / 2 -- Всегда в центре для простоты
 
     fovCircle.Radius = newRadius
     fovCircle.Position = circlePos
@@ -111,7 +106,7 @@ local function isInFov(targetPos, camera)
     if not GunSilent.Settings.UseFOV.Value then return true end
     local screenPos, onScreen = camera:WorldToViewportPoint(targetPos)
     if not onScreen then return false end
-    local referencePos = GunSilent.Settings.CircleMethod.Value == "Middle" and camera.ViewportSize / 2 or UserInputService:GetMouseLocation()
+    local referencePos = camera.ViewportSize / 2
     local distanceFromReference = (Vector2.new(screenPos.X, screenPos.Y) - referencePos).Magnitude
     return distanceFromReference <= math.tan(math.rad(GunSilent.Settings.FOV.Value) / 2) * camera.ViewportSize.X / 2
 end
@@ -130,8 +125,7 @@ local function getNearestPlayerGun(gunRange)
     if not localRoot then return nil end
     local rootPos = localRoot.Position
     local camera = Workspace.CurrentCamera
-    local nearestPlayer, shortestDistance, closestToCursor, bestScore = nil, gunRange, math.huge, math.huge
-    local sortMethod = GunSilent.Settings.SortMethod.Value
+    local nearestPlayer, shortestDistance = nil, gunRange
 
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= Players.LocalPlayer then
@@ -141,28 +135,9 @@ local function getNearestPlayerGun(gunRange)
                 local targetHumanoid = targetChar:FindFirstChild("Humanoid")
                 if targetRoot and targetHumanoid and targetHumanoid.Health > 0 then
                     local distance = (rootPos - targetRoot.Position).Magnitude
-                    if distance <= shortestDistance or sortMethod ~= "Distance" then
-                        if isInFov(targetRoot.Position, camera) then
-                            if sortMethod == "Mouse&Distance" then
-                                local screenPos = camera:WorldToViewportPoint(targetRoot.Position)
-                                local cursorDistance = (Vector2.new(screenPos.X, screenPos.Y) - UserInputService:GetMouseLocation()).Magnitude
-                                local score = (distance / (GunSilent.Settings.RangePlus.Value + 50)) + (cursorDistance / camera.ViewportSize.X)
-                                if score < bestScore then
-                                    bestScore = score
-                                    nearestPlayer = player
-                                end
-                            elseif sortMethod == "Distance" and distance < shortestDistance then
-                                shortestDistance = distance
-                                nearestPlayer = player
-                            elseif sortMethod == "Mouse" then
-                                local screenPos = camera:WorldToViewportPoint(targetRoot.Position)
-                                local cursorDistance = (Vector2.new(screenPos.X, screenPos.Y) - UserInputService:GetMouseLocation()).Magnitude
-                                if cursorDistance < closestToCursor then
-                                    closestToCursor = cursorDistance
-                                    nearestPlayer = player
-                                end
-                            end
-                        end
+                    if distance <= shortestDistance and isInFov(targetRoot.Position, camera) then
+                        shortestDistance = distance
+                        nearestPlayer = player
                     end
                 end
             end
@@ -174,7 +149,7 @@ local function getNearestPlayerGun(gunRange)
 end
 
 local function resolveVelocity(target, positionHistory, clientVelocity)
-    if not GunSilent.Settings.ResolverEnabled.Value or not positionHistory or #positionHistory < 5 then
+    if not GunSilent.Settings.ResolverEnabled.Value or not positionHistory or #positionHistory < 3 then
         return clientVelocity, false
     end
 
@@ -193,15 +168,15 @@ local function resolveVelocity(target, positionHistory, clientVelocity)
         end
     end
 
-    -- Взвешенная средняя скорость из последних 15 позиций
-    for i = #filteredHistory - 1, math.max(1, #filteredHistory - 15), -1 do
+    -- Средняя скорость из последних 10 позиций
+    for i = #filteredHistory - 1, math.max(1, #filteredHistory - 10), -1 do
         local currEntry = filteredHistory[i + 1]
         local prevEntry = filteredHistory[i]
         local timeDelta = currEntry.time - prevEntry.time
         if timeDelta > 0 and timeDelta < 0.2 then
             local velocity = (currEntry.pos - prevEntry.pos) / timeDelta
             if velocity.Magnitude <= maxSpeedLimit * 1.5 then
-                local weight = 1 / (1 + (currentTime - currEntry.time) * 5) -- Свежие данные имеют больший вес
+                local weight = 1 / (1 + (currentTime - currEntry.time) * 5)
                 totalVelocity = totalVelocity + velocity * weight
                 totalWeight = totalWeight + weight
                 validEntries = validEntries + 1
@@ -212,28 +187,11 @@ local function resolveVelocity(target, positionHistory, clientVelocity)
     local calculatedVelocity = validEntries > 0 and totalVelocity / totalWeight or Vector3.new(0, 0, 0)
     local isSpoofed = false
 
-    -- Проверка спуфа
-    if validEntries >= 5 then
+    if validEntries >= 3 and clientVelocity.Magnitude > 5 then
         local velocityDiff = (clientVelocity - calculatedVelocity).Magnitude
         local threshold = maxSpeedLimit * GunSilent.Settings.ResolverThreshold.Value
         if velocityDiff > threshold or clientVelocity.Magnitude > maxSpeedLimit * 1.5 then
             isSpoofed = true
-        else
-            -- Проверка углового отклонения
-            local lastPositions = {}
-            for i = #filteredHistory - 4, #filteredHistory do
-                if filteredHistory[i] then
-                    lastPositions[#lastPositions + 1] = filteredHistory[i].pos
-                end
-            end
-            if #lastPositions >= 3 then
-                local trajectoryDir = (lastPositions[#lastPositions] - lastPositions[1]).Unit
-                local velocityDir = clientVelocity.Magnitude > 0 and clientVelocity.Unit or Vector3.new(0, 0, 0)
-                local dotProduct = velocityDir.Magnitude > 0 and trajectoryDir:Dot(velocityDir) or 1
-                if dotProduct < 0.6 then -- Угол > ~50 градусов
-                    isSpoofed = true
-                end
-            end
         end
     end
 
@@ -274,59 +232,25 @@ local function predictTargetPositionGun(target)
     local clientPos = targetPos
     local resolvedVelocity, isSpoofed = resolveVelocity(target, positionHistory, targetRoot.Velocity)
 
-    -- Ограничение скорости
-    if resolvedVelocity.Magnitude > GunSilent.FixedPredictionValues.MaxPlayerSpeed then
-        resolvedVelocity = resolvedVelocity.Unit * GunSilent.FixedPredictionValues.MaxPlayerSpeed
-    end
-
-    -- Динамическое масштабирование предикта по скорости
-    local targetSpeed = resolvedVelocity.Magnitude
-    local speedFactor = 0.7 + (targetSpeed / GunSilent.FixedPredictionValues.MaxPlayerSpeed) * 0.6
-
-    -- Учет пинга
-    local ping = GunSilent.Settings.PingCompensation.Value
-    local totalPredictionTime = (timeToTarget + ping) * GunSilent.Settings.PredictionStrength.Value * speedFactor
-
+    -- Для стоячих целей минимальный предикт
     local predictedPos = clientPos
     if not isTeleporting then
-        -- Базовый предикт
-        predictedPos = clientPos + resolvedVelocity * totalPredictionTime
+        local targetSpeed = resolvedVelocity.Magnitude
+        if targetSpeed < 5 then
+            -- Стоячая цель: только пинг
+            local ping = GunSilent.Settings.PingCompensation.Value * math.clamp(distance / 50, 0.5, 1.0)
+            predictedPos = clientPos + resolvedVelocity * ping
+        else
+            -- Движущаяся цель: полный предикт
+            local speedFactor = 0.8 + (targetSpeed / GunSilent.FixedPredictionValues.MaxPlayerSpeed) * 0.5
+            local ping = GunSilent.Settings.PingCompensation.Value * math.clamp(distance / 50, 0.5, 1.0)
+            local totalPredictionTime = (timeToTarget + ping) * GunSilent.Settings.PredictionStrength.Value * speedFactor
+            predictedPos = clientPos + resolvedVelocity * totalPredictionTime
 
-        -- Учет ускорения
-        if not isSpoofed and #positionHistory >= 5 then
-            local prevEntry = positionHistory[#positionHistory - 1]
-            local timeDelta = positionHistory[#positionHistory].time - prevEntry.time
-            if timeDelta > 0 then
-                local acceleration = (positionHistory[#positionHistory].velocity - prevEntry.velocity) / timeDelta
-                if acceleration.Magnitude <= GunSilent.FixedPredictionValues.MaxAcceleration then
-                    predictedPos = predictedPos + 0.5 * acceleration * totalPredictionTime^2
-                end
+            -- Сглаживание
+            if GunSilent.State.LastPredictionPos then
+                predictedPos = GunSilent.State.LastPredictionPos:Lerp(predictedPos, 1 - GunSilent.Settings.SmoothingFactor.Value)
             end
-        end
-
-        -- Компенсация стрейфов
-        if #positionHistory >= 10 then
-            local trajectoryPoints = {}
-            for i = math.max(1, #positionHistory - 10), #positionHistory do
-                trajectoryPoints[#trajectoryPoints + 1] = positionHistory[i].pos
-            end
-            local avgDir = Vector3.new(0, 0, 0)
-            local dirCount = 0
-            for i = 2, #trajectoryPoints do
-                local dir = (trajectoryPoints[i] - trajectoryPoints[i-1]).Unit
-                avgDir = avgDir + dir
-                dirCount = dirCount + 1
-            end
-            if dirCount > 0 then
-                avgDir = avgDir / dirCount
-                local strafeCorrection = avgDir * targetSpeed * totalPredictionTime * 0.4
-                predictedPos = predictedPos + strafeCorrection
-            end
-        end
-
-        -- Сглаживание
-        if GunSilent.State.LastPredictionPos then
-            predictedPos = GunSilent.State.LastPredictionPos:Lerp(predictedPos, 1 - GunSilent.Settings.SmoothingFactor.Value)
         end
         GunSilent.State.LastPredictionPos = predictedPos
     end
@@ -370,25 +294,27 @@ local function updateVisualsGun(target, hasWeapon)
     GunSilent.State.LastVisualUpdateTime = currentTime
 
     local localRoot = GunSilent.State.LocalRoot
-    if not GunSilent.Settings.Enabled.Value or not hasWeapon or not target or not target.Character or not localRoot then
+    if not GunSilent.Settings.Enabled.Value or not localRoot then
         if GunSilent.State.PredictVisualPart then GunSilent.State.PredictVisualPart.Transparency = 1 end
-        if GunSilent.State.DirectionVisualPart then GunSilent.State.DirectionVisualPart.Transparency = 1 end
         if GunSilent.State.TrajectoryBeam then GunSilent.State.TrajectoryBeam.Enabled = false end
-        GunSilent.State.LastTargetPos = nil
-        GunSilent.State.LastPredictionPos = nil
         return
     end
 
-    local prediction = predictTargetPositionGun(target)
-    if not prediction.position or not prediction.direction then return end
+    local prediction = target and predictTargetPositionGun(target)
+    local targetPos = prediction and prediction.clientPosition
+    local predictionPos = prediction and prediction.position
+
+    if not target or not target.Character or not predictionPos or not prediction.direction then
+        if GunSilent.State.PredictVisualPart then GunSilent.State.PredictVisualPart.Transparency = 1 end
+        if GunSilent.State.TrajectoryBeam then GunSilent.State.TrajectoryBeam.Enabled = false end
+        return
+    end
 
     local targetChar = target.Character
     local hitPart = targetChar:FindFirstChild(GunSilent.Settings.HitPart.Value) or targetChar:FindFirstChild("HumanoidRootPart")
     if not hitPart then return end
 
-    local targetPos, predictionPos = prediction.clientPosition, prediction.position
     GunSilent.State.LastTargetPos, GunSilent.State.LastPredictionPos = targetPos, predictionPos
-
     local startPos = localRoot.Position + Vector3.new(0, 1.5, 0)
 
     if GunSilent.Settings.PredictVisual.Value then
@@ -407,24 +333,6 @@ local function updateVisualsGun(target, hasWeapon)
         predictVisualPart.Transparency = 0.3
     elseif GunSilent.State.PredictVisualPart then
         GunSilent.State.PredictVisualPart.Transparency = 1
-    end
-
-    if GunSilent.Settings.DirectionVisual.Value then
-        local directionVisualPart = GunSilent.State.DirectionVisualPart
-        if not directionVisualPart then
-            directionVisualPart = Instance.new("Part")
-            directionVisualPart.Size = Vector3.new(0.2, 0.2, 3)
-            directionVisualPart.Anchored = true
-            directionVisualPart.CanCollide = false
-            directionVisualPart.Color = Color3.fromRGB(255, 215, 0)
-            directionVisualPart.Parent = Workspace
-            GunSilent.State.DirectionVisualPart = directionVisualPart
-        end
-        directionVisualPart.CFrame = CFrame.lookAt(startPos, startPos + (prediction.direction * 3))
-        directionVisualPart.Position = startPos + (prediction.direction * 1.5)
-        directionVisualPart.Transparency = 0.5
-    elseif GunSilent.State.DirectionVisualPart then
-        GunSilent.State.DirectionVisualPart.Transparency = 1
     end
 
     if GunSilent.Settings.TrajectoryBeam.Value and GunSilent.Settings.PredictVisual.Value then
@@ -446,9 +354,6 @@ local function updateVisualsGun(target, hasWeapon)
         trajectoryBeam.Attachment0.Parent = localRoot
         trajectoryBeam.Attachment1.Parent = GunSilent.State.PredictVisualPart
         trajectoryBeam.Enabled = true
-        -- Индикация пинга через длину луча
-        trajectoryBeam.Width0 = 0.15 + GunSilent.Settings.PingCompensation.Value * 0.5
-        trajectoryBeam.Width1 = 0.15 + GunSilent.Settings.PingCompensation.Value * 0.5
     elseif GunSilent.State.TrajectoryBeam then
         GunSilent.State.TrajectoryBeam.Enabled = false
     end
@@ -480,7 +385,12 @@ local function initializeGunSilent()
                         local hitData = createHitDataGun(nearestPlayer)
                         if aimCFrame and hitData then
                             modifiedArgs = {args[1], args[2], equippedTool, aimCFrame, hitData}
+                            GunSilent.notify("GunSilent", "Firing at target: " .. nearestPlayer.Name, false)
+                        else
+                            GunSilent.notify("GunSilent", "Failed to generate aim data", false)
                         end
+                    else
+                        GunSilent.notify("GunSilent", "No valid target found", false)
                     end
                 end
             end
@@ -492,6 +402,7 @@ local function initializeGunSilent()
         if not GunSilent.Settings.Enabled.Value then
             if GunSilent.State.FovCircle then GunSilent.State.FovCircle.Visible = false end
             GunSilent.Core.GunSilentTarget.CurrentTarget = nil
+            updateVisualsGun(nil, false)
             return
         end
 
@@ -524,6 +435,7 @@ local function initializeGunSilent()
             if aimCFrame and hitData then
                 GunSilent.State.V_U_4.event = GunSilent.State.V_U_4.event + 1
                 game:GetService("ReplicatedStorage").Remotes.Send:FireServer(GunSilent.State.V_U_4.event, "shoot_gun", currentTool, aimCFrame, hitData)
+                GunSilent.notify("GunSilent", "Rage firing at: " .. nearestPlayer.Name, false)
             end
         end
     end)
@@ -659,36 +571,6 @@ local function Init(UI, Core, notify)
                     notify("GunSilent", "Show Circle " .. (value and "Enabled" or "Disabled"), true)
                 end
             }
-            uiElements.CircleMethod = {
-                element = UI.Sections.GunSilent:Dropdown({
-                    Name = "Circle Method",
-                    Default = GunSilent.Settings.CircleMethod.Value,
-                    Options = {"Cursor", "Middle"},
-                    Callback = function(value)
-                        GunSilent.Settings.CircleMethod.Value = value
-                        notify("GunSilent", "Circle Method set to: " .. value, true)
-                    end
-                }, 'CircleMethod'),
-                callback = function(value)
-                    GunSilent.Settings.CircleMethod.Value = value
-                    notify("GunSilent", "Circle Method set to: " .. value, true)
-                end
-            }
-            uiElements.SortMethod = {
-                element = UI.Sections.GunSilent:Dropdown({
-                    Name = "Sort Method",
-                    Default = GunSilent.Settings.SortMethod.Value,
-                    Options = {"Mouse", "Distance", "Mouse&Distance"},
-                    Callback = function(value)
-                        GunSilent.Settings.SortMethod.Value = value
-                        notify("GunSilent", "Sort Method set to: " .. value, true)
-                    end
-                }, 'SortMethod'),
-                callback = function(value)
-                    GunSilent.Settings.SortMethod.Value = value
-                    notify("GunSilent", "Sort Method set to: " .. value, true)
-                end
-            }
             uiElements.PredictVisual = {
                 element = UI.Sections.GunSilent:Toggle({
                     Name = "Predict Visual",
@@ -701,20 +583,6 @@ local function Init(UI, Core, notify)
                 callback = function(value)
                     GunSilent.Settings.PredictVisual.Value = value
                     notify("GunSilent", "Predict Visual " .. (value and "Enabled" or "Disabled"), true)
-                end
-            }
-            uiElements.DirectionVisual = {
-                element = UI.Sections.GunSilent:Toggle({
-                    Name = "Direction Visual",
-                    Default = GunSilent.Settings.DirectionVisual.Value,
-                    Callback = function(value)
-                        GunSilent.Settings.DirectionVisual.Value = value
-                        notify("GunSilent", "Direction Visual " .. (value and "Enabled" or "Disabled"), true)
-                    end
-                }, 'DirectionVisual'),
-                callback = function(value)
-                    GunSilent.Settings.DirectionVisual.Value = value
-                    notify("GunSilent", "Direction Visual " .. (value and "Enabled" or "Disabled"), true)
                 end
             }
             uiElements.TrajectoryBeam = {
@@ -770,7 +638,7 @@ local function Init(UI, Core, notify)
                 element = UI.Sections.GunSilent:Slider({
                     Name = "Ping Compensation",
                     Minimum = 0.0,
-                    Maximum = 0.3,
+                    Maximum = 0.2,
                     Default = GunSilent.Settings.PingCompensation.Value,
                     Precision = 3,
                     Callback = function(value)
@@ -787,7 +655,7 @@ local function Init(UI, Core, notify)
                 element = UI.Sections.GunSilent:Slider({
                     Name = "Smoothing Factor",
                     Minimum = 0.05,
-                    Maximum = 0.3,
+                    Maximum = 0.2,
                     Default = GunSilent.Settings.SmoothingFactor.Value,
                     Precision = 2,
                     Callback = function(value)
@@ -866,22 +734,7 @@ local function Init(UI, Core, notify)
                     uiElements.UseFOV.callback(uiElements.UseFOV.element:GetState())
                     uiElements.FOV.callback(uiElements.FOV.element:GetValue())
                     uiElements.ShowCircle.callback(uiElements.ShowCircle.element:GetState())
-                    local circleMethodOptions = uiElements.CircleMethod.element:GetOptions()
-                    for option, selected in pairs(circleMethodOptions) do
-                        if selected then
-                            uiElements.CircleMethod.callback(option)
-                            break
-                        end
-                    end
-                    local sortMethodOptions = uiElements.SortMethod.element:GetOptions()
-                    for option, selected in pairs(sortMethodOptions) do
-                        if selected then
-                            uiElements.SortMethod.callback(option)
-                            break
-                        end
-                    end
                     uiElements.PredictVisual.callback(uiElements.PredictVisual.element:GetState())
-                    uiElements.DirectionVisual.callback(uiElements.DirectionVisual.element:GetState())
                     uiElements.TrajectoryBeam.callback(uiElements.TrajectoryBeam.element:GetState())
                     uiElements.HitChance.callback(uiElements.HitChance.element:GetValue())
                     uiElements.PredictionStrength.callback(uiElements.PredictionStrength.element:GetValue())
