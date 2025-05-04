@@ -19,14 +19,13 @@ local GunSilent = {
         PingCompensation = { Value = 0.1, Default = 0.1 },
         SmoothingFactor = { Value = 0.1, Default = 0.1 },
         ResolverEnabled = { Value = true, Default = true },
+        ResolverLevel = { Value = 2, Default = 2 },
         ResolverThreshold = { Value = 0.3, Default = 0.3 },
         PositionHistorySize = { Value = 30, Default = 30 },
         SortMethod = { Value = "Mouse&Distance", Default = "Mouse&Distance" },
         ShotgunSupport = { Value = false, Default = false },
         GenBullet = { Value = 4, Default = 4 },
         TestGenBullet = { Value = false, Default = false },
-        PredictLevel = { Value = 2, Default = 2 }, -- Только 2 и 3
-        ResolverLevel = { Value = 2, Default = 2 }  -- Только 2
     },
     State = {
         LastEventId = 0,
@@ -300,7 +299,7 @@ local function predictTargetPositionGun(target)
     local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
     local equippedTool = getEquippedGunTool(GunSilent.State.LocalCharacter)
     if not hitPart or not targetRoot or not equippedTool then
-        return { position = targetRoot.Position, direction = (targetRoot.Position - myPos).Unit, timeToTarget = 0, clientPosition = targetRoot.Position }
+        return { position = targetRoot and targetRoot.Position or nil, direction = targetRoot and (targetRoot.Position - myPos).Unit or nil, timeToTarget = 0, clientPosition = targetRoot and targetRoot.Position or nil }
     end
 
     local targetPos = hitPart.Position
@@ -327,22 +326,12 @@ local function predictTargetPositionGun(target)
     local predictedPos = clientPos
     if not isTeleporting then
         local targetSpeed = resolvedVelocity.Magnitude
-        if GunSilent.Settings.PredictLevel.Value >= 2 and targetSpeed >= 5 then
+        if targetSpeed >= 5 then
             local speedFactor = 0.8 + (targetSpeed / 50) * 0.5
             local ping = GunSilent.Settings.PingCompensation.Value * math.clamp(distance / 50, 0.5, 1.0)
             local accuracyFactor = math.clamp(getGunRange(equippedTool) / distance, 0.5, 1.0)
             local totalPredictionTime = (timeToTarget + ping) * GunSilent.Settings.PredictionStrength.Value * speedFactor * accuracyFactor
             predictedPos = clientPos + resolvedVelocity * totalPredictionTime
-        end
-        if GunSilent.Settings.PredictLevel.Value == 3 and #positionHistory > 3 then
-            local acceleration = Vector3.new(0, 0, 0)
-            for i = #positionHistory - 1, 2, -1 do
-                local currVel = (positionHistory[i].pos - positionHistory[i - 1].pos) / (positionHistory[i].time - positionHistory[i - 1].time)
-                local prevVel = (positionHistory[i - 1].pos - positionHistory[i - 2].pos) / (positionHistory[i - 1].time - positionHistory[i - 2].time)
-                acceleration = acceleration + (currVel - prevVel) / (positionHistory[i].time - positionHistory[i - 1].time)
-            end
-            acceleration = acceleration / (#positionHistory - 2)
-            predictedPos = predictedPos + acceleration * (totalPredictionTime ^ 2) / 2
         end
 
         if GunSilent.State.LastPredictionPos and predictedPos then
@@ -352,8 +341,8 @@ local function predictTargetPositionGun(target)
     end
 
     return {
-        position = predictedPos or targetRoot.Position,
-        direction = predictedPos and (predictedPos - myPos).Unit or (targetRoot.Position - myPos).Unit,
+        position = predictedPos or (targetRoot and targetRoot.Position) or nil,
+        direction = predictedPos and (predictedPos - myPos).Unit or (targetRoot and (targetRoot.Position - myPos).Unit) or nil,
         timeToTarget = timeToTarget,
         clientPosition = clientPos
     }
@@ -444,7 +433,7 @@ local function updateVisualsGun(target)
             GunSilent.State.PredictVisualPart = predictVisualPart
         end
         if predictVisualPart then
-            predictVisualPart.Position = prediction.position
+            predictVisualPart.Position = predictionPos
             predictVisualPart.Color = Color3.fromRGB(0, 255, 255)
             predictVisualPart.Transparency = 0.3
         end
@@ -778,21 +767,6 @@ local function Init(UI, Core, notify)
                 end
             }
             UI.Sections.GunSilent:Header({ Name = "Prediction Settings" })
-            uiElements.PredictLevel = {
-                element = UI.Sections.GunSilent:Dropdown({
-                    Name = "Predict Level",
-                    Default = tostring(GunSilent.Settings.PredictLevel.Value),
-                    Options = {"2", "3"},
-                    Callback = function(value)
-                        GunSilent.Settings.PredictLevel.Value = tonumber(value)
-                        safeNotify(GunSilent.notify, "GunSilent", "Predict Level set to: " .. value, true)
-                    end
-                }, 'PredictLevel'),
-                callback = function(value)
-                    GunSilent.Settings.PredictLevel.Value = tonumber(value)
-                    safeNotify(GunSilent.notify, "GunSilent", "Predict Level set to: " .. value, true)
-                end
-            }
             uiElements.PredictionStrength = {
                 element = UI.Sections.GunSilent:Slider({
                     Name = "Prediction Strength",
