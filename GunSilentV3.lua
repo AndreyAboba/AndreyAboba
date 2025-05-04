@@ -483,7 +483,7 @@ local function updateVisualsGun(target)
             GunSilent.State.TrajectoryBeam.Enabled = false
         end
         return
-    }
+    end
 
     local targetChar = target.Character
     local hitPart = targetChar:FindFirstChild(GunSilent.Settings.HitPart.Value) or targetChar:FindFirstChild("HumanoidRootPart")
