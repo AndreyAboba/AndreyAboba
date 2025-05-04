@@ -25,8 +25,8 @@ local GunSilent = {
         GradientSpeed = { Value = 2, Default = 2 },
         AdvancedEnabled = { Value = false, Default = false },
         AdvancedVehicleFactor = { Value = 0.9, Default = 0.9 },
-        AdvancedFastVehicleFactor = { Value = 1.1, Default = 1.1 }, -- Новый множитель для быстрых машин
-        AdvancedMediumVehicleFactor = { Value = 1.0, Default = 1.0 }, -- Новый множитель для средних машин
+        AdvancedFastVehicleFactor = { Value = 1.1, Default = 1.1 },
+        AdvancedMediumVehicleFactor = { Value = 1.0, Default = 1.0 },
         AdvancedPedestrianFactor = { Value = 0.55, Default = 0.55 },
         AdvancedPredictionAggressiveness = { Value = 1.2, Default = 1.2 },
         AdvancedSmoothingFactor = { Value = 0.1, Default = 0.1 },
@@ -43,8 +43,9 @@ local GunSilent = {
         GenBullet = { Value = 4, Default = 4 },
         TestGenBullet = { Value = false, Default = false },
         HitboxTarget = { Value = true, Default = true },
-        DistancePredictionMultiplier = { Value = 1.0, Default = 1.0 }, -- Новый множитель предикта от дистанции
-        ResolverEnabled = { Value = true, Default = true } -- Включение Resolver'а
+        DistancePredictionMultiplier = { Value = 1.0, Default = 1.0 },
+        ResolverEnabled = { Value = true, Default = true },
+        ResolverSensitivity = { Value = 0.5, Default = 0.5 } -- Чувствительность Resolver'а
     },
     FixedPredictionValues = {
         VehicleFactor = 0.9,
@@ -233,32 +234,42 @@ local function getNearestPlayerGun(gunRange)
 end
 
 local function resolveVelocity(target, positionHistory, clientVelocity)
-    if not GunSilent.Settings.ResolverEnabled.Value or not positionHistory or #positionHistory < 2 then
-        return clientVelocity
+    if not GunSilent.Settings.ResolverEnabled.Value or not positionHistory or #positionHistory < 3 then
+        return clientVelocity, false
     end
 
     local currentTime = tick()
-    local latestEntry = positionHistory[#positionHistory]
-    local prevEntry = positionHistory[#positionHistory - 1]
-    local timeDelta = latestEntry.time - prevEntry.time
-
-    if timeDelta <= 0 then
-        return clientVelocity
-    end
-
-    local calculatedVelocity = (latestEntry.pos - prevEntry.pos) / timeDelta
-    local velocityMagnitude = calculatedVelocity.Magnitude
+    local totalVelocity = Vector3.new(0, 0, 0)
+    local validEntries = 0
     local maxSpeedLimit = GunSilent.Settings.AdvancedEnabled.Value and 500 or GunSilent.FixedPredictionValues.MaxSpeed
 
-    if velocityMagnitude > maxSpeedLimit * 1.5 then
-        return Vector3.new(0, 0, 0) -- Считаем, что velocity спуфится, игнорируем
+    -- Вычисляем среднюю скорость на основе последних позиций
+    for i = #positionHistory - 1, math.max(1, #positionHistory - 5), -1 do
+        local currEntry = positionHistory[i + 1]
+        local prevEntry = positionHistory[i]
+        local timeDelta = currEntry.time - prevEntry.time
+        if timeDelta > 0 and timeDelta < 0.5 then
+            local velocity = (currEntry.pos - prevEntry.pos) / timeDelta
+            if velocity.Magnitude <= maxSpeedLimit * 1.5 then
+                totalVelocity = totalVelocity + velocity
+                validEntries = validEntries + 1
+            end
+        end
     end
 
-    if (clientVelocity - calculatedVelocity).Magnitude > maxSpeedLimit * 0.5 then
-        return calculatedVelocity -- Используем вычисленную скорость, если клиентская сильно отличается
+    local calculatedVelocity = validEntries > 0 and totalVelocity / validEntries or Vector3.new(0, 0, 0)
+    local isSpoofed = false
+
+    -- Проверяем, является ли клиентский velocity подозрительным
+    if validEntries >= 2 then
+        local velocityDiff = (clientVelocity - calculatedVelocity).Magnitude
+        local sensitivityThreshold = maxSpeedLimit * GunSilent.Settings.ResolverSensitivity.Value
+        if velocityDiff > sensitivityThreshold or clientVelocity.Magnitude > maxSpeedLimit * 1.2 then
+            isSpoofed = true
+        end
     end
 
-    return clientVelocity -- Если нет явного спуфинга, возвращаем клиентскую скорость
+    return isSpoofed and calculatedVelocity or clientVelocity, isSpoofed
 end
 
 local function predictTargetPositionGun(target, applyFakeDistance)
@@ -295,16 +306,16 @@ local function predictTargetPositionGun(target, applyFakeDistance)
     end
 
     local clientPos = targetPos
-    local clientVelocity = resolveVelocity(target, positionHistory, targetRoot.Velocity)
+    local resolvedVelocity, isSpoofed = resolveVelocity(target, positionHistory, targetRoot.Velocity)
 
     local maxSpeedLimit = GunSilent.Settings.AdvancedEnabled.Value and 500 or GunSilent.FixedPredictionValues.MaxSpeed
-    if clientVelocity.Magnitude > maxSpeedLimit then
-        clientVelocity = clientVelocity.Unit * maxSpeedLimit
+    if resolvedVelocity.Magnitude > maxSpeedLimit then
+        resolvedVelocity = resolvedVelocity.Unit * maxSpeedLimit
     end
 
     local humanoid = targetChar:FindFirstChild("Humanoid")
     local isInVehicle = humanoid and humanoid.SeatPart ~= nil
-    local vehicleSpeed = isInVehicle and clientVelocity.Magnitude or 0
+    local vehicleSpeed = isInVehicle and resolvedVelocity.Magnitude or 0
     local predictionFactor
     if isInVehicle then
         if vehicleSpeed > 300 then
@@ -326,15 +337,22 @@ local function predictTargetPositionGun(target, applyFakeDistance)
     local predictedPos = clientPos
     if not GunSilent.State.IsTeleporting then
         local smoothingFactor = GunSilent.Settings.AdvancedEnabled.Value and GunSilent.Settings.AdvancedSmoothingFactor.Value or GunSilent.FixedPredictionValues.SmoothingFactor
-        local velocityFactor = clientVelocity * predictionFactor * (1 - smoothingFactor)
+        local velocityFactor = resolvedVelocity * predictionFactor * (1 - smoothingFactor)
         predictedPos = clientPos + velocityFactor * totalPredictionTime
 
-        if #positionHistory >= 2 then
+        if #positionHistory >= 3 and not isSpoofed then
             local prevEntry = positionHistory[#positionHistory - 1]
             local timeDelta = positionHistory[#positionHistory].time - prevEntry.time
             if timeDelta > 0 then
                 local acceleration = (positionHistory[#positionHistory].velocity - prevEntry.velocity) / timeDelta
                 predictedPos = predictedPos + 0.5 * acceleration * totalPredictionTime^2
+            end
+        elseif #positionHistory >= 2 then
+            local prevEntry = positionHistory[#positionHistory - 1]
+            local timeDelta = positionHistory[#positionHistory].time - prevEntry.time
+            if timeDelta > 0 then
+                local avgVelocity = (positionHistory[#positionHistory].pos - prevEntry.pos) / timeDelta
+                predictedPos = clientPos + avgVelocity * totalPredictionTime * predictionFactor
             end
         end
     end
@@ -1317,6 +1335,23 @@ local function Init(UI, Core, notify)
                     notify("GunSilent", "Resolver " .. (value and "Enabled" or "Disabled"), true)
                 end
             }
+            uiElements.ResolverSensitivity = {
+                element = UI.Sections.GunSilent:Slider({
+                    Name = "Resolver Sensitivity",
+                    Minimum = 0.1,
+                    Maximum = 1.0,
+                    Default = GunSilent.Settings.ResolverSensitivity.Value,
+                    Precision = 2,
+                    Callback = function(value)
+                        GunSilent.Settings.ResolverSensitivity.Value = value
+                        notify("GunSilent", "Resolver Sensitivity set to: " .. value, false)
+                    end
+                }, 'ResolverSensitivity'),
+                callback = function(value)
+                    GunSilent.Settings.ResolverSensitivity.Value = value
+                    notify("GunSilent", "Resolver Sensitivity set to: " .. value, false)
+                end
+            }
             local gunconfigSection = UI.Tabs.Config:Section({ Name = "GunSilent Sync", Side = "Right" })
             gunconfigSection:Header({ Name = "GunSilent Settings Sync" })
             gunconfigSection:Button({
@@ -1380,6 +1415,7 @@ local function Init(UI, Core, notify)
                     uiElements.BulletSpeed.callback(uiElements.BulletSpeed.element:GetValue())
                     uiElements.DistancePredictionMultiplier.callback(uiElements.DistancePredictionMultiplier.element:GetValue())
                     uiElements.ResolverEnabled.callback(uiElements.ResolverEnabled.element:GetState())
+                    uiElements.ResolverSensitivity.callback(uiElements.ResolverSensitivity.element:GetValue())
                     notify("GunSilent", "Settings synchronized with UI!", true)
                 end
             }, 'SyncSettings')
