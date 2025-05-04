@@ -18,19 +18,11 @@ local GunSilent = {
         PredictionStrength = { Value = 1.5, Default = 1.5 },
         PingCompensation = { Value = 0.1, Default = 0.1 },
         SmoothingFactor = { Value = 0.1, Default = 0.1 },
-        ResolverEnabled = { Value = true, Default = true },
-        ResolverThreshold = { Value = 0.3, Default = 0.3 },
         PositionHistorySize = { Value = 30, Default = 30 },
         SortMethod = { Value = "Mouse&Distance", Default = "Mouse&Distance" },
         ShotgunSupport = { Value = false, Default = false },
         GenBullet = { Value = 4, Default = 4 },
         TestGenBullet = { Value = false, Default = false }
-    },
-    FixedPredictionValues = {
-        MaxPlayerSpeed = 50,
-        TeleportThreshold = 50,
-        AntistompSpeedThreshold = 10, -- Порог скорости для antistomp
-        FreezeDuration = 1.0 -- Длительность "заморозки" модели
     },
     State = {
         LastEventId = 0,
@@ -236,116 +228,6 @@ local function getNearestPlayerGun(gunRange)
     return nearestPlayer
 end
 
-local function resolveVelocity(target, positionHistory, clientVelocity, targetChar)
-    if not GunSilent.Settings.ResolverEnabled.Value or not positionHistory or #positionHistory < 3 then
-        return clientVelocity, false
-    end
-
-    local currentTime = tick()
-    local totalVelocity = Vector3.new(0, 0, 0)
-    local totalWeight = 0
-    local validEntries = 0
-    local maxSpeedLimit = GunSilent.FixedPredictionValues.MaxPlayerSpeed
-    local teleportThreshold = GunSilent.FixedPredictionValues.TeleportThreshold
-    local antistompSpeedThreshold = GunSilent.FixedPredictionValues.AntistompSpeedThreshold
-    local humanoid = targetChar:FindFirstChild("Humanoid")
-    local assembly = targetChar:FindFirstChild("LowerTorso") -- Аналогично коду рагдолла
-    local isInVehicle = humanoid and humanoid.SeatPart ~= nil
-
-    local filteredHistory = {}
-    for i = 1, #positionHistory do
-        if i == 1 or (positionHistory[i].pos - positionHistory[i-1].pos).Magnitude < teleportThreshold then
-            filteredHistory[#filteredHistory + 1] = positionHistory[i]
-        end
-    end
-
-    local calculatedVelocity = Vector3.new(0, 0, 0)
-    local isSpoofed = false
-    local useCFrame = #filteredHistory > 2 and (function()
-        local meanPos = Vector3.new(0, 0, 0)
-        for _, entry in ipairs(filteredHistory) do
-            meanPos = meanPos + entry.pos
-        end
-        meanPos = meanPos / #filteredHistory
-        local variance = 0
-        for _, entry in ipairs(filteredHistory) do
-            variance = variance + (entry.pos - meanPos).Magnitude^2
-        end
-        return variance / #filteredHistory < 0.1
-    end)()
-
-    if useCFrame and targetChar:FindFirstChild("Head") then
-        local headCFrame = targetChar.Head.CFrame
-        local rootCFrame = targetChar.HumanoidRootPart.CFrame
-        local offset = headCFrame.Position - rootCFrame.Position
-        if isInVehicle and offset.Y < 1 then
-            calculatedVelocity = (GunSilent.FixedPredictionValues.VehicleHeadOffset + offset) / GunSilent.Settings.PingCompensation.Value
-        else
-            calculatedVelocity = offset / GunSilent.Settings.PingCompensation.Value
-        end
-    else
-        for i = #filteredHistory - 1, math.max(1, #filteredHistory - 10), -1 do
-            local currEntry = filteredHistory[i + 1]
-            local prevEntry = filteredHistory[i]
-            local timeDelta = currEntry.time - prevEntry.time
-            if timeDelta > 0 and timeDelta < 0.2 then
-                local velocity = (currEntry.pos - prevEntry.pos) / timeDelta
-                if velocity.Magnitude <= maxSpeedLimit * 1.5 then
-                    local weight = 1 / (1 + (currentTime - currEntry.time) * 5)
-                    totalVelocity = totalVelocity + velocity * weight
-                    totalWeight = totalWeight + weight
-                    validEntries = validEntries + 1
-                end
-            end
-        end
-        calculatedVelocity = validEntries > 0 and totalVelocity / totalWeight or Vector3.new(0, 0, 0)
-    end
-
-    -- Улучшенное обнаружение antistomp и нокаута
-    if humanoid and assembly then
-        local state = humanoid:GetState()
-        local isKnockedOut = state == Enum.HumanoidStateType.FallingDown or state == Enum.HumanoidStateType.Dead or humanoid.Health < 10
-        local isStunned = humanoid:GetAttribute("Stunned") or false
-        local isDead = humanoid:GetAttribute("IsDead") or false
-        local speed = assembly.AssemblyLinearVelocity.Magnitude
-
-        if (isKnockedOut or isStunned or isDead) and #filteredHistory > 1 then
-            local lastPos = filteredHistory[#filteredHistory].pos
-            local secondLastPos = filteredHistory[#filteredHistory - 1].pos
-            local posChange = (lastPos - secondLastPos).Magnitude
-            local isAntistomp = posChange > teleportThreshold * 2 or (speed > antistompSpeedThreshold and posChange > teleportThreshold)
-
-            if isAntistomp and (not positionHistory.FreezeUntil or currentTime > positionHistory.FreezeUntil) then
-                isSpoofed = true
-                positionHistory.FreezeUntil = currentTime + GunSilent.FixedPredictionValues.FreezeDuration
-                positionHistory.FrozenPosition = secondLastPos
-                local rootPart = targetChar:FindFirstChild("HumanoidRootPart")
-                if rootPart and not rootPart.Anchored then
-                    rootPart.Anchored = true
-                    rootPart.CFrame = CFrame.new(secondLastPos)
-                    spawn(function()
-                        wait(GunSilent.FixedPredictionValues.FreezeDuration)
-                        if rootPart and rootPart.Parent then
-                            rootPart.Anchored = false
-                            positionHistory.FreezeUntil = nil
-                        end
-                    end)
-                end
-            end
-        end
-    end
-
-    if validEntries >= 3 and clientVelocity.Magnitude > 5 then
-        local velocityDiff = (clientVelocity - calculatedVelocity).Magnitude
-        local threshold = maxSpeedLimit * GunSilent.Settings.ResolverThreshold.Value
-        if velocityDiff > threshold or clientVelocity.Magnitude > maxSpeedLimit * 1.5 then
-            isSpoofed = true
-        end
-    end
-
-    return calculatedVelocity, isSpoofed
-end
-
 local function predictTargetPositionGun(target)
     local localRoot = GunSilent.State.LocalRoot
     if not target or not target.Character or not localRoot then
@@ -363,7 +245,7 @@ local function predictTargetPositionGun(target)
 
     local targetPos = hitPart.Position
     local targetId = tostring(target.UserId)
-    local isTeleporting = GunSilent.State.LastTargetPosition[targetId] and (targetPos - GunSilent.State.LastTargetPosition[targetId]).Magnitude > GunSilent.FixedPredictionValues.TeleportThreshold
+    local isTeleporting = GunSilent.State.LastTargetPosition[targetId] and (targetPos - GunSilent.State.LastTargetPosition[targetId]).Magnitude > 50
     GunSilent.State.LastTargetPosition[targetId] = targetPos
 
     local distance = (targetPos - myPos).Magnitude
@@ -374,18 +256,13 @@ local function predictTargetPositionGun(target)
     GunSilent.State.PositionHistory[target] = positionHistory
     local currentTime = tick()
 
-    -- Если позиция заморожена, используем фиксированную позицию
-    if positionHistory.FreezeUntil and currentTime < positionHistory.FreezeUntil then
-        targetPos = positionHistory.FrozenPosition
-    end
-
     positionHistory[#positionHistory + 1] = { pos = targetPos, time = currentTime, velocity = targetRoot.Velocity }
     while #positionHistory > GunSilent.Settings.PositionHistorySize.Value do
         table.remove(positionHistory, 1)
     end
 
     local clientPos = targetPos
-    local resolvedVelocity, isSpoofed = resolveVelocity(target, positionHistory, targetRoot.Velocity, targetChar)
+    local resolvedVelocity = targetRoot.Velocity
 
     local predictedPos = clientPos
     if not isTeleporting then
@@ -394,7 +271,7 @@ local function predictTargetPositionGun(target)
             local ping = GunSilent.Settings.PingCompensation.Value * math.clamp(distance / 50, 0.5, 1.0)
             predictedPos = clientPos + resolvedVelocity * ping
         else
-            local speedFactor = 0.8 + (targetSpeed / GunSilent.FixedPredictionValues.MaxPlayerSpeed) * 0.5
+            local speedFactor = 0.8 + (targetSpeed / 50) * 0.5
             local ping = GunSilent.Settings.PingCompensation.Value * math.clamp(distance / 50, 0.5, 1.0)
             local accuracyFactor = math.clamp(getGunRange(equippedTool) / distance, 0.5, 1.0)
             local totalPredictionTime = (timeToTarget + ping) * GunSilent.Settings.PredictionStrength.Value * speedFactor * accuracyFactor
@@ -411,9 +288,7 @@ local function predictTargetPositionGun(target)
         position = predictedPos,
         direction = (predictedPos - myPos).Unit,
         timeToTarget = timeToTarget,
-        clientPosition = targetPos,
-        isSpoofed = isSpoofed,
-        isTeleporting = isTeleporting
+        clientPosition = clientPos
     }
 end
 
@@ -503,7 +378,7 @@ local function updateVisualsGun(target)
         end
         if predictVisualPart then
             predictVisualPart.Position = prediction.position
-            predictVisualPart.Color = prediction.isSpoofed and Color3.fromRGB(255, 0, 0) or (prediction.isTeleporting and Color3.fromRGB(255, 165, 0) or Color3.fromRGB(0, 255, 255))
+            predictVisualPart.Color = Color3.fromRGB(0, 255, 255)
             predictVisualPart.Transparency = 0.3
         end
     elseif GunSilent.State.PredictVisualPart then
@@ -887,37 +762,6 @@ local function Init(UI, Core, notify)
                     safeNotify(GunSilent.notify, "GunSilent", "Smoothing Factor set to: " .. value, false)
                 end
             }
-            uiElements.ResolverEnabled = {
-                element = UI.Sections.GunSilent:Toggle({
-                    Name = "Resolver Enabled",
-                    Default = GunSilent.Settings.ResolverEnabled.Value,
-                    Callback = function(value)
-                        GunSilent.Settings.ResolverEnabled.Value = value
-                        safeNotify(GunSilent.notify, "GunSilent", "Resolver " .. (value and "Enabled" or "Disabled"), true)
-                    end
-                }, 'ResolverEnabled'),
-                callback = function(value)
-                    GunSilent.Settings.ResolverEnabled.Value = value
-                    safeNotify(GunSilent.notify, "GunSilent", "Resolver " .. (value and "Enabled" or "Disabled"), true)
-                end
-            }
-            uiElements.ResolverThreshold = {
-                element = UI.Sections.GunSilent:Slider({
-                    Name = "Resolver Threshold",
-                    Minimum = 0.2,
-                    Maximum = 0.5,
-                    Default = GunSilent.Settings.ResolverThreshold.Value,
-                    Precision = 2,
-                    Callback = function(value)
-                        GunSilent.Settings.ResolverThreshold.Value = value
-                        safeNotify(GunSilent.notify, "GunSilent", "Resolver Threshold set to: " .. value, false)
-                    end
-                }, 'ResolverThreshold'),
-                callback = function(value)
-                    GunSilent.Settings.ResolverThreshold.Value = value
-                    safeNotify(GunSilent.notify, "GunSilent", "Resolver Threshold set to: " .. value, false)
-                end
-            }
             uiElements.BulletSpeed = {
                 element = UI.Sections.GunSilent:Slider({
                     Name = "Bullet Speed",
@@ -968,8 +812,6 @@ local function Init(UI, Core, notify)
                     uiElements.PredictionStrength.callback(uiElements.PredictionStrength.element:GetValue())
                     uiElements.PingCompensation.callback(uiElements.PingCompensation.element:GetValue())
                     uiElements.SmoothingFactor.callback(uiElements.SmoothingFactor.element:GetValue())
-                    uiElements.ResolverEnabled.callback(uiElements.ResolverEnabled.element:GetState())
-                    uiElements.ResolverThreshold.callback(uiElements.ResolverThreshold.element:GetValue())
                     uiElements.BulletSpeed.callback(uiElements.BulletSpeed.element:GetValue())
                     safeNotify(GunSilent.notify, "GunSilent", "Settings synchronized with UI!", true)
                 end
