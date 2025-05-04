@@ -32,7 +32,7 @@ local GunSilent = {
         MinSmoothing = 0.05,
         MaxSmoothing = 0.15,
         VehicleHeadOffset = Vector3.new(0, 1.5, 0),
-        FreezeDuration = 1.0 -- Длительность "заморозки" модели в секундах
+        FreezeDuration = 1.0 -- Длительность "заморозки" модели
     },
     State = {
         LastEventId = 0,
@@ -52,8 +52,7 @@ local GunSilent = {
         LastPredictionPos = nil,
         LastTargetUpdate = 0,
         TargetUpdateInterval = 0.1,
-        LastFriendsList = nil,
-        FrozenModels = {} -- Для хранения замороженных моделей
+        LastFriendsList = nil
     }
 }
 
@@ -308,28 +307,33 @@ local function resolveVelocity(target, positionHistory, clientVelocity, targetCh
         calculatedVelocity = validEntries > 0 and totalVelocity / totalWeight or Vector3.new(0, 0, 0)
     end
 
-    -- Улучшенное определение нокаута
-    local isKnockedOut = false
+    -- Обнаружение antistomp и заморозка модели
     if humanoid then
         local state = humanoid:GetState()
-        if state == Enum.HumanoidStateType.FallingDown or state == Enum.HumanoidStateType.Dead or (humanoid.Health < 10 and #filteredHistory > 1) then
+        local isKnockedOut = state == Enum.HumanoidStateType.FallingDown or state == Enum.HumanoidStateType.Dead or humanoid.Health < 10
+        if isKnockedOut and #filteredHistory > 1 then
             local lastPos = filteredHistory[#filteredHistory].pos
             local secondLastPos = filteredHistory[#filteredHistory - 1].pos
             if (lastPos - secondLastPos).Magnitude > teleportThreshold * 2 then
-                isKnockedOut = true
                 isSpoofed = true
+                if not positionHistory.FreezeUntil or currentTime > positionHistory.FreezeUntil then
+                    positionHistory.FreezeUntil = currentTime + GunSilent.FixedPredictionValues.FreezeDuration
+                    positionHistory.FrozenPosition = secondLastPos
+                    local rootPart = targetChar:FindFirstChild("HumanoidRootPart")
+                    if rootPart and not rootPart.Anchored then
+                        rootPart.Anchored = true
+                        rootPart.CFrame = CFrame.new(secondLastPos)
+                        spawn(function()
+                            wait(GunSilent.FixedPredictionValues.FreezeDuration)
+                            if rootPart and rootPart.Parent then
+                                rootPart.Anchored = false
+                                positionHistory.FreezeUntil = nil
+                            end
+                        end)
+                    end
+                end
             end
         end
-    end
-
-    if isKnockedOut then
-        positionHistory.FreezeUntil = currentTime + GunSilent.FixedPredictionValues.FreezeDuration
-        positionHistory.FrozenPosition = filteredHistory[#filteredHistory - 1].pos -- Фиксируем позицию перед телепортацией
-    end
-
-    -- Если позиция заморожена, используем фиксированную позицию
-    if positionHistory.FreezeUntil and currentTime < positionHistory.FreezeUntil then
-        calculatedVelocity = Vector3.new(0, 0, 0) -- Останавливаем движение
     end
 
     if validEntries >= 3 and clientVelocity.Magnitude > 5 then
@@ -461,13 +465,6 @@ local function updateVisualsGun(target)
         if GunSilent.State.TrajectoryBeam then
             GunSilent.State.TrajectoryBeam.Enabled = false
         end
-        -- Удаляем все замороженные модели
-        for _, frozenModel in pairs(GunSilent.State.FrozenModels) do
-            if frozenModel and frozenModel.Parent then
-                frozenModel:Destroy()
-            end
-        end
-        GunSilent.State.FrozenModels = {}
         return
     end
 
@@ -488,46 +485,6 @@ local function updateVisualsGun(target)
     local targetChar = target.Character
     local hitPart = targetChar:FindFirstChild(GunSilent.Settings.HitPart.Value) or targetChar:FindFirstChild("HumanoidRootPart")
     if not hitPart then return end
-
-    local humanoid = targetChar:FindFirstChild("Humanoid")
-    local isKnockedOut = humanoid and (humanoid:GetState() == Enum.HumanoidStateType.FallingDown or humanoid:GetState() == Enum.HumanoidStateType.Dead or humanoid.Health < 10)
-    local positionHistory = GunSilent.State.PositionHistory[target] or {}
-
-    if isKnockedOut and positionHistory.FreezeUntil and currentTime < positionHistory.FreezeUntil then
-        -- Создаем или обновляем замороженную модель
-        local targetId = tostring(target.UserId)
-        local frozenModel = GunSilent.State.FrozenModels[targetId]
-        if not frozenModel then
-            frozenModel = safeCreateInstance("Part", {
-                Size = Vector3.new(2, 5, 1), -- Примерный размер модели
-                Shape = Enum.PartType.Block,
-                Anchored = true,
-                CanCollide = false,
-                Transparency = 0.7,
-                Color = Color3.fromRGB(0, 255, 0),
-                Parent = Workspace
-            })
-            GunSilent.State.FrozenModels[targetId] = frozenModel
-            spawn(function()
-                wait(GunSilent.FixedPredictionValues.FreezeDuration)
-                if frozenModel and frozenModel.Parent then
-                    frozenModel:Destroy()
-                    GunSilent.State.FrozenModels[targetId] = nil
-                end
-            end)
-        end
-        if frozenModel then
-            frozenModel.Position = positionHistory.FrozenPosition
-            frozenModel.CFrame = CFrame.new(positionHistory.FrozenPosition) * CFrame.Angles(0, math.rad(currentTime * 90), 0) -- Простая анимация вращения
-        end
-    elseif positionHistory.FreezeUntil and currentTime >= positionHistory.FreezeUntil then
-        local targetId = tostring(target.UserId)
-        local frozenModel = GunSilent.State.FrozenModels[targetId]
-        if frozenModel and frozenModel.Parent then
-            frozenModel:Destroy()
-            GunSilent.State.FrozenModels[targetId] = nil
-        end
-    end
 
     GunSilent.State.LastTargetPos, GunSilent.State.LastPredictionPos = targetPos, predictionPos
     local startPos = localRoot.Position + Vector3.new(0, 1.5, 0)
