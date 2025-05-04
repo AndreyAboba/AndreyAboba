@@ -25,8 +25,8 @@ local GunSilent = {
         ShotgunSupport = { Value = false, Default = false },
         GenBullet = { Value = 4, Default = 4 },
         TestGenBullet = { Value = false, Default = false },
-        PredictLevel = { Value = 2, Default = 2 }, -- 1, 2, 3
-        ResolverLevel = { Value = 1, Default = 1 }  -- 1, 2
+        PredictLevel = { Value = 2, Default = 2 }, -- Только 2 и 3
+        ResolverLevel = { Value = 2, Default = 2 }  -- Только 2
     },
     State = {
         LastEventId = 0,
@@ -249,7 +249,7 @@ local function resolveVelocity(target, positionHistory, clientVelocity, targetCh
     end
 
     local calculatedVelocity = Vector3.new(0, 0, 0)
-    local useCFrame = GunSilent.Settings.ResolverLevel.Value >= 2 and #filteredHistory > 2 and (function()
+    local useCFrame = GunSilent.Settings.ResolverLevel.Value == 2 and #filteredHistory > 2 and (function()
         local meanPos = Vector3.new(0, 0, 0)
         for _, entry in ipairs(filteredHistory) do
             meanPos = meanPos + entry.pos
@@ -345,15 +345,15 @@ local function predictTargetPositionGun(target)
             predictedPos = predictedPos + acceleration * (totalPredictionTime ^ 2) / 2
         end
 
-        if GunSilent.State.LastPredictionPos then
+        if GunSilent.State.LastPredictionPos and predictedPos then
             predictedPos = GunSilent.State.LastPredictionPos:Lerp(predictedPos, 1 - GunSilent.Settings.SmoothingFactor.Value)
         end
         GunSilent.State.LastPredictionPos = predictedPos
     end
 
     return {
-        position = predictedPos,
-        direction = (predictedPos - myPos).Unit,
+        position = predictedPos or clientPos,
+        direction = predictedPos and (predictedPos - myPos).Unit or (clientPos - myPos).Unit,
         timeToTarget = timeToTarget,
         clientPosition = clientPos
     }
@@ -782,7 +782,7 @@ local function Init(UI, Core, notify)
                 element = UI.Sections.GunSilent:Dropdown({
                     Name = "Predict Level",
                     Default = tostring(GunSilent.Settings.PredictLevel.Value),
-                    Options = {"1", "2", "3"},
+                    Options = {"2", "3"},
                     Callback = function(value)
                         GunSilent.Settings.PredictLevel.Value = tonumber(value)
                         safeNotify(GunSilent.notify, "GunSilent", "Predict Level set to: " .. value, true)
@@ -862,7 +862,7 @@ local function Init(UI, Core, notify)
                 element = UI.Sections.GunSilent:Dropdown({
                     Name = "Resolver Level",
                     Default = tostring(GunSilent.Settings.ResolverLevel.Value),
-                    Options = {"1", "2"},
+                    Options = {"2"},
                     Callback = function(value)
                         GunSilent.Settings.ResolverLevel.Value = tonumber(value)
                         safeNotify(GunSilent.notify, "GunSilent", "Resolver Level set to: " .. value, true)
