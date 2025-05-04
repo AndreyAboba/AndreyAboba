@@ -312,17 +312,18 @@ function AutoV2.Init(MacLib, Core, notify)
                     notify("Auto Pickup", "Auto-pickup disabled!", true)
                 end
             end
-        })
+        }, 'AutoPickupEnabled')
         autoPickupSection:Slider({
             Name = "Pickup Radius",
             Default = AutoV2.Config.PickupMinDistance,
             Minimum = 5,
             Maximum = 50,
+            Precision = 1,
             Callback = function(value)
                 AutoV2.Config.PickupMinDistance = value
                 notify("Auto Pickup", "Pickup radius set to " .. value .. " meters!", true)
             end
-        })
+        }, 'PickupRadius')
 
         local autoDropSection = MacLib.Tabs.Auto:Section({ Name = "AutoDrop", Side = "Left" })
         autoDropSection:Header({ Name = "AutoDrop" })
@@ -339,7 +340,7 @@ function AutoV2.Init(MacLib, Core, notify)
                     notify("Auto Drop", "Auto-drop disabled!", true)
                 end
             end
-        })
+        }, 'AutoDropEnabled')
         autoDropSection:Toggle({
             Name = "Use Keybind",
             Default = AutoV2.Config.UseKeybind,
@@ -351,12 +352,12 @@ function AutoV2.Init(MacLib, Core, notify)
                     notify("Auto Drop", "Keybind mode disabled!", true)
                 end
             end
-        })
+        }, 'UseKeybindAutoDrop')
         autoDropSection:Keybind({
             Name = "Drop Keybind",
             Default = AutoV2.Config.DropKeybind,
             Callback = function(value) AutoV2.Config.DropKeybind = value end
-        })
+        }, 'DropKeybind')
         autoDropSection:Dropdown({
             Name = "Items to Drop",
             Multi = true,
@@ -378,7 +379,7 @@ function AutoV2.Init(MacLib, Core, notify)
                 end
                 notify("Auto Drop", "Items to drop updated!", true)
             end
-        })
+        }, 'ADItemsToDrop')
 
         local autoReloadSection = MacLib.Tabs.Auto:Section({ Name = "AutoReload", Side = "Right" })
         autoReloadSection:Header({ Name = "AutoReload" })
@@ -395,7 +396,7 @@ function AutoV2.Init(MacLib, Core, notify)
                     notify("Auto Reload", "Auto-reload disabled!", true)
                 end
             end
-        })
+        }, 'EnabledAR')
         autoReloadSection:Dropdown({
             Name = "Bypass Method",
             Options = {"ReEquip"},
@@ -404,7 +405,7 @@ function AutoV2.Init(MacLib, Core, notify)
                 AutoV2.Config.BypassMethod = value
                 notify("Auto Reload", "Bypass method set to " .. value, true)
             end
-        })
+        }, 'BypassMethodAR')
     end
 end
 
